@@ -1,0 +1,16 @@
+alphashape
+black
+dill
+findiff
+ipykernel
+matplotlib
+mayavi
+numba
+numpy
+pip-search
+polyscope
+potpourri3d
+PyQt5
+scipy
+sympy
+scikit-image
