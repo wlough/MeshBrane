@@ -1,44 +1,40 @@
 import numpy as np
 import sympy as sp
 
-import polyscope as ps
-from numdiff import (
-    matrix_to_quaternion,
-    quaternion_to_matrix,
-    exp_so3,
-    log_so3,
-    exp_quaternion,
-    log_quaternion,
-    jitcross,
-)
+# from numdiff import (
+#     # matrix_to_quaternion,
+#     # quaternion_to_matrix,
+#     # exp_so3,
+#     # log_so3,
+#     # exp_quaternion,
+#     # log_quaternion,
+#     # jitcross,
+# )
 
 # from skimage.measure import marching_cubes
 from branes.model import (
     make_implicit_surface_mesh,
     make_sample_mesh,
-    brane,
+    # brane,
     FramedBrane,
-    get_face_data,
+    # get_face_data,
     mayavi_mesh_plot,
     transpose_csr,
-    _transpose_csr,
 )
 
 from scipy.sparse import csr_matrix
+from mayavi import mlab
+
+# import polyscope as ps
 
 # from scipy.linalg import expm, logm
-# implicit_fun_str = (
-#     "4*cos(x + 3)*cos(y + 3)*cos(z + 3) + 3*cos(x + 3) + 3*cos(y + 3) + 3*cos(z + 3)"
-# )
-# x, y, z = sp.symbols("x y z")
-# scale = 3
-# shift = 0
-# sp.sympify(implicit_fun_str).subs(
-#     {x: scale * (x + shift), y: scale * (y + shift), z: scale * (z + shift)}
-# ).__str__()
 
-vertices, faces, normals = make_sample_mesh("dumbbell2")
-_normals = 1 * normals
+
+vertices, faces, normals = make_sample_mesh("torus")
+# vertices, faces, normals = make_implicit_surface_mesh(
+#     implicit_fun_str, xyz_minmax, Nxyz
+# )
+
 b = FramedBrane(vertices, faces, normals)
 
 vertices, edges, faces, frames = (
@@ -49,11 +45,20 @@ vertices, edges, faces, frames = (
 )
 
 
+# %%
+vertex = 13
+
+v_of_e_of_v = b.vertices_adjacent_to_vertex(vertex)
+_normals = 0.1 * np.array([normals[_] for _ in v_of_e_of_v])
+_vertices = np.array([vertices[_] for _ in v_of_e_of_v])
+
+V, F = b.mini_mesh(vertex)
+
 fig_kwargs = {
-    "vertices": vertices,
+    "vertices": V,
     "edges": edges,
-    "faces": faces,
-    "frames": frames,
+    "faces": F,
+    "frames": None,  # frames,
     "show": True,
     "save": False,
     "fig_path": None,
@@ -62,14 +67,16 @@ fig_kwargs = {
     "plot_faces": True,
     # "vector_field_data": {
     #     "vectors": _normals,
-    #     "positions": vertices,
+    #     "positions": _vertices,
     #     "color": (0.7057, 0.0156, 0.1502),
     # },
 }
 
 
+#
+mayavi_mesh_plot(**fig_kwargs)
+# data_T, indices_T, indptr_T = transpose_csr(b.Afe_data,b.Afe_indices,b.Afe_indptr)
 # %%
-# mayavi_mesh_plot(**fig_kwargs)
 vertices = b.position_vectors()
 edges = b.edges
 faces = b.faces
