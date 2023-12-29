@@ -1,4 +1,4 @@
-from numba import float64, int32
+from numba import float64, int32, njit
 from numba.experimental import jitclass
 from numba.types import ListType
 import numpy as np
@@ -14,6 +14,220 @@ from numdiff import (
     log_quaternion,
 )
 from scipy.sparse import csr_matrix
+from mayavi import mlab
+
+import numpy as np
+from numba import njit
+
+
+@njit
+def transpose_csr(data, indices, indptr):
+    # Compute the number of non-zero entries and the number of columns
+    n = len(data)
+    m = np.max(indices) + 1
+
+    # Initialize the data, indices, and indptr for the transpose
+    data_T = np.empty_like(data)
+    indices_T = np.empty_like(indices)
+    # indptr_T = np.zeros(m + 1, dtype=indptr.dtype)
+    _indptr_T = np.zeros(m + 1, dtype=indptr.dtype)
+    # _indptr_T[0] = 0
+    # _indptr_T[j+1] = indptr_T[j]
+
+    # Compute the column counts
+    for index in indices:
+        # indptr_T[index + 1] += 1
+        _indptr_T[index + 1] += 1
+
+    # Compute the column pointers
+    # indptr_T = np.cumsum(indptr_T)
+    _indptr_T = np.cumsum(_indptr_T)
+
+    for i in range(len(indptr) - 1):
+        # For each non-zero in the row...
+        for data_index in range(indptr[i], indptr[i + 1]):
+            # Get the column index
+            j = indices[data_index]
+
+            # Get the insertion index
+            insert_index = _indptr_T[j]
+            # _insert_index = _indptr_T[j + 1]
+
+            # Insert the data and row index
+            data_T[insert_index] = data[data_index]
+            indices_T[insert_index] = i
+
+            # Increment the column pointer
+            _indptr_T[j] += 1
+            # _indptr_T[j + 1] += 1
+    indptr_T = np.zeros_like(_indptr_T)
+    indptr_T[1:] = _indptr_T[:-1]
+    return data_T, indices_T, indptr_T
+
+
+@njit
+def _transpose_csr(data, indices, indptr):
+    # Compute the number of non-zero entries and the number of columns
+    n = len(data)
+    m = np.max(indices) + 1
+
+    # Initialize the data, indices, and indptr for the transpose
+    data_T = np.empty_like(data)
+    indices_T = np.empty_like(indices)
+    indptr_T = np.zeros(m + 1, dtype=indptr.dtype)
+
+    # Compute the column counts
+    for index in indices:
+        indptr_T[index + 1] += 1
+
+    # Compute the column pointers
+    indptr_T = np.cumsum(indptr_T)
+
+    # For each row...
+    for i in range(len(indptr) - 1):
+        # For each non-zero in the row...
+        for data_index in range(indptr[i], indptr[i + 1]):
+            # Get the column index
+            j = indices[data_index]
+
+            # Get the insertion index
+            insert_index = indptr_T[j]
+
+            # Insert the data and row index
+            data_T[insert_index] = data[data_index]
+            indices_T[insert_index] = i
+
+            # Increment the column pointer
+            indptr_T[j] += 1
+
+    return data_T, indices_T, indptr_T
+
+
+def mayavi_mesh_plot(
+    vertices,
+    faces,
+    edges=None,
+    frames=None,
+    vector_field_data=None,
+    submesh_data=None,
+    show=True,
+    save=False,
+    fig_path=None,
+    plot_vertices=True,
+    plot_edges=True,
+    plot_faces=True,
+):
+    face_color = (0.0, 0.2667, 0.1059)
+    edge_color = (1.0, 0.498, 0.0)
+    vertex_color = (0.7057, 0.0156, 0.1502)
+    frame_color = (0.2298, 0.2987, 0.7537)
+
+    # figsize = (2180, 2180)
+    figsize = (720, 720)
+    ##########################################################
+    if show:
+        mlab.options.offscreen = False
+    else:
+        mlab.options.offscreen = True
+
+    # bgcolor = (1.0, 1.0, 1.0)
+    # fgcolor = (0.0, 0.0, 0.0)
+    figsize = (2180, 2180)
+    title = f"Membrane mesh"
+    fig = mlab.figure(title, size=figsize)  # , bgcolor=bgcolor, fgcolor=fgcolor)
+
+    if plot_edges:
+        mem_edges = mlab.triangular_mesh(
+            *vertices.T,
+            faces,
+            # opacity=0.4,
+            color=edge_color,
+            # representation="wireframe"
+            representation="mesh",
+            # representation="surface"
+            # representation="fancymesh",
+            tube_radius=0.002,
+            tube_sides=3,
+        )
+    if plot_faces:
+        mem_faces = mlab.triangular_mesh(
+            *vertices.T,
+            faces,
+            opacity=0.4,
+            color=face_color,
+            # representation="wireframe"
+            # representation="mesh",
+            representation="surface"
+            # representation="fancymesh",
+            # tube_radius=None
+        )
+    if plot_vertices:
+        mem_vertices = mlab.points3d(
+            *vertices.T, mode="sphere", scale_factor=0.015, color=vertex_color
+        )
+    if frames is not None:
+        tangents1 = mlab.quiver3d(
+            *vertices.T,
+            *frames[:, :, 0].T,
+            # line_width=5,
+            mode="arrow",
+            # scale_mode="vector",
+            scale_factor=0.075,
+            color=frame_color,
+        )
+        # tangents2 = mlab.quiver3d(
+        #     *vertices.T,
+        #     *frames[:, :, 1].T,
+        #     # line_width=5,
+        #     mode="arrow",
+        #     # scale_mode="vector",
+        #     scale_factor=0.075,
+        #     color=frame_color,
+        # )
+        normals = mlab.quiver3d(
+            *vertices.T,
+            *frames[:, :, 2].T,
+            # line_width=5,
+            mode="arrow",
+            # scale_mode="vector",
+            scale_factor=0.075,
+            color=frame_color,
+        )
+
+    if vector_field_data is not None:
+        vectors = vector_field_data["vectors"]
+        vector_positions = vector_field_data["positions"]
+        vector_color = vector_field_data["color"]
+        vecs = mlab.quiver3d(
+            *vector_positions.T,
+            *vectors.T,
+            # line_width=5,
+            mode="arrow",
+            # scale_mode="vector",
+            scale_factor=1,
+            color=vector_color,
+        )
+    if submesh_data is not None:
+        vectors = vector_field_data["vectors"]
+        vector_positions = vector_field_data["positions"]
+        vector_color = vector_field_data["color"]
+        vecs = mlab.quiver3d(
+            *vector_positions.T,
+            *vectors.T,
+            # line_width=5,
+            mode="arrow",
+            # scale_mode="vector",
+            scale_factor=1,
+            color=vector_color,
+        )
+
+    if show:
+        mlab.axes()
+        mlab.orientation_axes()
+        mlab.show()
+    if save:
+        mlab.savefig(fig_path, figure=fig, size=figsize)
+    mlab.close(all=True)
 
 
 class Quaternion:
@@ -75,46 +289,82 @@ def make_implicit_surface_mesh(implicit_fun_str, xyz_minmax, Nxyz):
 
     iso_val = 0.0
     verts, faces, normals, values = marching_cubes(vol, iso_val, spacing=(dx, dy, dz))
-    # X, Y, Z = (
-    #     verts[:, 0] + x[0, 0, 0],
-    #     verts[:, 1] + y[0, 0, 0],
-    #     verts[:, 2] + z[0, 0, 0],
-    # )
 
     verts[:, 0] += x[0, 0, 0]
     verts[:, 1] += y[0, 0, 0]
     verts[:, 2] += z[0, 0, 0]
-    normals = normals.astype(np.float64)
+    normals = -normals.astype(np.float64)
     return verts, faces, normals
 
 
 def make_sample_mesh(surface_name):
+    # if surface_name == "dumbbell":
+    #     xyz_minmax = [-12.0, 12.0, -5.0, 5.0, -5.0, 5.0]
+    #     # Nxyz = [60j, 60j, 60j]
+    #     Nxyz = [20j, 10j, 10j]
+    #     implicit_fun_str = (
+    #         "1.0*(y**2 + z**2 + (x - 8)**2 - 1)*(y**2 + z**2 + (x + 8)**2 - 1) - 4200.0"
+    #     )
     if surface_name == "dumbbell":
-        xyz_minmax = [-12.0, 12.0, -5.0, 5.0, -5.0, 5.0]
-        Nxyz = [60j, 60j, 60j]
-        implicit_fun_str = (
-            "1.0*(y**2 + z**2 + (x - 8)**2 - 1)*(y**2 + z**2 + (x + 8)**2 - 1) - 4200.0"
-        )
+        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        # Nxyz = [60j, 60j, 60j]
+        # _x = x/12
+        Nxyz = [20j, 20j, 20j]
+        implicit_fun_str = "(144*y**2 + 144*z**2 + (12*x - 8)**2 - 1)*(144*y**2 + 144*z**2 + (12*x + 8)**2 - 1) - 4200"
+    # elif surface_name == "dumbbell2":
+    #     xyz_minmax = [-3.0, 3.0, -3.0, 3.0, -3.0, 3.0]
+    #     Nxyz = [10j, 10j, 20j]
+    #     implicit_fun_str = "x**2 + y**2 - (1.25 - cos(pi*z/4)) * (9 - z**2) / 4"
+    elif surface_name == "dumbbell2":
+        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        Nxyz = [20j, 20j, 20j]
+        implicit_fun_str = "9*x**2 + 9*y**2 - 9*(z**2 - 1)*(cos(3*pi*z/4) - 1.25)/4"
+    # elif surface_name == "torus":
+    #     xyz_minmax = [-6.0, 6.0, -6.0, 6.0, -6.0, 6.0]
+    #     # Nxyz = [60j, 60j, 60j]
+    #     Nxyz = [10j, 10j, 20j]
+    #     R = 4  # big radius
+    #     r = 4.0 / 3.0  # small radius
+    #     implicit_fun_str = (
+    #         f"(x**2 + y**2 + z**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * (x**2 + y**2)"
+    #     )
     elif surface_name == "torus":
-        xyz_minmax = [-6.0, 6.0, -6.0, 6.0, -6.0, 6.0]
+        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         # Nxyz = [60j, 60j, 60j]
         Nxyz = [20j, 20j, 20j]
-        R = 4
-        r = 4.0 / 3.0
+        R = 0.7  # big radius
+        r = 0.7 / 3.0  # small radius
         implicit_fun_str = (
             f"(x**2 + y**2 + z**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * (x**2 + y**2)"
         )
-
+    # elif surface_name == "neovius":
+    #     xyz_minmax = [0.0, 6.0, 0.0, 6.0, 0.0, 6.0]
+    #     Nxyz = [20j, 20j, 20j]
+    #     implicit_fun_str = (
+    #         "3 * (cos(x) + cos(y) + cos(z)) + 4 * cos(x) * cos(y) * cos(z)"
+    #     )
     elif surface_name == "neovius":
-        xyz_minmax = [0.0, 6.0, 0.0, 6.0, 0.0, 6.0]
-        Nxyz = [60j, 60j, 60j]
-        R = 4
-        r = 2.0 / 3.0
-        # implicit_fun_str = "3 * (sp.cos(x) + sp.cos(y) + sp.cos(z)) + 4 * sp.cos(x) * sp.cos(y) * sp.cos(z)"
-        implicit_fun_str = (
-            "3 * (cos(x) + cos(y) + cos(z)) + 4 * cos(x) * cos(y) * cos(z)"
-        )
-
+        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        Nxyz = [20j, 20j, 20j]
+        # implicit_fun_str = "4*cos(3*x + 9)*cos(3*y + 9)*cos(3*z + 9) + 3*cos(3*x + 9) + 3*cos(3*y + 9) + 3*cos(3*z + 9)"
+        implicit_fun_str = "4*cos(3*x + 3)*cos(3*y + 3)*cos(3*z + 3) + 3*cos(3*x + 3) + 3*cos(3*y + 3) + 3*cos(3*z + 3)"
+    elif surface_name == "sphere":
+        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        Nxyz = [20j, 20j, 20j]
+        R = 0.9
+        implicit_fun_str = f"x**2+y**2+z**2-{R**2}"
+    elif surface_name == "oblate":
+        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        Nxyz = [20j, 20j, 20j]
+        Rxy = 0.9
+        Rz = 0.6
+        implicit_fun_str = f"(x/{Rxy})**2+(y/{Rxy})**2+(z/{Rz})**2-1"
+    elif surface_name == "prolate":
+        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        Nxyz = [20j, 20j, 20j]
+        Rxy = 0.6
+        Rz = 0.9
+        implicit_fun_str = f"(x/{Rxy})**2+(y/{Rxy})**2+(z/{Rz})**2-1"
     verts, faces, normals = make_implicit_surface_mesh(
         implicit_fun_str, xyz_minmax, Nxyz
     )
@@ -166,6 +416,15 @@ framed_brane_spec = [
     ("faces", int32[:, :]),
     ("edges", int32[:, :]),
     ("framed_vertices", float64[:, :]),
+    ("Afe_data", int32[:]),
+    ("Afe_indices", int32[:]),
+    ("Afe_indptr", int32[:]),
+    ("Aev_data", int32[:]),
+    ("Aev_indices", int32[:]),
+    ("Aev_indptr", int32[:]),
+    ("Afv_data", int32[:]),
+    ("Afv_indices", int32[:]),
+    ("Afv_indptr", int32[:]),
 ]
 
 
@@ -174,7 +433,25 @@ class FramedBrane:
     def __init__(self, vertices, faces, normals):
         self.faces = faces
         self.framed_vertices = self.frame_the_mesh(vertices, normals)
-        self.edges = self.get_edges()
+        # self.edges = self.get_edges()
+
+        Nfaces = len(faces)
+        self.Afv_indices = faces.ravel()
+        self.Afv_indptr = np.array([3 * f for f in range(Nfaces + 1)], dtype=np.int32)
+        self.Afv_data = np.ones(3 * Nfaces, dtype=np.int32)
+
+        (
+            self.edges,
+            self.Afe_data,
+            self.Afe_indices,
+            self.Afe_indptr,
+            self.Aev_data,
+            self.Aev_indices,
+            self.Aev_indptr,
+        ) = self.get_adjacency_edges_and_adjacency()
+        # Afv = csr_matrix((data, indices, indptr), shape=(Nfaces, Nvertices))
+        # Afe, Aev, edges = self.get_boundary_ops_csr(vertices, faces)
+        # Afv = get_Afv(vertices, faces)
 
     def frame_the_mesh(self, vertices, normals):
         ex = np.array([1.0, 0.0, 0.0])
@@ -205,10 +482,60 @@ class FramedBrane:
             framed_vertices[i, :3] = vertices[i, :]
         return framed_vertices
 
-    def get_edges(self):
-        vertices = self.framed_vertices
+    # def get_edges(self):
+    #     # vertices = self.framed_vertices
+    #     faces = self.faces
+    #     # Nvertices = len(vertices)
+    #     Nfaces = len(faces)
+    #     edges_list = []
+    #
+    #     # Afe ###############
+    #     Afe_data_list = []  # [-1,1,...]
+    #     Afe_indices_list = []  #
+    #     # Afe_indptr = np.array([3 * f for f in range(Nfaces + 1)], dtype=np.int32)
+    #
+    #     # Aev ###############
+    #     # Aev_data_list = []  # [-1,1,...]
+    #     Aev_indices_list = []  # vertex indices
+    #     # Aev_indptr = []  # [0,2,4,...]
+    #
+    #     for f in range(Nfaces):
+    #         face = faces[f]
+    #         for _v in range(3):
+    #             vm = face[_v]
+    #             vp = face[np.mod(_v + 1, 3)]
+    #             edge_p = [vm, vp]
+    #             edge_m = [vp, vm]
+    #             try:  # is negative edge already in edges?
+    #                 edges_list.index(edge_m)
+    #             except Exception:  # if not, then add it
+    #                 edges_list.append(edge_m)
+    #                 e = len(edges_list) - 1
+    #                 Afe_indices_list.append(e)
+    #                 Afe_data_list.append(-1)
+    #                 Aev_indices_list.append(vp)
+    #                 Aev_indices_list.append(vm)
+    #             try:  # is positive edge already in edges?
+    #                 edges_list.index(edge_p)
+    #             except Exception:  # if neither, add positive edge to edges
+    #                 edges_list.append(edge_p)
+    #                 e = len(edges_list) - 1
+    #                 Afe_indices_list.append(e)
+    #                 Afe_data_list.append(1)
+    #                 Aev_indices_list.append(vm)
+    #                 Aev_indices_list.append(vp)
+    #
+    #     Afe_data = np.array(Afe_data_list, dtype=np.int32)
+    #     Afe_indices = np.array(Afe_indices_list, dtype=np.int32)
+    #     Aev_indices = np.array(Aev_indices_list, dtype=np.int32)
+    #     edges = np.array(edges_list, dtype=np.int32)
+    #
+    #     return edges
+
+    def get_adjacency_edges_and_adjacency(self):
+        # vertices = self.framed_vertices
         faces = self.faces
-        Nvertices = len(vertices)
+        # Nvertices = len(vertices)
         Nfaces = len(faces)
         edges_list = []
 
@@ -230,7 +557,7 @@ class FramedBrane:
                 edge_p = [vm, vp]
                 edge_m = [vp, vm]
                 try:  # is negative edge already in edges?
-                    e_m = edges_list.index(edge_m)
+                    edges_list.index(edge_m)
                 except Exception:  # if not, then add it
                     edges_list.append(edge_m)
                     e = len(edges_list) - 1
@@ -239,7 +566,7 @@ class FramedBrane:
                     Aev_indices_list.append(vp)
                     Aev_indices_list.append(vm)
                 try:  # is positive edge already in edges?
-                    e_p = edges_list.index(edge_p)
+                    edges_list.index(edge_p)
                 except Exception:  # if neither, add positive edge to edges
                     edges_list.append(edge_p)
                     e = len(edges_list) - 1
@@ -250,10 +577,26 @@ class FramedBrane:
 
         Afe_data = np.array(Afe_data_list, dtype=np.int32)
         Afe_indices = np.array(Afe_indices_list, dtype=np.int32)
-        Aev_indices = np.array(Aev_indices_list, dtype=np.int32)
-        edges = np.array(edges_list, dtype=np.int32)
+        Afe_indptr = np.array([3 * f for f in range(Nfaces + 1)], dtype=np.int32)
 
-        return edges
+        edges = np.array(edges_list, dtype=np.int32)
+        Nedges = len(edges)
+
+        Aev_data = np.array(Nedges * [-1, 1], dtype=np.int32)  # [-1,1,...]
+        Aev_indices = np.array(Aev_indices_list, dtype=np.int32)
+        Aev_indptr = np.array(
+            [2 * _ for _ in range(Nedges + 1)], dtype=np.int32
+        )  # [0,2,4,...]
+
+        return (
+            edges,
+            Afe_data,
+            Afe_indices,
+            Afe_indptr,
+            Aev_data,
+            Aev_indices,
+            Aev_indptr,
+        )
 
     def position_vectors(self):
         return self.framed_vertices[:, :3]
@@ -269,6 +612,38 @@ class FramedBrane:
             q = Q[v]
             R[v] = quaternion_to_matrix(q)
         return R
+
+    def get_y_of_x_csr(self, Axy_indices, Axy_indptr):
+        # indices, indptr = Axy_csr.indices, Axy_csr.indptr
+        Nx = len(Axy_indptr) - 1
+        x_of_y = []
+        for nx in range(Nx):
+            x_of_y.append(Axy_indices[Axy_indptr[nx] : Axy_indptr[nx + 1]])
+
+        return x_of_y
+
+    def get_edges_of_faces(self):
+        """e_of_f, v_of_e"""
+        # indices, indptr = Axy_csr.indices, Axy_csr.indptr
+        Afe_indices, Afe_indptr = self.Afe_indices, self.Afe_indptr
+        Nfaces = len(Afe_indptr) - 1
+        e_of_f = []
+        for f in range(Nfaces):
+            e_of_f.append(Afe_indices[Afe_indptr[f] : Afe_indptr[f + 1]])
+
+        return e_of_f
+
+    def edges_of_face(self, face):
+        """face = index of face"""
+        return self.Afe_indices[self.Afe_indptr[face] : self.Afe_indptr[face + 1]]
+
+    def vertices_of_face(self, face):
+        """face = index of face"""
+        return self.Afv_indices[self.Afv_indptr[face] : self.Afv_indptr[face + 1]]
+
+    # def vertices_of_face(self, face):
+    #     """face = index of face"""
+    #     return self.Afv_indices[self.Afv_indptr[face] : self.Afv_indptr[face + 1]]
 
 
 class brane(object):
