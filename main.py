@@ -5,6 +5,7 @@ import sympy as sp
 from alphashape import alphashape as ashp
 from scipy.sparse import csr_matrix, csc_matrix
 
+
 x, y, z = sp.symbols("x y z")
 # implicit_expr = (x - 0) ** 2 + (y - 0) ** 2 + ((z - 0) / 2.0) ** 2 - 1.0
 rsq = x**2 + y**2
