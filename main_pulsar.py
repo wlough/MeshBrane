@@ -1,39 +1,63 @@
 import numpy as np
 import sympy as sp
+from importlib import reload
 
-# from numdiff import (
-#     # matrix_to_quaternion,
-#     # quaternion_to_matrix,
-#     # exp_so3,
-#     # log_so3,
-#     # exp_quaternion,
-#     # log_quaternion,
-#     # jitcross,
-# )
+from numdiff import (
+    matrix_to_quaternion,
+    quaternion_to_matrix,
+    exp_so3,
+    log_so3,
+    exp_quaternion,
+    log_quaternion,
+    jitcross,
+    multiply_se3_quaternion,
+    inverse_se3_quaternion,
+    mul_quaternion,
+    inv_quaternion,
+    rotate_by_quaternion,
+    se3_quaternion_to_matrix,
+    se3_matrix_to_quaternion,
+    quaternion_to_matrix2,
+    log_se3_quaternion,
+    exp_se3_quaternion,
+    exp_se3,
+    exp_se3_slow,
+)
 
 # from skimage.measure import marching_cubes
 from branes.model import (
     make_implicit_surface_mesh,
     make_sample_mesh,
+    load_sample_mesh,
     # brane,
     FramedBrane,
     # get_face_data,
     mayavi_mesh_plot,
     transpose_csr,
+    get_face_data,
+    get_area_weighted_vertex_normals,
+    polyscope_mesh_plot,
+    polyscope_multimesh_plot,
+    default_color_dict,
+    example_multimesh_plot,
 )
+
 
 from scipy.sparse import csr_matrix
 from mayavi import mlab
 
-# import polyscope as ps
+import polyscope as ps
+import dill
 
-# from scipy.linalg import expm, logm
+# with open("./scratch/test_brane.pickle", "wb") as _f:
+#     dill.dump(b, _f, recurse=True)
+
+from scipy.linalg import expm, logm
 
 
-vertices, faces, normals = make_sample_mesh("torus")
-# vertices, faces, normals = make_implicit_surface_mesh(
-#     implicit_fun_str, xyz_minmax, Nxyz
-# )
+# %%
+vertices, faces, normals = make_sample_mesh("dumbbell2")
+
 
 b = FramedBrane(vertices, faces, normals)
 
@@ -45,144 +69,47 @@ vertices, edges, faces, frames = (
 )
 
 
+# example_multimesh_plot(b)
+
 # %%
-vertex = 13
-
-v_of_e_of_v = b.vertices_adjacent_to_vertex(vertex)
-_normals = 0.1 * np.array([normals[_] for _ in v_of_e_of_v])
-_vertices = np.array([vertices[_] for _ in v_of_e_of_v])
-
-V, F = b.mini_mesh(vertex)
-
-fig_kwargs = {
-    "vertices": V,
-    "edges": edges,
-    "faces": F,
-    "frames": None,  # frames,
-    "show": True,
-    "save": False,
-    "fig_path": None,
-    "plot_vertices": True,
-    "plot_edges": True,
-    "plot_faces": True,
-    # "vector_field_data": {
-    #     "vectors": _normals,
-    #     "positions": _vertices,
-    #     "color": (0.7057, 0.0156, 0.1502),
-    # },
-}
-
-
-#
-mayavi_mesh_plot(**fig_kwargs)
-# data_T, indices_T, indptr_T = transpose_csr(b.Afe_data,b.Afe_indices,b.Afe_indptr)
-# %%
-vertices = b.position_vectors()
-edges = b.edges
-faces = b.faces
-Nvertices = len(vertices)
+brane = b
+vertices, edges, faces, frames = (
+    brane.position_vectors(),
+    brane.edges,
+    brane.faces,
+    brane.orthogonal_matrices(),
+)
+framed_vertices = brane.framed_vertices
 Nedges = len(edges)
-Nfaces = len(faces)
+psi = np.zeros((Nedges, 6))
+# def get_psi(brane)
 
-# Afe_data = b.Afe_data
-# Afe_indices = b.Afe_indices
-# Afe_indptr = b.Afe_indptr
+for e in range(Nedges):
+    v0, v1 = edges[e]
+    pq0, pq1 = framed_vertices[v0], framed_vertices[v1]
+    pq0_inv = inverse_se3_quaternion(pq0)
+    pq = pq0  # multiply_se3_quaternion(pq0_inv, pq1)
+    psi[e] = log_se3_quaternion(pq)
 
-Afv_data = b.Afv_data
-Afv_indices = b.Afv_indices
-Afv_indptr = b.Afv_indptr
-
-# Aev_data = b.Aev_data
-# Aev_indices = b.Aev_indices
-# Aev_indptr = b.Aev_indptr
-
-# csr_matrix(np.random.rand(100).reshape((10,10)))
-# data, indices, indptr = Afe_data, Afe_indices, Afe_indptr
-# Nrows, Ncolums = Nfaces, Nedges
-
-
-# data, indices, indptr = Afv_data, Afv_indices, Afv_indptr
-# Nrows, Ncolums = Nfaces, Nvertices
-
-Nrows, Ncolums = 103, 219
-mat = csr_matrix(np.random.rand(Nrows * Ncolums).reshape((Nrows, Ncolums)))
-data, indices, indptr = mat.data, mat.indices, mat.indptr
-
-
-#
-A = csr_matrix((data, indices, indptr), shape=(Nrows, Ncolums))
-AT = A.T.tocsr()
-
-
-AT_data, AT_indices, AT_indptr = transpose_csr(data, indices, indptr)
-
-AT.data - AT_data
-AT.indices - AT_indices
-AT.indptr - AT_indptr
-# AT.indptr - np.array([0, *AT_indptr[:-1]])
 
 # %%
-_AT = csr_matrix((AT_data, AT_indices, AT_indptr), shape=(Ncolums, Nrows))
+
+ex, ey, ez = np.eye(3)
+i, j, k = np.eye(4)[1:]
+theta_vec = 0.25 * np.pi * ez + np.random.rand(3)
+x, y, z = np.random.rand(3)  # 1.0, 2.0, 3.0
+r = x * ex + y * ey + z * ez
+_r = x * i + y * j + z * k
+Q = exp_so3(theta_vec)
+q = exp_quaternion(theta_vec)
+q_inv = inv_quaternion(q)
 
 
-np.linalg.norm(np.ravel((_AT - AT).todense()))
-# %%
-vertices = b.framed_vertices
-faces = b.faces
-Nvertices = len(vertices)
-Nfaces = len(faces)
-edges_list = []
+qr1 = mul_quaternion(q, mul_quaternion(_r, q_inv))
 
-# Afe ###############
-Afe_data_list = []  # [-1,1,...]
-Afe_indices_list = []  #
-# Afe_indptr = np.array([3 * f for f in range(Nfaces + 1)], dtype=np.int32)
+qr2 = mul_quaternion(mul_quaternion(q, _r), q_inv)
 
-# Aev ###############
-# Aev_data_list = []  # [-1,1,...]
-Aev_indices_list = []  # vertex indices
-# Aev_indptr = []  # [0,2,4,...]
+qr = rotate_by_quaternion(q, r)
 
-for f in range(Nfaces):
-    face = faces[f]
-    for _v in range(3):
-        vm = face[_v]
-        vp = face[np.mod(_v + 1, 3)]
-        edge_p = [vm, vp]
-        edge_m = [vp, vm]
-        try:  # is negative edge already in edges?
-            e_m = edges_list.index(edge_m)
-        except Exception:  # if not, then add it
-            edges_list.append(edge_m)
-            e = len(edges_list) - 1
-            Afe_indices_list.append(e)
-            Afe_data_list.append(-1)
-            Aev_indices_list.append(vp)
-            Aev_indices_list.append(vm)
-        try:  # is positive edge already in edges?
-            e_p = edges_list.index(edge_p)
-        except Exception:  # if neither, add positive edge to edges
-            edges_list.append(edge_p)
-            e = len(edges_list) - 1
-            Afe_indices_list.append(e)
-            Afe_data_list.append(1)
-            Aev_indices_list.append(vm)
-            Aev_indices_list.append(vp)
-
-
-Afe_data = np.array(Afe_data_list, dtype=np.int32)
-Afe_indices = np.array(Afe_indices_list, dtype=np.int32)
-Aev_indices = np.array(Aev_indices_list, dtype=np.int32)
-edges = np.array(edges_list, dtype=np.int32)
-
-# len(edges)
-# %%
-# b = brane(sample_surface_name="torus")
-# # b.
-# V, F = b.vertices, b.faces
-# #
-# ps.init()
-#
-# ps_mesh = ps.register_surface_mesh("my mesh", V, F)
-# ps.show()
-# N = 100
+Qr = Q @ r
+qr - Qr

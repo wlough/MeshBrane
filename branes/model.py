@@ -14,6 +14,17 @@ from numdiff import (
 )
 from scipy.sparse import csr_matrix
 from mayavi import mlab
+import polyscope as ps
+import dill
+
+default_color_dict = {
+    "face_color": (0.0, 0.2667, 0.1059),
+    "face_alpha": 0.8,
+    "edge_color": (1.0, 0.498, 0.0),
+    "vertex_color": (1.0, 0.498, 0.0),  # (0.7057, 0.0156, 0.1502)
+    "normal_color": (0.7057, 0.0156, 0.1502),  # (1.0, 0.0, 0.0)
+    "tangent_color": (0.2298, 0.2987, 0.7537),
+}
 
 
 @njit
@@ -60,45 +71,6 @@ def transpose_csr(data, indices, indptr):
 
     indptr_T[1:] = _indptr_T[:-1]
     return data_T, indices_T, indptr_T
-
-
-# @njit
-# def _transpose_csr(data, indices, indptr):
-#     # Compute the number of non-zero entries and the number of columns
-#     # n = len(data)
-#     m = np.max(indices) + 1
-#
-#     # Initialize the data, indices, and indptr for the transpose
-#     data_T = np.empty_like(data)
-#     indices_T = np.empty_like(indices)
-#     indptr_T = np.zeros(m + 1, dtype=indptr.dtype)
-#
-#     # Compute the column counts
-#     for index in indices:
-#         indptr_T[index + 1] += 1
-#
-#     # Compute the column pointers
-#     indptr_T = np.cumsum(indptr_T)
-#
-#     # For each row...
-#     for i in range(len(indptr) - 1):
-#         # For each non-zero in the row...
-#         for data_index in range(indptr[i], indptr[i + 1]):
-#             # Get the column index
-#             j = indices[data_index]
-#
-#             # Get the insertion index
-#             insert_index = indptr_T[j]
-#
-#             # Insert the data and row index
-#             data_T[insert_index] = data[data_index]
-#             indices_T[insert_index] = i
-#
-#             # Increment the column pointer
-#             indptr_T[j] += 1
-#
-#     return data_T, indices_T, indptr_T
-#
 
 
 def mayavi_mesh_plot(
@@ -237,6 +209,304 @@ def mayavi_mesh_plot(
     mlab.close(all=True)
 
 
+def mayavi_mesh_minimesh_plot(
+    vertices,
+    faces,
+    mini_vertices,
+    mini_faces,
+    edges=None,
+    frames=None,
+    vector_field_data=None,
+    submesh_data=None,
+    show=True,
+    save=False,
+    fig_path=None,
+    plot_vertices=True,
+    plot_edges=True,
+    plot_faces=True,
+):
+    face_color = (0.0, 0.2667, 0.1059)
+    edge_color = (1.0, 0.498, 0.0)
+    vertex_color = (0.7057, 0.0156, 0.1502)
+    frame_color = (0.2298, 0.2987, 0.7537)
+
+    # figsize = (2180, 2180)
+    figsize = (720, 720)
+    ##########################################################
+    if show:
+        mlab.options.offscreen = False
+    else:
+        mlab.options.offscreen = True
+
+    # bgcolor = (1.0, 1.0, 1.0)
+    # fgcolor = (0.0, 0.0, 0.0)
+    figsize = (2180, 2180)
+    title = "Membrane mesh"
+    # , bgcolor=bgcolor, fgcolor=fgcolor)
+    fig = mlab.figure(title, size=figsize)
+
+    if plot_edges:
+        # mem_edges = #
+        mlab.triangular_mesh(
+            *vertices.T,
+            faces,
+            # opacity=0.4,
+            color=edge_color,
+            # representation="wireframe"
+            representation="mesh",
+            # representation="surface"
+            # representation="fancymesh",
+            tube_radius=0.002,
+            tube_sides=3,
+        )
+    if plot_faces:
+        # mem_faces = #
+        mlab.triangular_mesh(
+            *vertices.T,
+            faces,
+            opacity=0.4,
+            color=face_color,
+            # representation="wireframe"
+            # representation="mesh",
+            representation="surface"
+            # representation="fancymesh",
+            # tube_radius=None
+        )
+    if plot_vertices:
+        # mem_vertices = #
+        mlab.points3d(
+            *vertices.T, mode="sphere", scale_factor=0.015, color=vertex_color
+        )
+    if frames is not None:
+        # tangents1 = #
+        mlab.quiver3d(
+            *vertices.T,
+            *frames[:, :, 0].T,
+            # line_width=5,
+            mode="arrow",
+            # scale_mode="vector",
+            scale_factor=0.075,
+            color=frame_color,
+        )
+        # tangents2 =
+        # mlab.quiver3d(
+        #     *vertices.T,
+        #     *frames[:, :, 1].T,
+        #     # line_width=5,
+        #     mode="arrow",
+        #     # scale_mode="vector",
+        #     scale_factor=0.075,
+        #     color=frame_color,
+        # )
+        # normals =
+        mlab.quiver3d(
+            *vertices.T,
+            *frames[:, :, 2].T,
+            # line_width=5,
+            mode="arrow",
+            # scale_mode="vector",
+            scale_factor=0.075,
+            color=frame_color,
+        )
+
+    if vector_field_data is not None:
+        vectors = vector_field_data["vectors"]
+        vector_positions = vector_field_data["positions"]
+        vector_color = vector_field_data["color"]
+        # vecs =
+        mlab.quiver3d(
+            *vector_positions.T,
+            *vectors.T,
+            # line_width=5,
+            mode="arrow",
+            # scale_mode="vector",
+            scale_factor=1,
+            color=vector_color,
+        )
+    if submesh_data is not None:
+        vectors = vector_field_data["vectors"]
+        vector_positions = vector_field_data["positions"]
+        vector_color = vector_field_data["color"]
+        # vecs =
+        mlab.quiver3d(
+            *vector_positions.T,
+            *vectors.T,
+            # line_width=5,
+            mode="arrow",
+            # scale_mode="vector",
+            scale_factor=1,
+            color=vector_color,
+        )
+
+    if show:
+        # mlab.axes()
+        mlab.orientation_axes()
+        mlab.show()
+    if save:
+        mlab.savefig(fig_path, figure=fig, size=figsize)
+    mlab.close(all=True)
+
+
+def polyscope_mesh_plot(vertices, faces, frames=None):
+    """register_surface_mesh variables:
+    enabled=None
+    color=None
+    edge_color=None
+    smooth_shade=None
+    edge_width=None
+    material=None
+    back_face_policy=None
+    back_face_color=None
+    transparency=None
+
+    surface_mesh.add_color_quantity(name, colors)
+    surface_mesh.add_scalar_quantity(name, scalars)
+    surface_mesh.add_vector_quantity(name, vectors)
+    # Add a scalar quantity
+    scalar_values = np.random.rand(vertices.shape[0])  # One value per vertex
+    mesh.add_scalar_quantity("random scalars", scalar_values)
+
+    # Add a vector quantity
+    vector_values = np.random.rand(vertices.shape[0], 3)  # One vector per vertex
+    mesh.add_vector_quantity("random vectors", vector_values)
+
+    # Add a color quantity
+    color_values = np.random.rand(vertices.shape[0], 3)  # One RGB color per vertex
+    mesh.add_color_quantity("random colors", color_values)
+    """
+    # face_color = (0.0, 0.2667, 0.1059)
+    # edge_color = (1.0, 0.498, 0.0)
+    # vertex_color = (1.0, 0.498, 0.0)  # (0.7057, 0.0156, 0.1502)
+    # normal_color = (0.7057, 0.0156, 0.1502)  # (1.0, 0.0, 0.0)
+    # tangent_color = (0.2298, 0.2987, 0.7537)
+    face_color = default_color_dict["face_color"]
+    face_alpha = default_color_dict["face_alpha"]
+    edge_color = default_color_dict["edge_color"]
+    vertex_color = default_color_dict["vertex_color"]
+    normal_color = default_color_dict["normal_color"]
+    tangent_color = default_color_dict["tangent_color"]
+
+    ps.init()
+
+    mesh = ps.register_surface_mesh("surface", vertices, faces)
+    # Set the base color of the mesh
+    mesh.set_color(face_color)
+    # Set the color of the edges
+    mesh.set_edge_color(edge_color)
+    mesh.set_edge_width(1.0)
+    # Set the transparency of the mesh
+    mesh.set_transparency(face_alpha)
+    vertex_cloud = ps.register_point_cloud(
+        "vertices", vertices, enabled=True, color=vertex_color, radius=0.0025
+    )
+
+    if frames is not None:
+        # normals = frames[:, 2]
+        vertex_cloud.add_vector_quantity(
+            "normals",
+            frames[:, :, 2],
+            enabled=True,
+            color=normal_color,
+        )
+
+        vertex_cloud.add_vector_quantity(
+            "tangents1", frames[:, :, 0], color=tangent_color, enabled=True
+        )
+
+    ps.show()
+
+
+def polyscope_multimesh_plot(surfaces_list):
+    """ """
+    mesh_list = []
+    vertex_cloud_list = []
+    Nsurfs = len(surfaces_list)
+    # normals_list = []
+    ps.init()
+    # ps.set_transparency_mode("simple")
+    for _ in range(Nsurfs):
+        surface_dict = surfaces_list[_]
+        surf_keys = surface_dict.keys()
+        vertices = surface_dict["vertices"]
+        faces = surface_dict["faces"]
+        face_color = surface_dict["face_color"]
+        face_alpha = surface_dict["face_alpha"]
+        edge_color = surface_dict["edge_color"]
+        vertex_color = surface_dict["vertex_color"]
+
+        mesh_list.append(ps.register_surface_mesh(f"surface{_}", vertices, faces))
+        # Set the base color of the mesh
+        mesh_list[-1].set_color(face_color)
+        # Set the color of the edges
+        mesh_list[-1].set_edge_color(edge_color)
+        mesh_list[-1].set_edge_width(1.0)
+        # Set the transparency of the mesh
+        mesh_list[-1].set_transparency(face_alpha)
+        vertex_cloud_list.append(
+            ps.register_point_cloud(
+                f"vertices{_}",
+                vertices,
+                enabled=True,
+                color=vertex_color,
+                radius=0.0025,
+            )
+        )
+
+        if "frames" in surf_keys:
+            frames = surface_dict["frames"]
+            normal_color = surface_dict["normal_color"]
+            tangent_color = surface_dict["tangent_color"]
+            vertex_cloud_list[-1].add_vector_quantity(
+                "normals",
+                frames[:, :, 2],
+                enabled=True,
+                color=normal_color,
+            )
+
+            vertex_cloud_list[-1].add_vector_quantity(
+                "tangents1", frames[:, :, 0], color=tangent_color, enabled=True
+            )
+
+    ps.show()
+
+
+def example_multimesh_plot(brane, vertex_list=None):
+    if vertex_list is None:
+        vertex_list = [0, 93, 60, 200]
+    vertices, faces = brane.position_vectors(), brane.faces
+    frames = brane.orthogonal_matrices()
+    surfaces_list = []
+    brane_dict = {
+        "vertices": vertices,
+        "faces": faces,
+        # "frames": frames,
+    } | default_color_dict
+    for vertex in vertex_list:
+        v_of_e_of_v = np.array([vertex, *brane.vertices_adjacent_to_vertex(vertex)])
+        # _normals = 0.1 * np.array([normals[_] for _ in v_of_e_of_v])
+        # _vertices = np.array([vertices[_] for _ in v_of_e_of_v])
+
+        mini_vertices, mini_faces = brane.mini_mesh(vertex)
+        mini_frames = np.array([frames[_] for _ in v_of_e_of_v])
+
+        mini_brane_dict = {
+            "vertices": mini_vertices,
+            "faces": mini_faces,
+            "frames": mini_frames,
+            "face_color": (0.0, 0.0, 1.0),
+            "edge_color": (1.0, 0.0, 0.0),
+            "vertex_color": (1.0, 0.0, 0.0),
+            "normal_color": (1.0, 0.0, 0.0),
+            "tangent_color": (1.0, 0.0, 0.0),
+            "face_alpha": 1.0,
+        }
+        surfaces_list.append(mini_brane_dict)
+
+    surfaces_list.append(brane_dict)
+
+    polyscope_multimesh_plot(surfaces_list)
+
+
 class Quaternion:
     def __init__(self, w, x, y, z):
         self.w = w
@@ -314,6 +584,7 @@ def make_sample_mesh(surface_name):
         xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         Nxyz = [20j, 20j, 20j]
         implicit_fun_str = "9*x**2 + 9*y**2 - 9*(z**2 - 1)*(cos(3*pi*z/4) - 1.25)/4"
+
     elif surface_name == "torus":
         xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         # Nxyz = [60j, 60j, 60j]
@@ -359,17 +630,47 @@ def make_sample_mesh(surface_name):
     verts, faces, normals = make_implicit_surface_mesh(
         implicit_fun_str, xyz_minmax, Nxyz
     )
+
+    # normal_norms = np.linalg.norm(normals, axis=1)
+    normals = np.array([n / np.linalg.norm(n) for n in normals])
+
+    surf_dict = {"vertices": verts, "faces": faces, "normals": normals}
+    with open(f"./scratch/{surface_name}_dict.pickle", "wb") as _f:
+        dill.dump(surf_dict, _f, recurse=True)
+
     return verts, faces, normals
 
 
-def get_face_data(vertices, faces, surface_com):
+def load_sample_mesh(surface_name):
+    # with open("./scratch/test_brane.pickle", "wb") as _f:
+    #     dill.dump(b, _f, recurse=True)
+    with open(f"./scratch/{surface_name}_dict.pickle", "rb") as _f:
+        surf_dict = dill.load(_f)
+
+    verts, faces, normals = (
+        surf_dict["vertices"],
+        surf_dict["faces"],
+        surf_dict["normals"],
+    )
+    return verts, faces, normals
+
+
+def get_face_data(vertices, faces, surface_com=None):
     """
     computes what are hopefully outward pointing unit normal vectors
     and directed area vectors of the faces. Reorders vertices of each face to
     match unit normal direction.
     """
     # faces = faces_old
+
     Nfaces = len(faces)
+
+    if surface_com is None:
+        Nvertices = len(vertices)
+        surface_com = np.zeros(3)
+        for v in vertices:
+            surface_com += v
+        surface_com /= Nvertices
     face_normals = np.zeros((Nfaces, 3))
     face_areas = np.zeros((Nfaces, 3))
     face_centroids = np.zeros((Nfaces, 3))
@@ -401,6 +702,23 @@ def get_face_data(vertices, faces, surface_com):
     return faces, face_centroids, face_normals, face_areas
 
 
+def get_area_weighted_vertex_normals(vertices, faces_of_vertices, face_areas):
+    """
+    computes unit normal vectors at vertices.
+    """
+    Nvertices = len(vertices)
+    vertex_normals = np.zeros((Nvertices, 3))
+    for v in range(Nvertices):
+        # Nfaces_of_v = len(faces_of_vertices[v])
+        # Nfaces_of_v = max([1,len(faces_of_vertices[v])])
+        for f in faces_of_vertices[v]:
+            vertex_normals[v] += face_areas[f]
+        normal_norm = np.sqrt(vertex_normals[v] @ vertex_normals[v])
+        if normal_norm > 0:
+            vertex_normals[v] /= normal_norm
+    return vertex_normals
+
+
 framed_brane_spec = [
     # ("vertices", float64[:, :]),
     # ("normals", float64[:, :]),
@@ -425,6 +743,7 @@ framed_brane_spec = [
     ("Avf_data", int32[:]),
     ("Avf_indices", int32[:]),
     ("Avf_indptr", int32[:]),
+    ("psi", float64[:, :]),
 ]
 
 
@@ -487,56 +806,6 @@ class FramedBrane:
 
             framed_vertices[i, :3] = vertices[i, :]
         return framed_vertices
-
-    # def get_edges(self):
-    #     # vertices = self.framed_vertices
-    #     faces = self.faces
-    #     # Nvertices = len(vertices)
-    #     Nfaces = len(faces)
-    #     edges_list = []
-    #
-    #     # Afe ###############
-    #     Afe_data_list = []  # [-1,1,...]
-    #     Afe_indices_list = []  #
-    #     # Afe_indptr = np.array([3 * f for f in range(Nfaces + 1)], dtype=np.int32)
-    #
-    #     # Aev ###############
-    #     # Aev_data_list = []  # [-1,1,...]
-    #     Aev_indices_list = []  # vertex indices
-    #     # Aev_indptr = []  # [0,2,4,...]
-    #
-    #     for f in range(Nfaces):
-    #         face = faces[f]
-    #         for _v in range(3):
-    #             vm = face[_v]
-    #             vp = face[np.mod(_v + 1, 3)]
-    #             edge_p = [vm, vp]
-    #             edge_m = [vp, vm]
-    #             try:  # is negative edge already in edges?
-    #                 edges_list.index(edge_m)
-    #             except Exception:  # if not, then add it
-    #                 edges_list.append(edge_m)
-    #                 e = len(edges_list) - 1
-    #                 Afe_indices_list.append(e)
-    #                 Afe_data_list.append(-1)
-    #                 Aev_indices_list.append(vp)
-    #                 Aev_indices_list.append(vm)
-    #             try:  # is positive edge already in edges?
-    #                 edges_list.index(edge_p)
-    #             except Exception:  # if neither, add positive edge to edges
-    #                 edges_list.append(edge_p)
-    #                 e = len(edges_list) - 1
-    #                 Afe_indices_list.append(e)
-    #                 Afe_data_list.append(1)
-    #                 Aev_indices_list.append(vm)
-    #                 Aev_indices_list.append(vp)
-    #
-    #     Afe_data = np.array(Afe_data_list, dtype=np.int32)
-    #     Afe_indices = np.array(Afe_indices_list, dtype=np.int32)
-    #     Aev_indices = np.array(Aev_indices_list, dtype=np.int32)
-    #     edges = np.array(edges_list, dtype=np.int32)
-    #
-    #     return edges
 
     def get_adjacency_edges_and_adjacency(self):
         # vertices = self.framed_vertices
@@ -711,6 +980,34 @@ class FramedBrane:
     #             if add_v:
     #                 V.append(_v)
     def mini_mesh(self, v):
+        faces = self.faces
+        vertices = self.position_vectors()
+        # V, E, F = [], [], []
+        F = self.faces_of_vertex(v)
+        V = [v]
+        for f in F:
+            face = faces[f]
+            for _v in face:
+                add_v = not _v in V
+                if add_v:
+                    V.append(_v)
+
+        Nfaces = len(F)
+        Nvertices = len(V)
+        mini_faces = np.zeros((Nfaces, 3), dtype=np.int32)
+        mini_vertices = np.zeros((Nvertices, 3))
+        for _ in range(Nvertices):
+            _v = V[_]
+            mini_vertices[_] = vertices[_v]
+        for _ in range(Nfaces):
+            f = F[_]
+            face = faces[f]
+            mini_faces[_, 0] = V.index(face[0])
+            mini_faces[_, 1] = V.index(face[1])
+            mini_faces[_, 2] = V.index(face[2])
+        return mini_vertices, mini_faces
+
+    def get_sub_brane(self, v):
         faces = self.faces
         vertices = self.position_vectors()
         # V, E, F = [], [], []
