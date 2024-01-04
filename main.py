@@ -1,371 +1,305 @@
-# from numdiff import diff
 import numpy as np
-from meshbrane import meshbrane, sparsebrane
 import sympy as sp
-from alphashape import alphashape as ashp
-from scipy.sparse import csr_matrix, csc_matrix
-
-
-x, y, z = sp.symbols("x y z")
-# implicit_expr = (x - 0) ** 2 + (y - 0) ** 2 + ((z - 0) / 2.0) ** 2 - 1.0
-rsq = x**2 + y**2
-# zsqr = z**2
-# r = 1.2-sp.cos(sp.pi*z)
-# r=1.25-cos(pi*z/3)
-# zzz0 =
-implicit_expr1 = rsq - (1.25 - sp.cos(sp.pi * z / 4)) * (9 - z**2) / 4
-implicit_expr2 = 1  # x**2 + y**2 + (z - 2) ** 2 - 1.0
-implicit_expr3 = 1  # x**2 + y**2 + (z + 2) ** 2 - 1.0
-implicit_expr = implicit_expr1 * implicit_expr2 * implicit_expr3
-implicit_vars = (x, y, z)
-nx, ny, nz = 10j, 10j, 20j
-xyz_grid = np.mgrid[-3:3:nx, -3:3:ny, -3:3:nz]
-random_args = {"Npts": 100, "alpha": 1.0}
-implicit_args = {
-    "implicit_expr": implicit_expr,
-    "implicit_vars": implicit_vars,
-    "xyz_grid": xyz_grid,
-}
-# brane2 = meshbrane2(random_args=random_args, implicit_args=implicit_args)
-sbrane = sparsebrane(init_type="implicit", implicit_args=implicit_args)
-# brane1 = meshbrane(random_args=random_args, implicit_args=implicit_args)
-#
-cloud_args = {
-    "points": sbrane.vertices,
-    "alpha": 1 / 3,
-}
-
-
-# brane = sparsebrane(init_type="cloud", cloud_args=cloud_args)
-figure_kwargs = {
-    "show": True,
-    "save": False,
-    "plot_vertices": True,
-    "plot_edges": True,
-    "plot_faces": True,
-    "plot_face_normals": False,
-    "plot_vertex_normals": False,
-}
-
-sbrane.plot_mesh(**figure_kwargs)
-
-
-# %%
-F = sbrane.faces
-E = sbrane.edges
-V = sbrane.vertices
-
-
-Aef_data = sbrane.Aef.data
-Aef_indices = sbrane.Aef.indices
-Aef_indptr = sbrane.Aef.indptr
-
-Afe_data = sbrane.Afe.data
-Afe_indices = sbrane.Afe.indices
-Afe_indptr = sbrane.Afe.indptr
-
-Aev_data = sbrane.Aev.data
-Aev_indices = sbrane.Aev.indices
-Aev_indptr = sbrane.Aev.indptr
-
-Ave_data = sbrane.Ave.data
-Ave_indices = sbrane.Ave.indices
-Ave_indptr = sbrane.Ave.indptr
-
-Nv = len(sbrane.vertices)
-Ne = len(sbrane.edges)
-Nf = len(sbrane.faces)
-
-data_v = np.ones(Nv)
-indices_v = np.array([v for v in range(Nv)])
-indptr_v = np.array([v for v in range(Nv + 1)])
-_ketv = csc_matrix((data_v, indices_v, indptr_v), shape=(Nv, Nv))
-_brav = csr_matrix((data_v, indices_v, indptr_v), shape=(Nv, Nv))
-
-data_e = np.ones(Ne)
-indices_e = np.array([e for e in range(Ne)])
-indptr_e = np.array([e for e in range(Ne + 1)])
-_kete = csc_matrix((data_e, indices_e, indptr_e), shape=(Ne, Ne))
-_brae = csr_matrix((data_e, indices_e, indptr_e), shape=(Ne, Ne))
-
-data_f = np.ones(Nf)
-indices_f = np.array([f for f in range(Nf)])
-indptr_f = np.array([f for f in range(Nf + 1)])
-_ketf = csc_matrix((data_f, indices_f, indptr_f), shape=(Nf, Nf))
-_braf = csr_matrix((data_f, indices_f, indptr_f), shape=(Nf, Nf))
-
-
-def ketv(v):
-    return _ketv[:, v]
-
-
-def brav(v):
-    return _brav[v, :]
-
-
-def kete(e):
-    return _kete[:, e]
-
-
-def brae(e):
-    return _brae[e, :]
-
-
-def ketf(f):
-    return _ketf[:, f]
-
-
-def braf(f):
-    return _braf[f, :]
-
-
-Bdry_ve = sbrane.Aev.T
-coBdry_ev = sbrane.Aev
-
-Bdry_ef = sbrane.Afe.T
-coBdry_fe = sbrane.Afe
-
-e = 13
-ket_e = kete(e)
-
-ket_Bdry_e = Bdry_ve @ ket_e
-v0 = Bdry_ket_e.indices[np.where(Bdry_ket_e.data == -1)]
-ket_f2collapse = coBdry_fe @ ket_e
-
-
-edge = E[e]
-cobdry_e = sbrane.Aef[e].toarray()
-_cobdry_e = sbrane.Afe
-bdry_e = sbrane.Ave[:, e].toarray()
-
-
-# edges with v2pop in boundary
-e2pop = Ave_indices[Ave_indptr[v2pop] : Ave_indptr[v2pop + 1]]
-# faces with edge in boundary
-# f2pop = Aef_indices[Aef_indptr[e] : Aef_indptr[e + 1]]
-
-
-def star_v(v):
-    e_indices = Ave_indices[Ave_indptr[v] : Ave_indptr[v + 1]]
-    f_indices = {
-        f for f in Aef_indices[Aef_indptr[e] : Aef_indptr[e + 1]] for e in e_indices
-    }
-    return e_indices, f_indices
-
-
-# %%
-# faces with edge in boundary
-f2pop = Aef_indices[Aef_indptr[e] : Aef_indptr[e + 1]]
-# vertices of faces2pop
-v2pop = {v for f in f2pop for v in F[f]}  # if v != v2keep}
-# edges of faces2pop
-e2pop = {e for f in f2pop for e in Afe_indices[Afe_indptr[f] : Afe_indptr[f + 1]]}
-
-# f2relabel = {f for v in v2pop for f in Avf_indices[Avf_indptr[v] : Avf_indptr[v + 1]]}
-
-
-part_vertices = np.array([V[v] for v in v2pop])
-sbrane.plot_part(part_vertices=part_vertices)
-# %%
-
-#
-#
-
-#
-
-#
-
-#
-
-
-# %%
-
-simfig_kwargs = {
-    "show": False,
-    "save": True,
-    "plot_vertices": True,
-    "plot_edges": True,
-    "plot_faces": True,
-    "plot_face_normals": False,
-    "plot_vertex_normals": False,
-}
-
-brane.wiggly_sim(T=0.02, dt=0.01, figure_kwargs=simfig_kwargs)
-
-
-# %% #################################################################
-vertex_positions = brane.vertices
-vertices = np.array([_ for _ in range(len(vertex_positions))], dtype=np.int32)
-faces = brane.faces
-edges = brane.edges
-
-
-Aev = brane.Aev.toarray()
-Ave = brane.Ave.toarray()
-
-Afe = brane.Afe.toarray()
-Aef = brane.Aef.toarray()
-
-Afv = brane.Afv.toarray()
-Avf = brane.Avf.toarray()
-
-
-vf_data = brane.Avf.data
-vf_indices = brane.Avf.indices
-vf_indptr = brane.Avf.indptr
-
-ef_data = brane.Aef.data
-ef_indices = brane.Aef.indices
-ef_indptr = brane.Aef.indptr
-
-ve_data = brane.Ave.data
-ve_indices = brane.Ave.indices
-ve_indptr = brane.Ave.indptr
-
-# for v in vertices:
-v = 17
-faces_of_v = vf_indices[vf_indptr[v] : vf_indptr[v + 1]]
-edges_of_v = ve_indices[ve_indptr[v] : ve_indptr[v + 1]]
-cell_edges = []
-
-bd_f = 0 * brane.Afe[0]
-for f in faces_of_v:
-    bd_f += brane.Afe[f]
-
-
-bd_cell = 0 * brane.Aev[0]
-for e in bd_f.indices:
-    bd_cell += brane.Aev[e]
-
-bd_cell.data
-# %% #################################################################
-from meshbrane.simulation_functions import *
-from meshbrane.model import *
-from mayavi import mlab
-
-vertices = brane.vertices
-edges = brane.edges
-Avf = brane.Avf
-Ave = brane.Ave
-v = 17
-
-faces_of_vertices = get_y_of_x_csr(Avf)
-edges_of_vertices = get_y_of_x_csr(Ave)
-
-faces_of_v = faces_of_vertices[v]
-edges_of_v = edges_of_vertices[v]
-
-# _e = 2
-# e = edges_of_v[2]
-# edge = edges[e]
-#
-
-Nev = len(edges_of_v)
-cell_vertex_indices = np.zeros(Nev, dtype=np.int32)
-
-for _e in range(Nev):
-    e = edges_of_v[_e]
-    edge = edges[e]
-    edge = edges[e]
-    ev_sgn = Ave[v, e]
-    if ev_sgn == 1:
-        # v_cell = sum(edge) - v
-        v_cell = edge[0]
-    elif ev_sgn == -1:
-        # v_cell = sum(edge) - v
-        v_cell = edge[1]
-    cell_vertex_indices[_e] = v_cell
-cell_vertices = np.array([vertices[v] for v in cell_vertex_indices])
-vertex = vertices[v]
-# %%
-# def plot_mesh_cell(self, show=True, save=False, fig_path=None):
-self = brane
-show = True
-save = False
-fig_path = None
-vertices = self.vertices
-faces = self.faces
-face_centroids = self.face_centroids
-face_normals = self.face_normals
-vertex_normals = self.vertex_normals
-face_color = self.face_color
-edge_color = self.edge_color
-vertex_color = self.vertex_color
-normal_color = self.normal_color
-figsize = (2180, 2180)
-##########################################################
-if show:
-    mlab.options.offscreen = False
-else:
-    mlab.options.offscreen = True
-
-cell_X, cell_Y, cell_Z = cell_vertices.T
-
-vertex_X, vertex_Y, vertex_Z = vertices.T
-face_X, face_Y, face_Z = face_centroids.T
-face_nX, face_nY, face_nZ = face_normals.T
-vertex_nX, vertex_nY, vertex_nZ = vertex_normals.T
-# bgcolor = (1.0, 1.0, 1.0)
-# fgcolor = (0.0, 0.0, 0.0)
-figsize = (2180, 2180)
-title = f"Membrane mesh"
-fig = mlab.figure(title, size=figsize)  # , bgcolor=bgcolor, fgcolor=fgcolor)
-mem_edges = mlab.triangular_mesh(
-    vertex_X,
-    vertex_Y,
-    vertex_Z,
-    faces,
-    # opacity=0.4,
-    color=edge_color,
-    # representation="wireframe"
-    representation="mesh",
-    # representation="surface"
-    # representation="fancymesh",
-    tube_radius=0.03,
+import polyscope as ps
+from src.model import Brane, FramedBrane, HalfEdgeMesh
+from src.utils import (
+    make_implicit_surface_mesh,
+    make_sample_mesh,
+    load_mesh_from_ply,
+    save_mesh_to_ply,
 )
-mem_faces = mlab.triangular_mesh(
-    vertex_X,
-    vertex_Y,
-    vertex_Z,
-    faces,
-    opacity=0.4,
-    color=face_color,
-    # representation="wireframe"
-    # representation="mesh",
-    representation="surface"
-    # representation="fancymesh",
-    # tube_radius=None
+import matplotlib.pyplot as plt
+from src.pretty_pictures import (
+    polyscope_list_plot,
 )
-mem_vertices = mlab.points3d(
-    *vertices.T, mode="sphere", scale_factor=0.1, color=vertex_color
+from src.numdiff import (
+    #     matrix_to_quaternion,
+    #     quaternion_to_matrix,
+    #     exp_so3,
+    #     log_so3,
+    #     exp_quaternion,
+    #     log_quaternion,
+    jitcross,
+    mul_se3_quaternion,
+    inv_se3_quaternion,
+    #     mul_quaternion,
+    #     inv_quaternion,
+    #     rotate_by_quaternion,
+    se3_quaternion_to_matrix,
+    #     se3_matrix_to_quaternion,
+    #     quaternion_to_matrix2,
+    log_se3_quaternion,
+    exp_se3_quaternion,
+    #     exp_se3,
+    #     exp_se3_slow,
+)
+from scipy.sparse import csr_matrix
+from scipy.sparse.linalg import spsolve
+from scipy.spatial import Delaunay
+
+# %%
+
+# file_path = "./data/ply_files/mem3dg_oblate.ply"
+# vertices, faces = load_mesh_from_ply(file_path)
+
+vertices, faces, normals = make_sample_mesh("torus")
+
+# fb = FramedBrane(vertices, faces, normals)
+# %%
+
+
+def laplacian_smooth(_vertices, _faces, lambda_factor=0.5, iterations=10):
+    vertices = _vertices.copy()
+    faces = _faces.copy()
+    # Create adjacency matrix
+    n = len(vertices)
+    adjacency_matrix = csr_matrix((n, n))
+    for face in faces:
+        for i in range(3):
+            adjacency_matrix[face[i], face[(i + 1) % 3]] = 1
+            adjacency_matrix[face[(i + 1) % 3], face[i]] = 1
+
+    # Create degree matrix
+    degree_matrix = csr_matrix((n, n))
+    degree_matrix.setdiag(adjacency_matrix.sum(axis=1))
+
+    # Create Laplacian matrix
+    laplacian_matrix = degree_matrix - adjacency_matrix
+
+    # Perform smoothing
+    for _ in range(iterations):
+        for i in range(3):
+            b = degree_matrix.dot(vertices[:, i])
+            vertices[:, i] = spsolve(
+                laplacian_matrix + lambda_factor * degree_matrix, b
+            )
+
+    return vertices
+
+
+vertices_laplacian_smooth = laplacian_smooth(
+    vertices, faces, lambda_factor=0.5, iterations=10
 )
 
-cell_vertices = mlab.points3d(
-    *cell_vertices.T, mode="sphere", scale_factor=0.1, color=normal_color
-)
 
-# f_normals = mlab.quiver3d(
-#     face_X,
-#     face_Y,
-#     face_Z,
-#     face_nX,
-#     face_nY,
-#     face_nZ,
+def delaunay_smooth(_vertices, _faces):
+    # Flatten the vertices to 2D if they are 3D
+    vertices = _vertices.copy()
+    faces = _faces.copy()
+    if vertices.shape[1] == 3:
+        vertices = vertices[:, :2]
+
+    # Perform Delaunay triangulation
+    tri = Delaunay(vertices)
+
+    # Return the new faces
+    return tri.points, tri.simplices
+
+
+vertices_delaunay_smooth, faces_delaunay_smooth = delaunay_smooth(vertices, faces)
+# %%
+b = Brane(vertices, faces)
+b_laplacian_smooth = b  # Brane(vertices_laplacian_smooth, faces)
+b_delaunay_smooth = Brane(vertices, faces_delaunay_smooth)
+
+# %%
+branes = [b, b_laplacian_smooth, b_delaunay_smooth]
+polyscope_list_plot(branes=branes)
+# polyscope_list_plot(brane=b_laplacian_smooth)
+# polyscope_list_plot(brane=b_delaunay_smooth)
+# %%
+
+
+# %%
+
+
+b.V_scalar = b.get_angle_defects()
+R = 0.7  # big radius
+r = 0.7 / 3.0  # small radius
+
+Rout = R + r
+Rin = R - r
+Kout = 1 / (Rout * r)
+Kin = 1 / (Rin * r)
+# %%
+self = b
+Nverts = len(self.pq)
+verts_of_verts = []
+# defects = np.zeros(Nverts)
+K = np.zeros(Nverts)
+# V = self.V_index
+for v0 in range(Nverts):
+    # p0 = self.pq[v, :3]
+    h_start = self.V_hedge[v0]
+    defect = 2 * np.pi
+    area = 0.0
+
+    h = h_start
+    v = self.H_vertex[h]
+    e2 = self.pq[v, :3] - self.pq[v0, :3]
+    norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
+    h = self.H_next[self.H_twin[h]]
+
+    while True:
+        e1 = e2
+        norm_e1 = norm_e2
+        v = self.H_vertex[h]  # 2nd vert
+        e2 = self.pq[v, :3] - self.pq[v0, :3]
+        norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
+        # e1_cross_e2 = jitcross(e1, e2)
+        # norm_e1_cross_e2 = np.sqrt(
+        #     e1_cross_e2[0] ** 2 + e1_cross_e2[1] ** 2 + e1_cross_e2[2] ** 2
+        # )
+        # sin_angle = norm_e1_cross_e2 / (norm_e1 * norm_e2)
+        cos_angle = (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (
+            norm_e1 * norm_e2
+        )
+        angle = np.arccos(cos_angle)
+        face_area = 0.5 * norm_e1 * norm_e2 * np.sin(angle)
+        # print(f"angle={np.round(angle / np.pi, 3)}")
+        # print(f"farea={np.round(face_area, 3)}")
+
+        defect -= angle
+        area += face_area / 3
+
+        h = self.H_next[self.H_twin[h]]
+        if h == h_start:
+            break
+    K[v0] = defect / area
+    print(f"area={np.round(area, 6)}")
+    print(f"angle defect={np.round(defect/np.pi, 6)}")
+
+
+# K
+# plt.plot(K)
+# %%
+# example_multimesh_plot(b)
+# vertices, edges, faces, frames = (
+#     b.position_vectors(),
+#     b.edges,
+#     b.faces,
+#     b.orthogonal_matrices(),
 # )
-# v_normals = mlab.quiver3d(
-#     vertex_X,
-#     vertex_Y,
-#     vertex_Z,
-#     vertex_nX,
-#     vertex_nY,
-#     vertex_nZ,
-#     color=normal_color,
-# )
+# psi_on_edges = b.get_psi_on_edges()
+vertices, edges, faces, frames = (
+    b.vertices,
+    b.halfedges,
+    b.faces,
+    b.orthogonal_matrices(),
+)
+polyscope_mesh_plot(vertices, faces, frames=None)
+# %%
+PQ = np.random.rand(7)
+PQ[3:] /= np.linalg.norm(PQ[3:])
+b.rigid_transform(PQ)
+vertices, edges, faces, frames = (
+    b.vertices,
+    b.halfedges,
+    b.faces,
+    b.orthogonal_matrices(),
+)
+polyscope_mesh_plot(vertices, faces, frames=None)
 
-if show:
-    mlab.show()
-if save:
-    mlab.savefig(fig_path, figure=fig, size=figsize)
-mlab.close(all=True)
 
-# mlab.close(all=True)
+# %%
+def mean_pose(self, vertex_list):
+    """computes the SE3-valued mean of the euclidean transformations
+    associated with vertices in vertex_list"""
+    iters = 3
+    v_initial = 0
+    framed_vertices = self.pq
+
+    Nsamps = len(vertex_list)
+    mu_g = framed_vertices[vertex_list[v_initial]]
+
+    for iter in range(iters):
+        mu_g_inv = inv_se3_quaternion(mu_g)
+        Psi = np.zeros(6)
+        for i in vertex_list:
+            g = framed_vertices[i]
+            g[3:] /= np.linalg.norm(g[3:])
+            mu_g_inv_g = mul_se3_quaternion(mu_g_inv, g)
+            mu_g_inv_g[3:] /= np.linalg.norm(mu_g_inv_g[3:])
+
+            Psi += log_se3_quaternion(mu_g_inv_g) / Nsamps
+            # Psi += log_se3_quaternion(mul_se3_quaternion(g, mu_g_inv)) / Nsamps
+        mu_g = mul_se3_quaternion(mu_g, exp_se3_quaternion(Psi))
+        # mu_g = mul_se3_quaternion(exp_se3_quaternion(Psi), mu_g)
+    return mu_g
+
+
+nan_list = []
+f_list = [_ for _ in range(len(b.faces))]  # [158, 159]  #
+pq = np.zeros((len(f_list), 7))
+for n_f in range(len(f_list)):
+    f = f_list[n_f]
+    face = faces[f]
+    G = np.array([b.pq[v] for v in face])
+    mu_g = G[0]
+    mu_g_inv = inv_se3_quaternion(mu_g)
+    mu_g_inv_g = mul_se3_quaternion(mu_g_inv, mu_g)
+
+    pq_mean = mean_pose(b, face)
+    xx = np.linalg.norm(pq_mean - mu_g)
+    if xx > 1:
+        # pq_mean = mu_g
+        nan_list.append(face)
+    pq[n_f] = pq_mean
+
+    # print(xx)
+
+# pq = np.array([*pq,*pq_R])
+polyscope_plot2(vertices, faces, frames=None, pq=pq)
+# ps.remove_surface_mesh("my_mesh")
+
+# registered_surfaces = ps.get_surface_meshes()
+ps.remove_all_structures()
+
+pq = [b.pq[_] for _ in nan_list[0]]
+
+# %%
+
+
+def myplot(brane, vertex_list=None):
+    if vertex_list is None:
+        vertex_list = [0, 93, 260, 500]
+    vertices, faces = brane.position_vectors(), brane.faces
+    frames = brane.orthogonal_matrices()
+    surfaces_list = []
+    brane_dict = {
+        "vertices": vertices,
+        "faces": faces,
+        # "frames": frames,
+    } | default_color_dict
+
+    pq = np.zeros((len(vertex_list), 7))
+    for _v in range(len(vertex_list)):
+        vertex = vertex_list[_v]
+        ring = brane.vertices_adjacent_to_vertex(vertex)
+        pq_mean = brane.mean_pose(ring)
+        pq[_v] = pq_mean
+
+        v_of_e_of_v = np.array([vertex, *ring])
+        mini_vertices, mini_faces = brane.mini_mesh(vertex)
+        mini_frames = np.array([frames[_] for _ in v_of_e_of_v])
+
+        mini_brane_dict = {
+            "vertices": mini_vertices,
+            "faces": mini_faces,
+            "frames": mini_frames,
+            "face_color": (0.0, 0.0, 1.0),
+            "edge_color": (1.0, 0.0, 0.0),
+            "vertex_color": (1.0, 0.0, 0.0),
+            "normal_color": (1.0, 0.0, 0.0),
+            "tangent_color": (1.0, 0.0, 0.0),
+            "face_alpha": 1.0,
+        }
+        surfaces_list.append(mini_brane_dict)
+
+    surfaces_list.append(brane_dict)
+
+    polyscope_plot(surfaces_list, pq)
+
+
+# %%
+myplot(b)
