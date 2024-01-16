@@ -368,13 +368,13 @@ def polyscope_mesh_cloud_plot(vertices, faces, frames=None, mf_cloud=None):
 
 
 def polyscope_list_plot(
-    point_clouds=[],
-    surfaces=[],
-    vector_point_clouds=[],
-    vector_surfaces=[],
-    pq_point_clouds=[],
-    pq_surfaces=[],
-    branes=[],
+    point_clouds=None,
+    surfaces=None,
+    vector_point_clouds=None,
+    vector_surfaces=None,
+    pq_point_clouds=None,
+    pq_surfaces=None,
+    branes=None,
 ):
     """
     point_cloud = {"points": points, "point_color": point_color}
@@ -392,30 +392,75 @@ def polyscope_list_plot(
                "face_rgb_values": face_rgb_values,
                "vertex_rgb_values": vertex_rgb_values}
     """
-    for brane in branes:
-        # pq_point_clouds.append({"pq": brane.pq})
+    if point_clouds is None:
+        point_clouds = []
+
+    if surfaces is None:
+        surfaces = []
+
+    if vector_point_clouds is None:
+        vector_point_clouds = []
+
+    if vector_surfaces is None:
+        vector_surfaces = []
+
+    if pq_point_clouds is None:
+        pq_point_clouds = []
+
+    if pq_surfaces is None:
+        pq_surfaces = []
+
+    if branes is None:
+        branes = []
+
+    for _, brane in enumerate(branes):
+        # pq_point_clouds.append({"pq": brane.V_pq})
         # face_rgb_values = np.random.rand(3 * len(brane.faces)).reshape(
         #     (len(brane.faces), 3)
         # )
-        # vertex_rgb_values = np.random.rand(3 * len(brane.pq)).reshape(
-        #     (len(brane.pq), 3)
+        # vertex_rgb_values = np.random.rand(3 * len(brane.V_pq)).reshape(
+        #     (len(brane.V_pq), 3)
         # )
         # face_scalar_values = np.random.rand(len(brane.faces))
-        # vertex_scalar_values = brane.V_scalar  # 6 * np.random.rand(len(brane.pq)) - 3
+        # vertex_scalar_values = brane.V_scalar  # 6 * np.random.rand(len(brane.V_pq)) - 3
 
         # brane_dict = {
-        #     "vertices": brane.pq[:, :3].copy(),
+        #     "vertices": brane.V_pq[:, :3].copy(),
         #     "faces": brane.faces.copy(),
         #     # "face_rgb_values": face_rgb_values,
         #     # "vertex_rgb_values": vertex_rgb_values,
         #     # "face_scalar_values": face_scalar_values,
         #     "vertex_scalar_values": brane.V_scalar.copy(),
         # }
-        surfaces.append(
+        # surfaces.append(
+        #     {
+        #         "vertices": brane.V_pq[:, :3].copy(),
+        #         "faces": brane.faces.copy(),
+        #         "vertex_scalar_values": brane.V_scalar.copy(),
+        #         "name": f"brane{_}",
+        #     }
+        # )
+        # pq_point_clouds.append(
+        #     {
+        #         "pq": brane.V_pq.copy(),
+        #         "name": f"pq_brane{_}",
+        #         # "point_color": point_color,
+        #         # "vector_color1": vector_color1,
+        #         # "vector_color2": vector_color2,
+        #         "vector_color3": (1.0, 0.0, 0.0),
+        #     }
+        # )
+
+        pq_surfaces.append(
             {
-                "vertices": brane.pq[:, :3].copy(),
+                "pq": brane.V_pq.copy(),
                 "faces": brane.faces.copy(),
                 "vertex_scalar_values": brane.V_scalar.copy(),
+                "name": f"brane{_}",
+                # "point_color": point_color,
+                # "vector_color1": vector_color1,
+                # "vector_color2": vector_color2,
+                "vector_color3": (1.0, 0.0, 0.0),
             }
         )
     ps_point_clouds = []
@@ -425,38 +470,48 @@ def polyscope_list_plot(
     ps_pq_point_clouds = []
     ps_pq_surfaces = []
     ps.init()
+    ps.remove_all_structures()
+    ps.set_navigation_style("free")
+    ps.set_up_dir("z_up")
     # ps.set_transparency_mode("simple")
     for _, point_cloud in enumerate(point_clouds):
-        for key in ["point_color"]:
+        for key in ["point_color", "name"]:
             if not key in point_cloud.keys():
                 point_cloud[key] = None
         points = point_cloud["points"]
         color = point_cloud["point_color"]
+        name = point_cloud["name"]
+        if name is None:
+            name = f"point_cloud{_}"
         register_point_cloud_kwargs = {
-            "name": f"point_cloud{_}",
+            "name": name,
             "points": points,
             "enabled": True,
             "radius": 0.0025,
             "color": color,
         }
         ps_point_clouds.append(ps.register_point_cloud(**register_point_cloud_kwargs))
+
     for _, vector_point_cloud in enumerate(vector_point_clouds):
-        for key in ["point_color", "vector_color"]:
+        for key in ["point_color", "vector_color", "name"]:
             if not key in vector_point_cloud.keys():
                 vector_point_cloud[key] = None
         points = vector_point_cloud["points"]
         vectors = vector_point_cloud["vectors"]
         point_color = vector_point_cloud["point_color"]
         vector_color = vector_point_cloud["vector_color"]
+        name = vector_point_cloud["name"]
+        if name is None:
+            name = f"vector_point_cloud{_}"
         register_point_cloud_kwargs = {
-            "name": f"vector_point_cloud{_}",
+            "name": name,
             "points": points,
             "enabled": True,
             "radius": 0.0025,
             "color": point_color,
         }
         add_vector_quantity_kwargs = {
-            "name": f"v_vector_point_cloud{_}",
+            "name": f"v_{name}",
             "values": vectors,
             "enabled": True,
             # "radius": 0.0025,
@@ -469,13 +524,22 @@ def polyscope_list_plot(
         ps_vector_point_clouds[-1].add_vector_quantity(**add_vector_quantity_kwargs)
 
     for _, pq_point_cloud in enumerate(pq_point_clouds):
-        for key in ["point_color", "vector_color1", "vector_color2", "vector_color3"]:
+        for key in [
+            "point_color",
+            "vector_color1",
+            "vector_color2",
+            "vector_color3",
+            "name",
+        ]:
             if not key in pq_point_cloud.keys():
                 pq_point_cloud[key] = None
         point_color = pq_point_cloud["point_color"]
         v1_color = pq_point_cloud["vector_color1"]
         v2_color = pq_point_cloud["vector_color2"]
         v3_color = pq_point_cloud["vector_color3"]
+        name = pq_point_cloud["name"]
+        if name is None:
+            name = f"pq_point_cloud{_}"
 
         points = pq_point_cloud["pq"][:, :3]
         q = pq_point_cloud["pq"][:, 3:]
@@ -483,7 +547,7 @@ def polyscope_list_plot(
         v1, v2, v3 = frames[:, :, 0], frames[:, :, 1], frames[:, :, 2]
 
         register_point_cloud_kwargs = {
-            "name": f"pq_point_cloud{_}",
+            "name": name,
             "points": points,
             "enabled": True,
             "radius": 0.0025,
@@ -491,21 +555,21 @@ def polyscope_list_plot(
         }
 
         add_vector_quantity_kwargs1 = {
-            "name": f"v1_pq_point_cloud{_}",
+            "name": f"v1_{name}",
             "values": v1,
             "enabled": True,
             # "radius": 0.0025,
             "color": v1_color,
         }
         add_vector_quantity_kwargs2 = {
-            "name": f"v2_pq_point_cloud{_}",
+            "name": f"v2_{name}",
             "values": v2,
             "enabled": True,
             # "radius": 0.0025,
             "color": v2_color,
         }
         add_vector_quantity_kwargs3 = {
-            "name": f"v3_pq_point_cloud{_}",
+            "name": f"v3_{name}",
             "values": v3,
             "enabled": True,
             # "radius": 0.0025,
@@ -516,11 +580,11 @@ def polyscope_list_plot(
         )
 
         ps_pq_point_clouds[-1].add_vector_quantity(**add_vector_quantity_kwargs1)
-        ps_pq_point_clouds[-1].add_vector_quantity(**add_vector_quantity_kwargs2)
+        # ps_pq_point_clouds[-1].add_vector_quantity(**add_vector_quantity_kwargs2)
         ps_pq_point_clouds[-1].add_vector_quantity(**add_vector_quantity_kwargs3)
 
     for _, surface in enumerate(surfaces):
-        for key in ["face_color", "edge_color", "transparency"]:
+        for key in ["face_color", "edge_color", "transparency", "name"]:
             if not key in surface.keys():
                 surface[key] = None
         vertices = surface["vertices"]
@@ -528,8 +592,11 @@ def polyscope_list_plot(
         edge_color = surface["edge_color"]
         face_color = surface["face_color"]
         transparency = surface["transparency"]
+        name = surface["name"]
+        if name is None:
+            name = f"surface{_}"
         register_surface_mesh_kwargs = {
-            "name": f"surfaces{_}",
+            "name": name,
             "vertices": vertices,
             "faces": faces,
             "enabled": True,
@@ -564,5 +631,102 @@ def polyscope_list_plot(
                 cmap="coolwarm",
             )
 
+    for _, pq_surface in enumerate(pq_surfaces):
+        for key in [
+            "face_color",
+            "edge_color",
+            "vector_color1",
+            "vector_color2",
+            "vector_color3",
+            "transparency",
+            "name",
+        ]:
+            if not key in pq_surface.keys():
+                pq_surface[key] = None
+        vertices = pq_surface["pq"][:, :3]
+        faces = pq_surface["faces"]
+        edge_color = pq_surface["edge_color"]
+        face_color = pq_surface["face_color"]
+        v1_color = pq_surface["vector_color1"]
+        v2_color = pq_surface["vector_color2"]
+        v3_color = pq_surface["vector_color3"]
+        transparency = pq_surface["transparency"]
+        name = pq_surface["name"]
+        q = pq_surface["pq"][:, 3:]
+        frames = np.array([quaternion_to_matrix(qi) for qi in q])
+        v1, v2, v3 = frames[:, :, 0], frames[:, :, 1], frames[:, :, 2]
+        if name is None:
+            name = f"pq_surface{_}"
+        register_surface_mesh_kwargs = {
+            "name": name,
+            "vertices": vertices,
+            "faces": faces,
+            "enabled": True,
+            "color": face_color,
+            "edge_color": edge_color,
+            "edge_width": 1.0,
+            "transparency": transparency,
+        }
+        ps_pq_surfaces.append(ps.register_surface_mesh(**register_surface_mesh_kwargs))
+        if "face_rgb_values" in pq_surface.keys():
+            face_rgb_values = pq_surface["face_rgb_values"]
+            ps_pq_surfaces[-1].add_color_quantity(
+                "face_rgb_values", face_rgb_values, defined_on="faces", enabled=True
+            )
+        if "vertex_rgb_values" in pq_surface.keys():
+            vertex_rgb_values = pq_surface["vertex_rgb_values"]
+            ps_pq_surfaces[-1].add_color_quantity(
+                "vertex_rgb_values", vertex_rgb_values, enabled=True
+            )
+        if "vertex_scalar_values" in pq_surface.keys():
+            vertex_scalar_values = pq_surface["vertex_scalar_values"]
+            # ps_mesh.add_scalar_quantity("rand vals2", vals_face, defined_on="faces")
+            # # visualize some random data per-edge (halfedges are also supported)
+            # vals_edge = np.random.rand(ps_mesh.n_edges())
+            # ps_mesh.add_scalar_quantity("rand vals3", vals_edge, defined_on="edges")
+            # as always, we can customize the initial appearance
+            ps_pq_surfaces[-1].add_scalar_quantity(
+                "vertex_scalar_values",
+                vertex_scalar_values,
+                enabled=True,
+                # vminmax=(-3.0, 3.0),
+                cmap="coolwarm",
+            )
+        add_vector_quantity_kwargs1 = {
+            "name": f"v1_{name}",
+            "values": v1,
+            "enabled": True,
+            # "radius": 0.0025,
+            "color": v1_color,
+        }
+        # add_vector_quantity_kwargs2 = {
+        #     "name": f"v2_{name}",
+        #     "values": v2,
+        #     "enabled": True,
+        #     # "radius": 0.0025,
+        #     "color": v2_color,
+        # }
+        add_vector_quantity_kwargs3 = {
+            "name": f"v3_{name}",
+            "values": v3,
+            "enabled": True,
+            # "radius": 0.0025,
+            "color": v3_color,
+        }
+        ps_pq_surfaces[-1].add_vector_quantity(**add_vector_quantity_kwargs1)
+        # ps_pq_point_clouds[-1].add_vector_quantity(**add_vector_quantity_kwargs2)
+        ps_pq_surfaces[-1].add_vector_quantity(**add_vector_quantity_kwargs3)
+    # ps_structures = [
+    #     *ps_point_clouds,
+    #     *ps_surfaces,
+    #     *ps_vector_point_clouds,
+    #     *ps_vector_surfaces,
+    #     *ps_pq_point_clouds,
+    #     *ps_pq_surfaces,
+    # ]
+
     ps.show()
     ps.remove_all_structures()
+    # for ps_struc in ps_structures:
+    #     ps_struc.remove()
+    # return ps_structures

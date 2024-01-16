@@ -160,6 +160,17 @@ def jitcross(u, v):
     return w
 
 
+@njit("f8(f8[:],f8[:])")
+def jitdot(u, v):
+    u_dot_v = 0.0
+    Ndim = len(u)
+    for i in range(Ndim):
+        u_dot_v += u[i] * v[i]
+    return u_dot_v
+
+
+#######################################
+# actual quaternion operations
 @njit("f8[:](f8[:], f8[:])")
 def mul_quaternion(q1, q2):
     """quaternion multiplication"""
@@ -176,55 +187,93 @@ def mul_quaternion(q1, q2):
 @njit("f8[:](f8[:])")
 def inv_quaternion(q):
     """quaternion multiplication"""
-    qw = q[0]
-    qx, qy, qz = -q[1:]
-    return np.array([qw, qx, qy, qz])
-
-
-@njit("f8[:](f8[:,:])")
-def matrix_to_quaternion(R):
-    qw = np.sqrt(1 + R[0, 0] + R[1, 1] + R[2, 2]) / 2
-    qx = (R[2, 1] - R[1, 2]) / (4 * qw)
-    qy = (R[0, 2] - R[2, 0]) / (4 * qw)
-    qz = (R[1, 0] - R[0, 1]) / (4 * qw)
-    return np.array([qw, qx, qy, qz])
+    qw, qx, qy, qz = q
+    normq = np.sqrt(qw**2 + qx**2 + qy**2 + qz**2)
+    return np.array([qw, -qx, -qy, -qz]) / normq
 
 
 @njit("f8[:](f8[:])")
-def exp_quaternion(angles):
-    """..."""
-    theta1, theta2, theta3 = angles
-    theta = np.sqrt(theta1**2 + theta2**2 + theta3**2)
-    if theta < 1e-6:
-        D = 1 / 2 - theta**2 / 48 + theta**4 / 3840  # - theta**6 / 645120
-        qw = 1 - theta**2 / 8 + theta**4 / 384  # - theta**6 / 46080
-    else:
-        D = np.sin(theta / 2) / theta
-        qw = np.cos(theta / 2)
+def con_quaternion(q):
+    """quaternion conjugate"""
+    qw, qx, qy, qz = q
+    return np.array([qw, -qx, -qy, -qz])
 
-    qx, qy, qz = D * theta1, D * theta2, D * theta3
-    exp_theta = np.array([qw, qx, qy, qz])
-    return exp_theta
+
+@njit("f8[:](f8[:])")
+def exp_quaternion(q):
+    """..."""
+    exp_q = np.zeros_like(q)
+    q0, qvec = q[0], q[1:]
+    alpha = np.sqrt(q[1] ** 2 + q[2] ** 2 + q[3] ** 2)
+    # theta = 2 * normqvec
+    if alpha < 1e-6:
+        sin_alpha_over_alpha = 1 - alpha**2 / 6 + alpha**4 / 120 - alpha**6 / 5040
+        cos_alpha = 1 - alpha**2 / 2 + alpha**4 / 24 - alpha**6 / 720
+    else:
+        sin_alpha_over_alpha = np.sin(alpha) / alpha
+        cos_alpha = np.cos(alpha)
+
+    # exp_q = np.exp(q0)*np.array([])
+    exp_q0 = np.exp(q0)
+    exp_q[0] = exp_q0 * cos_alpha
+    exp_q[1:] = exp_q0 * sin_alpha_over_alpha * qvec
+    return exp_q
 
 
 @njit("f8[:](f8[:])")
 def log_quaternion(q):
     """..."""
-    qw, qx, qy, qz = q
+    log_q = np.zeros_like(q)
+    q0, qvec = q[0], q[1:]
+    norm_q = np.sqrt(q[0] ** 2 + q[1] ** 2 + q[2] ** 2 + q[3] ** 2)
+    norm_qvec = np.sqrt(q[1] ** 2 + q[2] ** 2 + q[3] ** 2)
+    cos_alpha = q0 / norm_q
+    alpha = np.arccos(cos_alpha)
 
-    theta = 2 * np.arccos(qw)
-    if theta < 1e-6:
-        theta_over_sin_half_theta = (
-            2 + theta**2 / 12 + 7 * theta**4 / 2880  # + 31 * theta**6 / 483840
-        )
+    log_q[0] = np.log(norm_q)
+    log_q[1:] = alpha * qvec / norm_qvec
+    return log_q
+
+
+@njit("f8[:](f8[:], f8[:])")
+def pow_quaternion(q1, q2):
+    """q1**q2"""
+    log_q1 = log_quaternion(q1)
+    log_q1_q2 = mul_quaternion(log_q1, q2)
+    q1_to_the_q2 = exp_quaternion(log_q1_q2)
+    return q1_to_the_q2
+
+
+#######################################
+# UNIT quaternion operations
+@njit("f8[:](f8[:])")
+def exp_unit_quaternion(qvec):
+    """(pure imaginary quaternion)->(unit quaternion)
+    [qx,qy,qz]->[expqw,expqx,expqy,expqz]"""
+    exp_qvec = np.zeros(4)
+    alpha = np.sqrt(qvec[0] ** 2 + qvec[1] ** 2 + qvec[2] ** 2)
+    if alpha < 1e-6:
+        sin_alpha_over_alpha = 1 - alpha**2 / 6 + alpha**4 / 120 - alpha**6 / 5040
+        cos_alpha = 1 - alpha**2 / 2 + alpha**4 / 24 - alpha**6 / 720
     else:
-        theta_over_sin_half_theta = theta / np.sin(theta / 2)
+        sin_alpha_over_alpha = np.sin(alpha) / alpha
+        cos_alpha = np.cos(alpha)
+    exp_qvec[0] = cos_alpha
+    exp_qvec[1:] = sin_alpha_over_alpha * qvec
+    return exp_qvec
 
-    thetax = qx * theta_over_sin_half_theta
-    thetay = qy * theta_over_sin_half_theta
-    thetaz = qz * theta_over_sin_half_theta
 
-    return np.array([thetax, thetay, thetaz])
+@njit("f8[:](f8[:])")
+def log_unit_quaternion(q):
+    """(unit quaternion)->(pure imaginary quaternion)"""
+    # log_q = np.zeros_like(q[1:])
+    q0, qvec = q[0], q[1:]
+    norm_qvec = np.sqrt(q[1] ** 2 + q[2] ** 2 + q[3] ** 2)
+    # cos_alpha = q0
+    # sin_alpha = norm_qvec
+    alpha = np.arccos(q0)
+    alpha_vec = alpha * qvec / norm_qvec
+    return alpha_vec
 
 
 @njit("f8[:](f8[:])")
@@ -235,6 +284,19 @@ def cay_quaternion(eta):
     q[0] = (16 - norm_eta**2) / (16 + norm_eta**2)
     q[1:] = 8 * eta / (16 + norm_eta**2)
     return q
+
+
+#######################################
+# rotations as quaternions
+@njit("f8[:](f8[:,:])")
+def matrix_to_quaternion(R):
+    """3-by-3 orthogonal matrix to unit quaternion"""
+    qw = np.sqrt(1 + R[0, 0] + R[1, 1] + R[2, 2]) / 2  # breaks for diag(-1,-1,1)
+    # cos_theta = 2 * qw**2 - 1
+    qx = (R[2, 1] - R[1, 2]) / (4 * qw)
+    qy = (R[0, 2] - R[2, 0]) / (4 * qw)
+    qz = (R[1, 0] - R[0, 1]) / (4 * qw)
+    return np.array([qw, qx, qy, qz])
 
 
 @njit("f8[:,:](f8[:])")
@@ -297,6 +359,115 @@ def quaternion_to_matrix(q):
     return Q
 
 
+@njit("f8[:](f8[:])")
+def exp_so3_quaternion(angles):
+    """..."""
+    theta1, theta2, theta3 = angles
+    theta = np.sqrt(theta1**2 + theta2**2 + theta3**2)
+    if theta < 1e-6:
+        D = 1 / 2 - theta**2 / 48 + theta**4 / 3840  # - theta**6 / 645120
+        qw = 1 - theta**2 / 8 + theta**4 / 384  # - theta**6 / 46080
+    else:
+        D = np.sin(theta / 2) / theta
+        qw = np.cos(theta / 2)
+
+    qx, qy, qz = D * theta1, D * theta2, D * theta3
+    exp_theta = np.array([qw, qx, qy, qz])
+    return exp_theta
+
+
+@njit("f8[:](f8[:])")
+def log_so3_quaternion(q):
+    """2*(unit quaternion log of q)"""
+    qw, qx, qy, qz = q
+
+    theta = 2 * np.arccos(qw)
+    if theta < 1e-6:
+        theta_over_sin_half_theta = (
+            2 + theta**2 / 12 + 7 * theta**4 / 2880  # + 31 * theta**6 / 483840
+        )
+    else:
+        theta_over_sin_half_theta = theta / np.sin(theta / 2)
+
+    thetax = qx * theta_over_sin_half_theta
+    thetay = qy * theta_over_sin_half_theta
+    thetaz = qz * theta_over_sin_half_theta
+
+    return np.array([thetax, thetay, thetaz])
+
+
+@njit("f8[:](f8[:])")
+def safe_log_so3_quaternion(q):
+    qw, qx, qy, qz = q
+    # norm_q = np.sqrt(qw**2 + qx**2 + qy**2 + qz**2)
+    # R00 = qw**2 + qx**2 - qy**2 - qz**2
+    # R11 = qw**2 - qx**2 + qy**2 - qz**2
+    # R22 = qw**2 - qx**2 - qy**2 + qz**2
+    cos_theta = 2 * qw**2 - 1
+    # Ensure the value is within the valid range [-1, 1]
+    if cos_theta > 1:
+        cos_theta = 1
+    elif cos_theta < -1:
+        cos_theta = -1
+    # Compute the rotation angle
+    theta = np.arccos(cos_theta)
+    if theta < 1e-6:
+        theta_over_two_sin_theta = (
+            0.5 + theta**2 / 12 + 7 * theta**4 / 720  # + 31 * theta**6 / 30240
+        )
+    else:
+        theta_over_two_sin_theta = 0.5 * theta / np.sin(theta)
+    # R12 = 2 * qy * qz - 2 * qw * qx
+    # R21 = 2 * qw * qx + 2 * qy * qz
+    # R02 = 2 * qw * qy + 2 * qx * qz
+    # R20 = 2 * qx * qz - 2 * qw * qy
+    # R01 = 2 * qx * qy - 2 * qw * qz
+    # R10 = 2 * qw * qz + 2 * qx * qy
+    # thetax = (-R[1, 2] + R[2, 1]) * theta_over_two_sin_theta
+    # thetay = (R[0, 2] - R[2, 0]) * theta_over_two_sin_theta
+    # thetaz = (-R[0, 1] + R[1, 0]) * theta_over_two_sin_theta
+    thetax = (4 * qw * qx) * theta_over_two_sin_theta
+    thetay = (4 * qw * qy) * theta_over_two_sin_theta
+    thetaz = (4 * qw * qz) * theta_over_two_sin_theta
+    # q0, qvec = q[0], q[1:]
+    # norm_qvec = np.sqrt(q[1] ** 2 + q[2] ** 2 + q[3] ** 2)
+    # cos_theta = 2 * q0**2 - 1
+    # theta = np.arccos(cos_theta)
+    # thetavec = theta * qvec / norm_qvec
+    return np.array([thetax, thetay, thetaz])
+
+
+@njit("f8[:](f8[:], f8[:])")
+def rotate_by_quaternion(q, r):
+    """applies rotation representated by unit quaternion q=[qw,qx,qy,qz]
+    to verctor r=[x,y,z]"""
+    # qw1, qx1, qy1, qz1 = q
+    # qx2, qy2, qz2 = r
+    qw, qx, qy, qz = q
+    x, y, z = r
+
+    qrw = -qx * x - qy * y - qz * z
+    qrx = qw * x + qy * z - qz * y
+    qry = qw * y - qx * z + qz * x
+    qrz = qw * z + qx * y - qy * x
+
+    # qw = qrw * qw + qrx * qx + qry * qy + qrz * qz
+    rotated_x = -qrw * qx + qrx * qw - qry * qz + qrz * qy
+    rotated_y = -qrw * qy + qrx * qz + qry * qw - qrz * qx
+    rotated_z = -qrw * qz - qrx * qy + qry * qx + qrz * qw
+
+    # _r = np.zeros_like(q)
+    # _r[1:] = r
+    # q_inv = np.zeros_like(q)
+    # q_inv[0] = q[0]
+    # q_inv[1:] = -q[1:]
+    # qrq_inv = mul_quaternion(q, mul_quaternion(_r, q_inv))
+    # return qrq_inv[1:]
+    return np.array([rotated_x, rotated_y, rotated_z])
+
+
+#########################
+# so3 operations
 @njit("f8[:,:](f8[:])")
 def exp_so3(angles):
     """..."""
@@ -326,6 +497,42 @@ def exp_so3(angles):
     return exp_theta
 
 
+@njit("f8[:](f8[:,:])")
+def log_so3(R):
+    """Returns the components of log(R) in the canonical basis for Lie algebra so(3)"""
+    # Ensure the matrix is square
+    assert R.shape[0] == R.shape[1] == 3, "Matrix must be 3x3"
+
+    # Compute the value to be passed to np.arccos
+    cos_theta = (R[0, 0] + R[1, 1] + R[2, 2] - 1) / 2
+
+    # Ensure the value is within the valid range [-1, 1]
+    if cos_theta > 1:
+        cos_theta = 1
+    elif cos_theta < -1:
+        cos_theta = -1
+
+    # Compute the rotation angle
+    theta = np.arccos(cos_theta)
+    if theta < 1e-6:
+        theta_over_two_sin_theta = (
+            0.5 + theta**2 / 12 + 7 * theta**4 / 720  # + 31 * theta**6 / 30240
+        )
+    else:
+        theta_over_two_sin_theta = 0.5 * theta / np.sin(theta)
+
+    # R_RT_x = -R[1, 2] + R[2, 1]
+    # R_RT_y = R[0, 2] - R[2, 0]
+    # R_RT_z = -R[0, 1] + R[1, 0]
+    thetax = (-R[1, 2] + R[2, 1]) * theta_over_two_sin_theta
+    thetay = (R[0, 2] - R[2, 0]) * theta_over_two_sin_theta
+    thetaz = (-R[0, 1] + R[1, 0]) * theta_over_two_sin_theta
+
+    return np.array([thetax, thetay, thetaz])
+
+
+#########################
+# se3 operations
 # @njit("f8[:,:](f8[:])")
 def exp_se3_slow(psi):
     """slow but has formula for V"""
@@ -443,53 +650,22 @@ def coadjoint_se3(psi1, psi2):
     return psi
 
 
-@njit("f8[:](f8[:,:])")
-def log_so3(R):
-    """Returns the components of log(R) in the canonical basis for Lie algebra so(3)"""
-    # Ensure the matrix is square
-    assert R.shape[0] == R.shape[1] == 3, "Matrix must be 3x3"
-
-    # Compute the value to be passed to np.arccos
-    cos_theta = (R[0, 0] + R[1, 1] + R[2, 2] - 1) / 2
-
-    # Ensure the value is within the valid range [-1, 1]
-    if cos_theta > 1:
-        cos_theta = 1
-    elif cos_theta < -1:
-        cos_theta = -1
-
-    # Compute the rotation angle
-    theta = np.arccos(cos_theta)
-    if theta < 1e-6:
-        theta_over_two_sin_theta = (
-            0.5 + theta**2 / 12 + 7 * theta**4 / 720  # + 31 * theta**6 / 30240
-        )
-    else:
-        theta_over_two_sin_theta = 0.5 * theta / np.sin(theta)
-
-    # R_RT_x = -R[1, 2] + R[2, 1]
-    # R_RT_y = R[0, 2] - R[2, 0]
-    # R_RT_z = -R[0, 1] + R[1, 0]
-    thetax = (-R[1, 2] + R[2, 1]) * theta_over_two_sin_theta
-    thetay = (R[0, 2] - R[2, 0]) * theta_over_two_sin_theta
-    thetaz = (-R[0, 1] + R[1, 0]) * theta_over_two_sin_theta
-
-    return np.array([thetax, thetay, thetaz])
-
-
+#########################
+# se3 operations with rotations as quaternions
 @njit("f8[:](f8[:])")
 def log_se3_quaternion(pq):
     """phi_vec = translational part"""
     # x, y, z, qw, qx, qy, qz = pq
     psi = np.zeros(6)
     p, q = pq[:3], pq[3:]
-    # Ensure the value is within the valid range [-1, 1]
-    qw = pq[3]
-    # if qw > 1:
-    #     qw = 1
-    # elif qw < -1:
-    #     qw = -1
-    theta = 2 * np.arccos(qw)
+    q0, qvec = q[0], q[1:]
+    # norm_qvec = np.sqrt(q[1] ** 2 + q[2] ** 2 + q[3] ** 2)
+    cos_theta = 2 * q0**2 - 1
+    if cos_theta > 1:
+        cos_theta = 1.0
+    elif cos_theta < -1:
+        cos_theta = -1.0
+    theta = np.arccos(cos_theta)
     if theta < 1e-6:
         theta_over_sin_half_theta = (
             2 + theta**2 / 12 + 7 * theta**4 / 2880  # + 31 * theta**6 / 483840
@@ -506,7 +682,7 @@ def log_se3_quaternion(pq):
         B = (1 - np.cos(theta)) / theta**2
         # C = (theta - np.sin(theta)) / theta**3
         D = (1 - 0.5 * A / B) / theta**2
-    theta_vec = theta_over_sin_half_theta * q[1:]
+    theta_vec = theta_over_sin_half_theta * qvec
     theta_cross_r = jitcross(theta_vec, p)
     theta_cross_theta_cross_r = jitcross(theta_vec, theta_cross_r)
     phi_vec = p - 0.5 * theta_cross_r + D * theta_cross_theta_cross_r
@@ -547,33 +723,74 @@ def exp_se3_quaternion(psi):
     return pq
 
 
-@njit("f8[:](f8[:], f8[:])")
-def rotate_by_quaternion(q, r):
-    """applies rotation representated by unit quaternion q=[qw,qx,qy,qz]
-    to verctor r=[x,y,z]"""
-    # qw1, qx1, qy1, qz1 = q
-    # qx2, qy2, qz2 = r
-    qw, qx, qy, qz = q
-    x, y, z = r
+@njit("f8[:](f8[:])")
+def _log_se3_quaternion(pq):
+    """phi_vec = translational part"""
+    # x, y, z, qw, qx, qy, qz = pq
+    psi = np.zeros(6)
+    p, q = pq[:3], pq[3:]
+    # Ensure the value is within the valid range [-1, 1]
+    qw = pq[3]
+    if qw > 1:
+        qw = 1.0
+    elif qw < -1:
+        qw = -1.0
+    theta = 2 * np.arccos(qw)
+    if theta < 1e-6:
+        theta_over_sin_half_theta = (
+            2 + theta**2 / 12 + 7 * theta**4 / 2880  # + 31 * theta**6 / 483840
+        )
+        ##################################
+        # A = 1.0 - theta**2 / 6 + theta**4 / 120 - theta**6 / 540
+        # B = 1.0 / 2.0 - theta**2 / 24 + theta**4 / 720 - theta**6 / 40320
+        # C = 1.0 / 6.0 - theta**2 / 120.0 + theta**4 / 5040 - theta**6 / 362880
+        D = 1.0 / 12.0 + theta**2 / 720 + theta**4 / 30240  # + theta**6 / 1209600
+        ##################################
+    else:
+        theta_over_sin_half_theta = theta / np.sin(theta / 2)
+        A = np.sin(theta) / theta
+        B = (1 - np.cos(theta)) / theta**2
+        # C = (theta - np.sin(theta)) / theta**3
+        D = (1 - 0.5 * A / B) / theta**2
+    theta_vec = theta_over_sin_half_theta * q[1:]
+    theta_cross_r = jitcross(theta_vec, p)
+    theta_cross_theta_cross_r = jitcross(theta_vec, theta_cross_r)
+    phi_vec = p - 0.5 * theta_cross_r + D * theta_cross_theta_cross_r
 
-    qrw = -qx * x - qy * y - qz * z
-    qrx = qw * x + qy * z - qz * y
-    qry = qw * y - qx * z + qz * x
-    qrz = qw * z + qx * y - qy * x
+    psi[:3] = phi_vec
+    psi[3:] = theta_vec
+    return psi
 
-    # qw = qrw * qw + qrx * qx + qry * qy + qrz * qz
-    rotated_x = -qrw * qx + qrx * qw - qry * qz + qrz * qy
-    rotated_y = -qrw * qy + qrx * qz + qry * qw - qrz * qx
-    rotated_z = -qrw * qz - qrx * qy + qry * qx + qrz * qw
 
-    # _r = np.zeros_like(q)
-    # _r[1:] = r
-    # q_inv = np.zeros_like(q)
-    # q_inv[0] = q[0]
-    # q_inv[1:] = -q[1:]
-    # qrq_inv = mul_quaternion(q, mul_quaternion(_r, q_inv))
-    # return qrq_inv[1:]
-    return np.array([rotated_x, rotated_y, rotated_z])
+@njit("f8[:](f8[:])")
+def _exp_se3_quaternion(psi):
+    """phi_vec = translational part"""
+    # x, y, z, qw, qx, qy, qz = pq
+    pq = np.zeros(7)
+    phi_vec, theta_vec = psi[:3], psi[3:]
+    theta1, theta2, theta3 = theta_vec
+    theta = np.sqrt(theta1**2 + theta2**2 + theta3**2)
+    if theta < 1e-6:
+        # A = 1.0 - theta**2 / 6 + theta**4 / 120  # - theta**6 / 540
+        B = 1.0 / 2.0 - theta**2 / 24 + theta**4 / 720  # - theta**6 / 40320
+        C = 1.0 / 6.0 - theta**2 / 120.0 + theta**4 / 5040  # - theta**6 / 362880
+        D = 1 / 2 - theta**2 / 48 + theta**4 / 3840  # - theta**6 / 645120
+        qw = 1 - theta**2 / 8 + theta**4 / 384  # - theta**6 / 46080
+    else:
+        # A = np.sin(theta) / theta
+        B = (1 - np.cos(theta)) / theta**2
+        C = (theta - np.sin(theta)) / theta**3
+        D = np.sin(theta / 2) / theta
+        qw = np.cos(theta / 2)
+
+    qx, qy, qz = D * theta1, D * theta2, D * theta3
+    pq[3:] = np.array([qw, qx, qy, qz])
+
+    theta_cross_phi = jitcross(theta_vec, phi_vec)
+    theta_cross_theta_cross_phi = jitcross(theta_vec, theta_cross_phi)
+    pq[:3] = phi_vec + B * theta_cross_phi + C * theta_cross_theta_cross_phi
+
+    return pq
 
 
 @njit("f8[:](f8[:], f8[:])")
