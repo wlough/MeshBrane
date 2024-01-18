@@ -1,12 +1,14 @@
 import numpy as np
 import sympy as sp
 import polyscope as ps
-from src.model import Brane
+from src.model import Brane, testBrane
 from src.utils import (
     make_implicit_surface_mesh,
     make_sample_mesh,
     load_mesh_from_ply,
     save_mesh_to_ply,
+    make_trisurface_patch,
+    make_quadsurface_patch,
 )
 import matplotlib.pyplot as plt
 from src.pretty_pictures import (
@@ -51,7 +53,10 @@ from scipy.linalg import expm, logm, inv
 # vertices, faces = load_mesh_from_ply(file_path)
 vertices, faces, normals = make_sample_mesh("torus")
 b = Brane(vertices, faces)
-
+pq = b.regularize_mesh_acm_quat()
+b2 = Brane(vertices, faces)
+b2.V_pq = pq
+polyscope_list_plot(branes=[b, b2])
 # %%
 v_c = 13
 V_pq, F = b.build_minimesh_from_psi(v_c)
@@ -60,216 +65,122 @@ V = V_pq[:, :3]
 mini_b = Brane(V, F)
 # %%
 branes = [b]
-b.V_scalar = np.zeros_like(b.V_label)
+b.V_scalar = np.zeros_like(b.V_pq[:, 0]) + 0.1
 pq_point_clouds = []
-ps_structures = polyscope_list_plot(pq_point_clouds=pq_point_clouds, branes=branes)
+polyscope_list_plot(pq_point_clouds=pq_point_clouds, branes=branes)
 
 # %%
-v_c = 13
-V_pq, F = b.build_minimesh_from_psi(v_c)
-V = V_pq[:, :3]
 
-# %%
-# self = b
-vertices, faces = V, F
-# def label_half_edges(self, vertices, faces):
-# """
-# faces must be ordered counter-clockwise!
-# """
-
-####################
-# vertices
-Nvertices = len(vertices)
-V_label = np.array([_ for _ in range(Nvertices)], dtype=np.int32)
-V_hedge = -np.ones_like(V_label)  # outgoing halfedge
-####################
-# faces
-Nfaces = len(faces)
-F_label = np.array([_ for _ in range(Nfaces)], dtype=np.int32)
-F_hedge = -np.ones_like(F_label)  # one of the halfedges bounding it
-####################
-# halfedges
-# Nedges =
-# Nhedges = 3 * Nfaces
-halfedges = []
-H_label = []  # np.array([_ for _ in range(Nhedges)], dtype=np.int32)
-interior_hedge_labels = []
-H_vertex = []  # -np.ones_like(H_label)  # vertex it points to
-H_face = []  # -np.ones_like(H_label)  # face it belongs to  ***
-H_next = []  # -np.ones_like(
-# H_label
-# )  # next halfedge inside the face (ordered counter-clockwise)
-H_prev = []  # -np.ones_like(
-# H_label
-# )  # previous halfedge inside the face (ordered counter-clockwise)
-H_twin = []  # -np.ones_like(H_label)  # opposite halfedge
-# H_isboundary = []
-####################
-# save and label halfedges
-for f in F_label:
-    face = faces[f]
-    N_v_of_f = len(face)
-    for _ in range(N_v_of_f):
-        _next = np.mod(_ + 1, N_v_of_f)  # index shift to get next
-        v0 = face[_]  #
-        v1 = face[_next]
-        hedge = [v0, v1]
-        hedge_twin = [v1, v0]
-
-        try:
-            h = halfedges.index(hedge)
-        except Exception:
-            halfedges.append(hedge)
-            h = halfedges.index(hedge)
-
-        try:
-            interior_hedge_labels.index(h)
-        except Exception:
-            interior_hedge_labels.append(h)
-
-        try:
-            h_twin = halfedges.index(hedge_twin)
-        except Exception:
-            halfedges.append(hedge_twin)
-
-Nhedges = len(halfedges)
-H_label = np.ones(Nhedges, dtype=np.int32)
-H_vertex = np.ones(Nhedges, dtype=np.int32)
-H_face = np.ones(Nhedges, dtype=np.int32)
-H_next = np.ones(Nhedges, dtype=np.int32)
-H_prev = np.ones(Nhedges, dtype=np.int32)
-H_twin = np.ones(Nhedges, dtype=np.int32)
+vertices, faces = make_trisurface_patch()
+vertices, faces = make_quadsurface_patch(Nfaces=7)
+b = testBrane(vertices, faces)
+bdry = np.array([vertices[b.H_vertex[h]] for h in b.H_label if b.H_isboundary[h]])
+b.H_face
+surf = {"vertices": vertices, "faces": faces}
+cloud = {"points": bdry}
+polyscope_list_plot(surfaces=[surf], point_clouds=[cloud])
 
 
-# fill halfedges that are in the faces
-for f in F_label:
-    face = faces[f]
-    N_v_of_f = len(face)
-    h0 = len(halfedges)  # halfedges.__len__()  # label of 1st hedge in face
-    F_hedge[f] = h0  #
+def frame_the_mesh(self, vertices):
+    F_label = self.F_label
+    Nfaces = len(F_label)
+    F_area_vectors = np.zeros((Nfaces, 3))
+    # vertices = self.V_pq[:, :3]
 
-    for _ in range(N_v_of_f):
-        _next = np.mod(_ + 1, N_v_of_f)  # index shift to get next
-        _prev = np.mod(_ - 1, N_v_of_f)  # index shift to get prev
-        v0 = face[_]  #
-        v1 = face[_next]
-        h = h0 + _
-        h_prev = h0 + _prev
-        h_next = h0 + _next
-        hedge = [v0, v1]
-        halfedges.append(hedge)
-        H_label.append(h)
-        H_vertex.append(v1)
-        H_face.append(f)
-        H_prev.append(h_prev)
-        H_next.append(h_next)
-        if V_hedge[v0] == -1:
-            V_hedge[v0] = h
+    for _f in range(Nfaces):
+        f = F_label[_f]
+        h = self.F_hedge[f]
+        hn = self.H_next[h]
+        hp = self.H_prev[h]
+
+        v0 = self.H_vertex[hp]
+        v1 = self.H_vertex[h]
+        v2 = self.H_vertex[hn]
+
+        u1 = vertices[v1] - vertices[v0]
+        u2 = vertices[v2] - vertices[v1]
+
+        F_area_vectors[_f] = jitcross(u1, u2)
+    # F_area_vectors = self.get_face_area_vectors()
+
+    # vertices = self.V_pq[:, :3]
+
+    ex = np.array([1.0, 0.0, 0.0])
+    ey = np.array([0.0, 1.0, 0.0])
+    # ez = np.array([0.0, 0.0, 1.0])
+    Nverts = len(vertices)
+    # framed_vertices = np.zeros((Nverts, 7))
+    # matrices = np.zeros((Nverts, 3, 3))
+    framed_vertices = np.zeros((Nverts, 7))
+    for i in range(Nverts):
+        F = self.f_adjacent_to_v(i)
+        n = np.zeros(3)
+        for f in F:
+            n += F_area_vectors[f]
+        n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
+
+        cross_with_ey = np.sqrt(n[2] ** 2 + n[0] ** 2) > 1e-6
+        if cross_with_ey:
+            e1 = jitcross(ey, n)
+        else:
+            e1 = jitcross(ex, n)
+        e1 /= np.sqrt(e1[0] ** 2 + e1[1] ** 2 + e1[2] ** 2)
+        e2 = jitcross(n, e1)
+
+        R = np.zeros((3, 3))
+        R[:, 0] = e1
+        R[:, 1] = e2
+        R[:, 2] = n
+        framed_vertices[i, 3] = np.sqrt(1 + R[0, 0] + R[1, 1] + R[2, 2]) / 2
+        framed_vertices[i, 4] = (R[2, 1] - R[1, 2]) / (4 * framed_vertices[i, 3])
+        framed_vertices[i, 5] = (R[0, 2] - R[2, 0]) / (4 * framed_vertices[i, 3])
+        framed_vertices[i, 6] = (R[1, 0] - R[0, 1]) / (4 * framed_vertices[i, 3])
+
+        framed_vertices[i, :3] = vertices[i, :]
+    return framed_vertices
 
 
 # %%
-#############################################################
-# save halfedges that are in the faces
-for f in F_label:
-    face = faces[f]
-    N_v_of_f = len(face)
-    h0 = len(halfedges)  # halfedges.__len__()  # label of 1st hedge in face
-    F_hedge[f] = h0  #
 
-    for _ in range(N_v_of_f):
-        _next = np.mod(_ + 1, N_v_of_f)  # index shift to get next
-        _prev = np.mod(_ - 1, N_v_of_f)  # index shift to get prev
-        v0 = face[_]  #
-        v1 = face[_next]
-        h = h0 + _
-        h_prev = h0 + _prev
-        h_next = h0 + _next
-        hedge = [v0, v1]
-        halfedges.append(hedge)
-        H_label.append(h)
-        H_vertex.append(v1)
-        H_face.append(f)
-        H_prev.append(h_prev)
-        H_next.append(h_next)
-        if V_hedge[v0] == -1:
-            V_hedge[v0] = h
 
-# save halfedges that are on the boundaries
-# and fill H_twin for interior halfedges
-Ninterior_hedges = len(halfedges)  # halfedges.__len__()
-H_isboundary = Ninterior_hedges * [False]
-for h in range(Ninterior_hedges):
-    hedge = halfedges[h]
-    hedge_twin = [hedge[1], hedge[0]]
-    try:
-        h_twin = halfedges.index(hedge_twin)
-        H_twin.append(h_twin)
-    except Exception:
-        halfedges.append(hedge_twin)
-        h_twin = halfedges.index(hedge_twin)
+matrix = A.copy()
+is_single = False
+matrix = np.asarray(matrix, dtype=float)
 
-        H_label.append(h_twin)
-        H_vertex.append(hedge_twin[1])
-        H_face.append(-1)  # -1=boundary face
-        # H_prev.append(h_prev)
-        # H_next.append(h_next)
+if matrix.ndim not in [2, 3] or matrix.shape[-2:] != (3, 3):
+    raise ValueError(
+        "Expected `matrix` to have shape (3, 3) or "
+        "(N, 3, 3), got {}".format(matrix.shape)
+    )
 
-        H_twin.append(h_twin)
+if matrix.ndim == 2:
+    matrix = matrix[None, :, :]
+    is_single = True
 
-N_hedges = len(halfedges)  # halfedges.__len__()
+num_rotations = 1
+decision_matrix = np.empty((num_rotations, 4))
+decision_matrix[:, :3] = matrix.diagonal(axis1=1, axis2=2)
+decision_matrix[:, -1] = decision_matrix[:, :3].sum(axis=1)
+choices = decision_matrix.argmax(axis=1)
 
-# get next/prev on boundary
-for h in range(Ninterior_hedges, N_hedges):
-    hedge = halfedges[h]
-    hedge_twin = [hedge[1], hedge[0]]
-    h_twin = halfedges.index(hedge_twin)
-    H_twin.append(h_twin)
-    H_isboundary.append(True)
+quat = np.empty((num_rotations, 4))
 
-    h_t = h_twin
-    h_tp = H_prev[h_t]
+ind = np.nonzero(choices != 3)[0]
+i = choices[ind]
+j = (i + 1) % 3
+k = (j + 1) % 3
 
-    h_tpt = H_twin[h_tp]
-    h_tptp = H_prev[h_tpt]
+quat[ind, i] = 1 - decision_matrix[ind, -1] + 2 * matrix[ind, i, i]
+quat[ind, j] = matrix[ind, j, i] + matrix[ind, i, j]
+quat[ind, k] = matrix[ind, k, i] + matrix[ind, i, k]
+quat[ind, 3] = matrix[ind, k, j] - matrix[ind, j, k]
 
-    h_tptpt = H_twin[h_tptp]
-    h_tptptp = H_prev[h_tptpt]
+ind = np.nonzero(choices == 3)[0]
+quat[ind] = [1, 0, 0, 0]
 
-    # h_next = H_twin[hh]
-    hedge_tptptp = halfedges[h_tptptp]
-    hedge_next = [hedge_tptptp[1], hedge_tptptp[0]]
-    h_next = halfedges.index(hedge_next)
+quat /= np.linalg.norm(quat, axis=1)[:, None]
 
-    H_next.append(h_next)
-
-    hh = H_next[h_twin]
-
-    hh = H_twin[hh]
-    hh = H_next[hh]
-
-    hh = H_twin[hh]
-    hh = H_next[hh]
-
-    # h_prev = H_twin[hh]
-    hhedge = halfedges[hh]
-    hedge_prev = [hhedge[1], hhedge[0]]
-    h_prev = halfedges.index(hedge_prev)
-    H_prev.append(h_prev)
-
-halfedges = np.array(halfedges, dtype=np.int32)
-# return (
-#     V_label,
-#     V_hedge,
-#     np.array(halfedges, dtype=np.int32),
-#     np.array(H_label, dtype=np.int32),
-#     np.array(H_vertex, dtype=np.int32),
-#     np.array(H_face, dtype=np.int32),
-#     np.array(H_next, dtype=np.int32),
-#     np.array(H_prev, dtype=np.int32),
-#     np.array(H_twin, dtype=np.int32),
-#     np.array(H_isboundary),
-#     F_label,
-#     F_hedge,
-# )
-
-len(halfedges)
+if is_single:
+    return cls(quat[0], normalized=True, copy=False)
+else:
+    return cls(quat, normalized=True, copy=False)
