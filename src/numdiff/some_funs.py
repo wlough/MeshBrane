@@ -5,6 +5,82 @@ import dill
 
 
 #######################################
+# tested
+@njit
+def matrix_to_quaternion(Q):
+    """Converts a 3-by-3 rotation matrix to a unit quaternion. Safe to use with
+    arbitrary rotation angle"""
+    q = np.zeros(4)
+    diagQ = np.array([Q[0, 0], Q[1, 1], Q[2, 2]])
+    trQ = Q[0, 0] + Q[1, 1] + Q[2, 2]
+    diagQmax = max(diagQ)
+
+    use_alt_form = diagQmax > trQ
+    if use_alt_form:
+        i = index_of(diagQ, diagQmax)
+        j = (i + 1) % 3  # index of the next elements
+        k = (j + 1) % 3  # index of the next next element
+
+        # multipliying by np.sign(Qkj_Qjk) ensures qs >=0
+        qi = np.sqrt(1 + 2 * diagQmax - trQ) / 2
+        Qkj_Qjk = Q[k, j] - Q[j, k]
+        if Qkj_Qjk < 0:
+            qi *= -1
+        qj = (Q[i, j] + Q[j, i]) / (4 * qi)
+        qk = (Q[i, k] + Q[k, i]) / (4 * qi)
+        qs = Qkj_Qjk / (4 * qi)
+    else:
+        i, j, k = 0, 1, 2
+        qs = np.sqrt(1 + trQ) / 2
+        # cos_theta = 2 * qw**2 - 1
+        qi = (Q[2, 1] - Q[1, 2]) / (4 * qs)
+        qj = (Q[0, 2] - Q[2, 0]) / (4 * qs)
+        qk = (Q[1, 0] - Q[0, 1]) / (4 * qs)
+
+    q[0] = qs
+    q[i + 1] = qi
+    q[j + 1] = qj
+    q[k + 1] = qk
+    return q
+
+
+@njit("f8[:,:](f8[:])")
+def quaternion_to_matrix(q):
+    qw, qx, qy, qz = q
+    # qhat = np.array([[0.0, -qz, qy], [qz, 0.0, -qx], [-qy, qx, 0.0]])
+    # qvec = np.array([qx, qy, qz])
+    # I = np.eye(3)
+    # q_qT = np.array(
+    #     [
+    #         [qx * qx, qx * qy, qx * qz],
+    #         [qy * qx, qy * qy, qy * qz],
+    #         [qz * qx, qz * qy, qz * qz],
+    #     ]
+    # )
+    # Q = (qw**2 - qvec @ qvec) * I + 2 * qw * qhat + 2 * q_qT
+    Q = np.array(
+        [
+            [
+                qw**2 + qx**2 - qy**2 - qz**2,
+                2 * qx * qy - 2 * qw * qz,
+                2 * qw * qy + 2 * qx * qz,
+            ],
+            [
+                2 * qw * qz + 2 * qx * qy,
+                qw**2 - qx**2 + qy**2 - qz**2,
+                2 * qy * qz - 2 * qw * qx,
+            ],
+            [
+                2 * qx * qz - 2 * qw * qy,
+                2 * qw * qx + 2 * qy * qz,
+                qw**2 - qx**2 - qy**2 + qz**2,
+            ],
+        ]
+    )
+    return Q
+
+
+#######################################
 # special functions #
 factorial_table = np.array(
     [
@@ -32,6 +108,34 @@ factorial_table = np.array(
     ],
     dtype="int64",
 )
+
+
+@njit
+def index_of(array, element):
+    """
+    gets the index of element in array
+    """
+
+    for i, x in enumerate(array):
+        if x == element:
+            return i
+
+    msg = "element is not in array"
+    raise ValueError(msg)
+
+
+@njit
+def index_of_nested(array, element):
+    """
+    gets the index of subarray in array
+    """
+
+    for i, x in enumerate(array):
+        if (x == element).all():
+            return i
+
+    msg = "element is not in array"
+    raise ValueError(msg)
 
 
 @njit  # ("int32(int32)")
@@ -188,8 +292,8 @@ def mul_quaternion(q1, q2):
 def inv_quaternion(q):
     """quaternion multiplication"""
     qw, qx, qy, qz = q
-    normq = np.sqrt(qw**2 + qx**2 + qy**2 + qz**2)
-    return np.array([qw, -qx, -qy, -qz]) / normq
+    normq2 = qw**2 + qx**2 + qy**2 + qz**2
+    return np.array([qw, -qx, -qy, -qz]) / normq2
 
 
 @njit("f8[:](f8[:])")
@@ -207,16 +311,16 @@ def exp_quaternion(q):
     alpha = np.sqrt(q[1] ** 2 + q[2] ** 2 + q[3] ** 2)
     # theta = 2 * normqvec
     if alpha < 1e-6:
-        sin_alpha_over_alpha = 1 - alpha**2 / 6 + alpha**4 / 120 - alpha**6 / 5040
+        sinc_alpha = 1 - alpha**2 / 6 + alpha**4 / 120 - alpha**6 / 5040
         cos_alpha = 1 - alpha**2 / 2 + alpha**4 / 24 - alpha**6 / 720
     else:
-        sin_alpha_over_alpha = np.sin(alpha) / alpha
+        sinc_alpha = np.sin(alpha) / alpha
         cos_alpha = np.cos(alpha)
 
     # exp_q = np.exp(q0)*np.array([])
     exp_q0 = np.exp(q0)
     exp_q[0] = exp_q0 * cos_alpha
-    exp_q[1:] = exp_q0 * sin_alpha_over_alpha * qvec
+    exp_q[1:] = exp_q0 * sinc_alpha * qvec
     return exp_q
 
 
@@ -247,20 +351,20 @@ def pow_quaternion(q1, q2):
 #######################################
 # UNIT quaternion operations
 @njit("f8[:](f8[:])")
-def exp_unit_quaternion(qvec):
+def exp_unit_quaternion(a):
     """(pure imaginary quaternion)->(unit quaternion)
-    [qx,qy,qz]->[expqw,expqx,expqy,expqz]"""
-    exp_qvec = np.zeros(4)
-    alpha = np.sqrt(qvec[0] ** 2 + qvec[1] ** 2 + qvec[2] ** 2)
-    if alpha < 1e-6:
-        sin_alpha_over_alpha = 1 - alpha**2 / 6 + alpha**4 / 120 - alpha**6 / 5040
-        cos_alpha = 1 - alpha**2 / 2 + alpha**4 / 24 - alpha**6 / 720
+    [qx,qy,qz]->[exp(q)_w,exp(q)_x,exp(q)_y,exp(q)_z]"""
+    exp_a = np.zeros(4)
+    norm_a = np.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2)
+    if norm_a < 1e-6:
+        sinc_norm_a = 1 - norm_a**2 / 6 + norm_a**4 / 120  # - norm_a**6 / 5040
+        cos_norm_a = 1 - norm_a**2 / 2 + norm_a**4 / 24  # - norm_a**6 / 720
     else:
-        sin_alpha_over_alpha = np.sin(alpha) / alpha
-        cos_alpha = np.cos(alpha)
-    exp_qvec[0] = cos_alpha
-    exp_qvec[1:] = sin_alpha_over_alpha * qvec
-    return exp_qvec
+        sinc_norm_a = np.sin(norm_a) / norm_a
+        cos_norm_a = np.cos(norm_a)
+    exp_a[0] = cos_norm_a
+    exp_a[1:] = sinc_norm_a * a
+    return exp_a
 
 
 @njit("f8[:](f8[:])")
@@ -277,21 +381,140 @@ def log_unit_quaternion(q):
 
 
 @njit("f8[:](f8[:])")
-def cay_quaternion(eta):
-    """cay(eta)=(1-eta/4)^{-1}(1+eta/4)"""
+def exp_unit_quaternion2(a):
+    """(pure imaginary quaternion)->(unit quaternion)
+    [qx,qy,qz]->[exp(q)_w,exp(q)_x,exp(q)_y,exp(q)_z]"""
+    exp_a = np.zeros(4)
+    norm_a = np.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2)
+    if norm_a < 1e-6:
+        sinc_norm_a = 1 - norm_a**2 / 6 + norm_a**4 / 120  # - norm_a**6 / 5040
+        cos_norm_a = 1 - norm_a**2 / 2 + norm_a**4 / 24  # - norm_a**6 / 720
+    else:
+        sinc_norm_a = np.sin(norm_a) / norm_a
+        cos_norm_a = np.cos(norm_a)
+    exp_a[0] = cos_norm_a
+    exp_a[1:] = sinc_norm_a * a
+    return exp_a
+
+
+@njit
+def rcm_quaternion(G):
+    iters = 4
+    Nsamps = len(G)
+    g0 = G[0]
+    mu_g = np.zeros_like(g0)
+    mu_g[:] = g0
+    mu_g_inv = np.zeros_like(g0)
+    for iter in range(iters):
+        mu_g_inv = inv_quaternion(
+            mu_g
+        )  # np.array([mu_g[0], -mu_g[1], -mu_g[2], -mu_g[3]])
+        Psi = np.zeros(3)
+        for i in range(Nsamps):
+            g = G[i]
+            mu_g_inv_g = mul_quaternion(mu_g_inv, g)
+            Psi += log_unit_quaternion(mu_g_inv_g) / Nsamps
+            # Psi += log_se3_quaternion(mul_se3_quaternion(g, mu_g_inv)) / Nsamps
+        mu_g = mul_quaternion(mu_g, exp_unit_quaternion(Psi))
+        # mu_g = mul_se3_quaternion(exp_se3_quaternion(Psi), mu_g)
+    return mu_g
+
+
+for _ in range(100):
+    Nsamps = 13
+    G = np.zeros((Nsamps, 4))
+    for i in range(Nsamps):
+        q = np.random.rand(4) - 0.5
+        q *= q[0]
+        q /= np.linalg.norm(q)
+        G[i] = q
+
+    g = rcm_quaternion(G)
+    print(g @ g)
+    # g - sum(G)/Nsamps
+    # (np.array([mul_quaternion(inv_quaternion(g), _) for _ in G]))
+
+
+@njit("f8[:](f8[:], i8)")
+def log_unit_quaternion2(q, m):
+    """(unit quaternion)->(pure imaginary quaternion)"""
+    # log_q = np.zeros_like(q[1:])
+    q0, qvec = q[0], q[1:]
+    norm_qvec = np.sqrt(q[1] ** 2 + q[2] ** 2 + q[3] ** 2)
+    # cos_alpha = q0
+    # sin_alpha = norm_qvec
+    alpha = np.arccos(q0) + 2 * np.pi * m
+    alpha_vec = alpha * qvec / norm_qvec
+    return alpha_vec
+
+
+# A = np.pi * np.random.rand(33).reshape((11, 3))
+# a = A[0]
+# q = exp_unit_quaternion(a)
+# _a = log_unit_quaternion(q)
+# _a2 = log_unit_quaternion2(q, -1)
+# exp_unit_quaternion(_a)-exp_unit_quaternion(_a2)
+# for a in A:
+#     q = exp_unit_quaternion(a)
+#     _a = log_unit_quaternion(q)
+#     norma = np.linalg.norm(a)
+#     _norma = np.linalg.norm(_a)
+#     err = a - _a
+#
+#     print(f"|a|/pi={np.round(norma/np.pi, 3)}")
+#     print(f"|_a|={np.round(_norma/np.pi, 3)}")
+#     print(f"err={err}")
+#     print(f"q={q}")
+#
+#     print("------------------------------")
+
+
+@njit("f8[:](f8[:])")
+def cay_quaternion(a):
+    """cay(eta)=(1-a)^{-1}(1+a)"""
     q = np.zeros(4)
-    norm_eta = np.sqrt(eta[0] ** 2 + eta[1] ** 2 + eta[2] ** 2)
-    q[0] = (16 - norm_eta**2) / (16 + norm_eta**2)
-    q[1:] = 8 * eta / (16 + norm_eta**2)
+    norm_a2 = a[0] ** 2 + a[1] ** 2 + a[2] ** 2
+    q[0] = (1 - norm_a2) / (1 + norm_a2)
+    q[1:] = 2 * a / (1 + norm_a2)
+    # if q[0] < 0:
+    #     q *= -1
     return q
 
 
+@njit("f8[:](f8[:])")
+def cayinv_quaternion(q):
+    """inverse of cay(eta)=(1-a)^{-1}(1+a)
+
+    *Assumes q is normalized
+    *Breaks when q=[-1,0,0,0]
+    """
+
+    qs, qv = q[0], q[1:]
+    # if qs < 0:
+    #     qs *= -1
+    #     qv *= -1
+    norm_qv2 = qv[0] ** 2 + qv[1] ** 2 + qv[2] ** 2
+
+    N = qs**2 + 2 * qs + 1 + norm_qv2
+    #############################
+    a = 2 * qv / N
+    return a
+
+
+#######################################
 #######################################
 # rotations as quaternions
+#######################################
+#######################################
+# tested
+
+
 @njit("f8[:](f8[:,:])")
-def matrix_to_quaternion(R):
-    """3-by-3 orthogonal matrix to unit quaternion"""
-    qw = np.sqrt(1 + R[0, 0] + R[1, 1] + R[2, 2]) / 2  # breaks for diag(-1,-1,1)
+def matrix_to_quaternion2(R):
+    """3-by-3 orthogonal matrix to unit quaternion. valid for rotation angle
+    0<=theta<pi"""
+    trR = R[0, 0] + R[1, 1] + R[2, 2]  # =1+2cos(theta)
+    qw = np.sqrt(1 + trR) / 2
     # cos_theta = 2 * qw**2 - 1
     qx = (R[2, 1] - R[1, 2]) / (4 * qw)
     qy = (R[0, 2] - R[2, 0]) / (4 * qw)
@@ -323,42 +546,8 @@ def quaternion_to_matrix2(q):
     )
 
 
-@njit("f8[:,:](f8[:])")
-def quaternion_to_matrix(q):
-    qw, qx, qy, qz = q
-    # qhat = np.array([[0.0, -qz, qy], [qz, 0.0, -qx], [-qy, qx, 0.0]])
-    # qvec = np.array([qx, qy, qz])
-    # I = np.eye(3)
-    # q_qT = np.array(
-    #     [
-    #         [qx * qx, qx * qy, qx * qz],
-    #         [qy * qx, qy * qy, qy * qz],
-    #         [qz * qx, qz * qy, qz * qz],
-    #     ]
-    # )
-    # Q = (qw**2 - qvec @ qvec) * I + 2 * qw * qhat + 2 * q_qT
-    Q = np.array(
-        [
-            [
-                qw**2 + qx**2 - qy**2 - qz**2,
-                2 * qx * qy - 2 * qw * qz,
-                2 * qw * qy + 2 * qx * qz,
-            ],
-            [
-                2 * qw * qz + 2 * qx * qy,
-                qw**2 - qx**2 + qy**2 - qz**2,
-                2 * qy * qz - 2 * qw * qx,
-            ],
-            [
-                2 * qx * qz - 2 * qw * qy,
-                2 * qw * qx + 2 * qy * qz,
-                qw**2 - qx**2 - qy**2 + qz**2,
-            ],
-        ]
-    )
-    return Q
-
-
+#######################################
+# untested
 @njit("f8[:](f8[:])")
 def exp_so3_quaternion(angles):
     """..."""
