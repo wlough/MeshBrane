@@ -146,6 +146,23 @@ def make_trisurface_patch(Nfaces=5):
     return vertices, faces
 
 
+def make_double_trisurface_patch(Nfaces=5):
+    N = 1 * Nfaces
+    dr = 0.25
+    dz = 0.1
+    theta = np.array([2 * np.pi * _ / N for _ in range(N)])
+    r = np.random.rand(N)
+    r *= dr * np.max(r)
+    r += 1 - dr
+    z = dz * np.cos(theta)
+    x, y = r * np.cos(theta), r * np.sin(theta)
+    vertices = np.array([x, y, z]).T
+    vertices = np.array([[0.0, 0.0, dz], *vertices])
+    faces = [[0, i, i + 1] for i in range(1, N)]
+    faces = np.array([*faces, [0, N, 1]], dtype=np.int32)
+    return vertices, faces
+
+
 def make_quadsurface_patch(Nfaces=3):
     N = 2 * Nfaces
     dr = 0.25

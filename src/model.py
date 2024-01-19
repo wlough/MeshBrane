@@ -82,7 +82,7 @@ class Brane:
             self.halfedges,
             self.H_label,
             self.H_isboundary,
-        ) = self.build_and_label_halfedges(vertices, faces)
+        ) = self.label_halfedges(vertices, faces)
 
         (
             self.V_hedge,
@@ -135,8 +135,222 @@ class Brane:
         ##############
 
         # self.V_pq = self.frame_the_mesh(vertices)
-        self.V_scalar = self.get_Gaussian_curvature()
+        # self.V_scalar = self.get_Gaussian_curvature()
         # self.H_psi, self.H_tangent_components = self.get_initial_edge_tangents()
+
+    def frame_the_mesh2(self, vertices):
+        F_label = self.F_label
+        Nfaces = len(F_label)
+        F_area_vectors = np.zeros((Nfaces, 3))
+        # vertices = self.V_pq[:, :3]
+
+        for _f in range(Nfaces):
+            f = F_label[_f]
+            h = self.F_hedge[f]
+            hn = self.H_next[h]
+            hp = self.H_prev[h]
+
+            v0 = self.H_vertex[hp]
+            v1 = self.H_vertex[h]
+            v2 = self.H_vertex[hn]
+
+            u1 = vertices[v1] - vertices[v0]
+            u2 = vertices[v2] - vertices[v1]
+
+            F_area_vectors[_f] = jitcross(u1, u2)
+        # F_area_vectors = self.get_face_area_vectors()
+
+        # vertices = self.V_pq[:, :3]
+
+        ex = np.array([1.0, 0.0, 0.0])
+        ey = np.array([0.0, 1.0, 0.0])
+        # ez = np.array([0.0, 0.0, 1.0])
+        Nverts = len(vertices)
+        # framed_vertices = np.zeros((Nverts, 7))
+        # matrices = np.zeros((Nverts, 3, 3))
+        framed_vertices = np.zeros((Nverts, 7))
+        for i in range(Nverts):
+            F = self.f_adjacent_to_v(i)
+            n = np.zeros(3)
+            for f in F:
+                n += F_area_vectors[f]
+            n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
+
+            cross_with_ey = np.sqrt(n[2] ** 2 + n[0] ** 2) > 1e-6
+            if cross_with_ey:
+                e1 = jitcross(ey, n)
+            else:
+                e1 = jitcross(ex, n)
+            e1 /= np.sqrt(e1[0] ** 2 + e1[1] ** 2 + e1[2] ** 2)
+            e2 = jitcross(n, e1)
+
+            R = np.zeros((3, 3))
+            R[:, 0] = e1
+            R[:, 1] = e2
+            R[:, 2] = n
+            # framed_vertices[i, 3] = np.sqrt(1 + R[0, 0] + R[1, 1] + R[2, 2]) / 2
+            # framed_vertices[i, 4] = (R[2, 1] - R[1, 2]) / (4 * framed_vertices[i, 3])
+            # framed_vertices[i, 5] = (R[0, 2] - R[2, 0]) / (4 * framed_vertices[i, 3])
+            # framed_vertices[i, 6] = (R[1, 0] - R[0, 1]) / (4 * framed_vertices[i, 3])
+            framed_vertices[i, 3:] = matrix_to_quaternion(R)
+
+            framed_vertices[i, :3] = vertices[i, :]
+        return framed_vertices
+
+    def get_combinatorial_mesh_data(self):
+        """og is the one with _"""
+        V_label = self.V_label
+        H_label = self.H_label
+        F_label = self.F_label
+        halfedges = self.halfedges
+
+        H_isboundary = self.H_isboundary
+        faces = self.faces.copy()
+        ####################
+        # vertices
+        V_hedge = -np.ones_like(V_label)  # outgoing halfedge
+        ####################
+        # faces
+        F_hedge = -np.ones_like(F_label)  # one of the halfedges bounding it
+        ####################
+        # halfedges
+        H_vertex = -np.ones_like(H_label)  # vertex it points to
+        H_face = -np.ones_like(H_label)  # face it belongs to
+        H_next = -np.ones_like(
+            H_label
+        )  # next halfedge inside the face (ordered counter-clockwise)
+        H_prev = -np.ones_like(
+            H_label
+        )  # previous halfedge inside the face (ordered counter-clockwise)
+        H_twin = -np.ones_like(H_label)  # opposite halfedge
+        ####################
+
+        # assign each face a halfedge
+        # assign each interior halfedge previous/next halfedge
+        # assign each interior halfedge a face
+        for f in F_label:
+            face = faces[f]
+            N_v_of_f = len(face)
+            hedge0 = np.array([face[0], face[1]])
+            # h0 = halfedges_list.index(hedge0)
+            h0 = index_of_nested(halfedges, hedge0)
+            F_hedge[f] = h0  # assign each face a halfedge
+            for _ in range(N_v_of_f):
+                # for each vertex in face, get the indices of the
+                # previous/next vertex
+                _p1 = (_ + 1) % N_v_of_f
+                _m1 = (_ - 1) % N_v_of_f
+                vm1 = face[_m1]
+                v0 = face[_]
+                vp1 = face[_p1]
+                # get outgoing halfedge
+                hedge = np.array([v0, vp1])
+                # h = halfedges_list.index(hedge)
+                h = index_of_nested(halfedges, hedge)
+                # get incident halfedge
+                hedge_prev = np.array([vm1, v0])
+                # h_prev = halfedges_list.index(hedge_prev)
+                h_prev = index_of_nested(halfedges, hedge_prev)
+                # assign previous/next halfedge
+                H_prev[h] = h_prev
+                H_next[h_prev] = h
+                # assign face to halfedge
+                H_face[h] = f
+
+                hedge_twin = np.array([vp1, v0])
+                # h = halfedges_list.index(hedge)
+                h_t = index_of_nested(halfedges, hedge_twin)
+                H_twin[h] = h_t
+                H_twin[h_t] = h
+
+        # assign each halfedge a twin halfedge
+
+        # assign each halfedge a vertex
+        # assign each vertex a halfedge
+        # assign each boundary halfedge previous/next halfedge
+        for h in H_label:
+            v0, v1 = halfedges[h]
+            # hedge_twin = np.array([v1, v0])
+            # h_twin = halfedges_list.index(hedge_twin)
+            # h_twin = index_of_nested(halfedges, hedge_twin)
+            # H_twin[h] = h_twin
+            H_vertex[h] = v1
+            if V_hedge[v0] == -1:
+                V_hedge[v0] = h
+
+            if H_isboundary[h]:
+                # h_t = h_twin
+                # h_tp = H_prev[h_t]
+                #
+                # h_tpt = H_twin[h_tp]
+                # h_tptp = H_prev[h_tpt]
+                #
+                # h_tptpt = H_twin[h_tptp]
+                # h_tptptp = H_prev[h_tptpt]
+                #
+                # h_next = H_twin[h_tptptp]
+                # H_next[h] = h_next
+                # H_prev[h_next] = h
+                # h_next = self.twin(h)
+                h_next = H_twin[h]
+                while True:
+                    # h_next = self.twin(self.prev(h_next))
+                    h_next = H_twin[H_prev[h_next]]
+                    if H_isboundary[h_next]:
+                        break
+                H_next[h] = h_next
+                H_prev[h_next] = h
+
+        return (
+            V_hedge,
+            H_vertex,
+            H_face,
+            H_next,
+            H_prev,
+            H_twin,
+            F_hedge,
+        )
+
+    def label_halfedges(self, vertices, faces):
+        """Builds halfedges from vertices and faces, assigns an integer-valued
+        label/index to each halfedge, and determines whether the halfedge is
+        contained in the boundary of the mesh."""
+        halfedges = []
+        H_isboundary = []
+        H_label = []
+        ####################
+        # save and label halfedges
+        h = 0
+        for face in faces:
+            # face = faces[f]
+            N_v_of_f = len(face)
+            for _ in range(N_v_of_f):
+                # index shift to get next
+                _next = (_ + 1) % N_v_of_f
+                v0 = face[_]  #
+                v1 = face[_next]
+                hedge = [v0, v1]
+                halfedges.append(hedge)
+                H_isboundary.append(False)
+                H_label.append(h)
+                h += 1
+
+        for hedge in halfedges:
+            v0, v1 = hedge
+            hedge_twin = [v1, v0]
+            try:
+                halfedges.index(hedge_twin)
+            except Exception:
+                halfedges.append(hedge_twin)
+                H_isboundary.append(True)
+                H_label.append(h)
+                h += 1
+
+        return (
+            np.array(halfedges, dtype=np.int32),
+            np.array(H_label, dtype=np.int32),
+            np.array(H_isboundary),
+        )
 
     ###########################################################################
     # initialization functions #
@@ -166,7 +380,8 @@ class Brane:
             # face = faces[f]
             N_v_of_f = len(face)
             for _ in range(N_v_of_f):
-                _next = np.mod(_ + 1, N_v_of_f)  # index shift to get next
+                # index shift to get next
+                _next = (_ + 1) % N_v_of_f
                 v0 = face[_]  #
                 v1 = face[_next]
                 hedge = [v0, v1]
@@ -181,7 +396,7 @@ class Brane:
                 # get index of hedge_twin if it already exists, or create
                 # index if it doesn't exist yet
                 try:
-                    halfedges.index(hedge_twin)
+                    ht = halfedges.index(hedge_twin)
                 except Exception:
                     halfedges.append(hedge_twin)
                 # if halfedge is contained in a face, add its index to
@@ -201,7 +416,7 @@ class Brane:
             np.array(H_isboundary),
         )
 
-    def get_combinatorial_mesh_data(self):
+    def _get_combinatorial_mesh_data(self):
         """"""
         V_label = self.V_label
         H_label = self.H_label
@@ -247,8 +462,12 @@ class Brane:
             for _ in range(N_v_of_f):
                 # for each vertex in face, get the indices of the
                 # previous/next vertex
-                _p1 = np.mod(_ + 1, N_v_of_f)  # index shift to get next
-                _m1 = np.mod(_ - 1, N_v_of_f)  # index shift to get prev
+                _p1 = (
+                    _ + 1
+                ) % N_v_of_f  # np.mod(_ + 1, N_v_of_f)  # index shift to get next
+                _m1 = (
+                    _ - 1
+                ) % N_v_of_f  # np.mod(_ - 1, N_v_of_f)  # index shift to get prev
                 vm1 = face[_m1]
                 v0 = face[_]
                 vp1 = face[_p1]
@@ -399,7 +618,7 @@ class Brane:
         self.V_pq = self.frame_the_mesh(vertices)
 
     ###########################################################################
-    # mesh navigation helper functions #
+    # helper functions #
     ####################################
     def halfedge_vector(self, h):
         """displacement vector of halfedge"""
@@ -446,12 +665,115 @@ class Brane:
         return A
 
     ###########################################################################
-    # plotting helper functions #
+    # mesh navigation functions #
     ############################
+    def twin(self, h):
+        return self.H_twin[h]
+
+    def next(self, h):
+        return self.H_next[h]
+
+    def prev(self, h):
+        return self.H_prev[h]
+
+    def vert(self, h):
+        return self.H_vertex[h]
+
+    def face(self, h):
+        return self.H_face[h]
+
+    def h_of_v(self, v):
+        return self.V_hedge[v]
+
+    def h_of_f(self, f):
+        return self.F_hedge[f]
+
+    def update_h_of_f(self, f, h_new):
+        self.F_hedge[f] = h_new
+
+    def update_h_of_v(self, v, h_new):
+        self.V_hedge[v] = h_new
+
+    def update_twin(self, h, h_twin):
+        self.H_twin[h] = h_twin
+        self.H_twin[h_twin] = h
+
+    def update_next_prev(self, h0, h1):
+        """assigns next(h0)=h1 and prev(h1)=h0"""
+        self.H_next[h0] = h1
+        self.H_prev[h1] = h0
+
+    def update_v_of_h(self, h, v):
+        self.H_vertex[h] = v
+
+    def update_f_of_h(self, h, f):
+        self.H_face[h] = f
 
     ###########################################################################
-    # def reverse_face(self, f):
-    #
+    # mesh regulaization functions #
+    ###############################
+    def edge_flip(self, h):
+        r"""
+        h/ht can not be on boundary!
+          o              o
+         / \            /|\
+        o---o  |---->  o | o
+         \ /            \|/
+          o              o
+
+               v2                           v2
+             /    \                       /  |  \
+            /      \                     /   |   \
+           /h2    h1\                   /h2  |  h1\
+          /    f1    \                 /     |     \
+         /            \               /  f1  |  f2  \
+        /      h       \             /       |       \
+       v3--------------v1  |----->  v3      h|ht     v1
+        \      ht      /             \       |       /
+         \            /               \      |      /
+          \    f2    /                 \     |     /
+           \h3    h4/                   \h3  |  h4/
+            \      /                     \   |   /
+             \    /                       \  |  /
+               v4                           v4
+        """
+        ht = self.twin(h)
+        h1 = self.next(h)
+        h2 = self.prev(h)
+        h3 = self.next(ht)
+        h4 = self.prev(ht)
+        f1 = self.face(h)
+        f2 = self.face(ht)
+        v1 = self.vert(h4)
+        v2 = self.vert(h1)
+        v3 = self.vert(h2)
+        v4 = self.vert(h3)
+
+        # update next/prev halfedge
+        self.update_next_prev(h, h2)
+        self.update_next_prev(h2, h3)
+        self.update_next_prev(h3, h)
+        self.update_next_prev(ht, h4)
+        self.update_next_prev(h4, h1)
+        self.update_next_prev(h1, ht)
+        # update face referenced by halfedges
+        # and halfedge referenced by new faces
+        self.update_f_of_h(h3, f1)
+        # if self.h_of_f(f1) == h1:
+        self.update_h_of_f(f1, h3)
+        self.update_f_of_h(h1, f2)
+        # if self.h_of_f(f2) == h3:
+        self.update_h_of_f(f2, h1)
+        # update vert referenced by new halfedges
+        # and halfedge referenced by verts
+        self.update_v_of_h(h, v2)
+        self.update_v_of_h(ht, v4)
+        # if self.h_of_v(v3) == h:
+        self.update_h_of_v(v3, h3)
+        # if self.h_of_v(v1) == ht:
+        self.update_h_of_v(v1, h1)
+
+    ###########################################################################
 
     def label_half_edges(self, vertices, faces):
         """
@@ -496,8 +818,12 @@ class Brane:
             F_hedge[f] = h0  #
 
             for _ in range(N_v_of_f):
-                _next = np.mod(_ + 1, N_v_of_f)  # index shift to get next
-                _prev = np.mod(_ - 1, N_v_of_f)  # index shift to get prev
+                _next = (
+                    _ + 1
+                ) % N_v_of_f  # np.mod(_ + 1, N_v_of_f)  # index shift to get next
+                _prev = (
+                    _ - 1
+                ) % N_v_of_f  # np.mod(_ - 1, N_v_of_f)  # index shift to get prev
                 v0 = face[_]  #
                 v1 = face[_next]
                 h = h0 + _
@@ -922,7 +1248,10 @@ class Brane:
         # defects = np.zeros(Nverts)
         K = np.zeros(Nverts)
         # V = self.V_label
-        for v0 in range(Nverts):
+        # for v0 in range(Nverts):
+        v0 = 0
+        K = np.random.rand(Nverts)
+        while False:
             # p0 = self.V_pq[v, :3]
             h_start = self.V_hedge[v0]
             defect = 2 * np.pi
@@ -1130,15 +1459,15 @@ class testBrane:
             self.H_isboundary,
         ) = self.build_and_label_halfedges(vertices, faces)
 
-        # (
-        #     self.V_hedge,
-        #     self.H_vertex,
-        #     self.H_face,
-        #     self.H_next,
-        #     self.H_prev,
-        #     self.H_twin,
-        #     self.F_hedge,
-        # ) = self.get_combinatorial_mesh_data()
+        (
+            self.V_hedge,
+            self.H_vertex,
+            self.H_face,
+            self.H_next,
+            self.H_prev,
+            self.H_twin,
+            self.F_hedge,
+        ) = self.get_combinatorial_mesh_data()
         #
         # self.V_pq = self.frame_the_mesh(vertices)
 
@@ -1495,8 +1824,49 @@ class testBrane:
         return V_pq
 
     ###########################################################################
-    # plotting helper functions #
+    # mesh navigation functions #
     ############################
+    def twin(self, h):
+        return self.H_twin[h]
+
+    def next(self, h):
+        return self.H_next[h]
+
+    def prev(self, h):
+        return self.H_prev[h]
+
+    def vert(self, h):
+        return self.H_vertex[h]
+
+    def face(self, h):
+        return self.H_face[h]
+
+    def h_of_v(self, v):
+        return self.V_hedge[v]
+
+    def h_of_f(self, f):
+        return self.F_hedge[f]
+
+    def update_h_of_f(self, f, h_new):
+        self.F_hedge[f] = h_new
+
+    def update_h_of_v(self, v, h_new):
+        self.V_hedge[v] = h_new
+
+    def update_twin(self, h, h_twin):
+        self.H_twin[h] = h_twin
+        self.H_twin[h_twin] = h
+
+    def update_next_prev(self, h0, h1):
+        """assigns next(h0)=h1 and prev(h1)=h0"""
+        self.H_next[h0] = h1
+        self.H_prev[h1] = h0
+
+    def update_v_of_h(self, h, v):
+        self.H_vertex[h] = v
+
+    def update_f_of_h(self, h, f):
+        self.H_face[h] = f
 
     ###########################################################################
     # def reverse_face(self, f):

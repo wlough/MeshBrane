@@ -397,42 +397,46 @@ def exp_unit_quaternion2(a):
     return exp_a
 
 
-@njit
-def rcm_quaternion(G):
-    iters = 4
-    Nsamps = len(G)
-    g0 = G[0]
-    mu_g = np.zeros_like(g0)
-    mu_g[:] = g0
-    mu_g_inv = np.zeros_like(g0)
-    for iter in range(iters):
-        mu_g_inv = inv_quaternion(
-            mu_g
-        )  # np.array([mu_g[0], -mu_g[1], -mu_g[2], -mu_g[3]])
-        Psi = np.zeros(3)
-        for i in range(Nsamps):
-            g = G[i]
-            mu_g_inv_g = mul_quaternion(mu_g_inv, g)
-            Psi += log_unit_quaternion(mu_g_inv_g) / Nsamps
-            # Psi += log_se3_quaternion(mul_se3_quaternion(g, mu_g_inv)) / Nsamps
-        mu_g = mul_quaternion(mu_g, exp_unit_quaternion(Psi))
-        # mu_g = mul_se3_quaternion(exp_se3_quaternion(Psi), mu_g)
-    return mu_g
-
-
-for _ in range(100):
-    Nsamps = 13
-    G = np.zeros((Nsamps, 4))
-    for i in range(Nsamps):
-        q = np.random.rand(4) - 0.5
-        q *= q[0]
-        q /= np.linalg.norm(q)
-        G[i] = q
-
-    g = rcm_quaternion(G)
-    print(g @ g)
-    # g - sum(G)/Nsamps
-    # (np.array([mul_quaternion(inv_quaternion(g), _) for _ in G]))
+#
+# # @njit
+# def rcm_quaternion(G):
+#     iters = 4
+#     Nsamps = len(G)
+#     g0 = G[0]
+#     mu_g = np.zeros_like(g0)
+#     mu_g[:] = g0
+#     mu_g_inv = np.zeros_like(g0)
+#     for iter in range(iters):
+#         mu_g_inv = inv_quaternion(
+#             mu_g
+#         )  # np.array([mu_g[0], -mu_g[1], -mu_g[2], -mu_g[3]])
+#         Psi = np.zeros(3)
+#         for i in range(Nsamps):
+#             g = G[i]
+#             mu_g_inv_g = mul_quaternion(mu_g_inv, g)
+#             print(mu_g_inv_g@mu_g_inv_g)
+#             mu_g_inv_g /= np.linalg.norm(mu_g_inv_g)
+#             Psi += log_unit_quaternion(mu_g_inv_g) / Nsamps
+#
+#             # Psi += log_se3_quaternion(mul_se3_quaternion(g, mu_g_inv)) / Nsamps
+#         mu_g = mul_quaternion(mu_g, exp_unit_quaternion(Psi))
+#         # mu_g = mul_se3_quaternion(exp_se3_quaternion(Psi), mu_g)
+#     return mu_g
+#
+#
+# for _ in range(100):
+#     Nsamps = 13
+#     G = np.zeros((Nsamps, 4))
+#     for i in range(Nsamps):
+#         q = np.random.rand(4) - 0.5
+#         q *= q[0]
+#         q /= np.linalg.norm(q)
+#         G[i] = q
+#
+#     g = rcm_quaternion(G)
+#     print(g @ g)
+#     # g - sum(G)/Nsamps
+# (np.array([mul_quaternion(inv_quaternion(g), _) for _ in G]))
 
 
 @njit("f8[:](f8[:], i8)")
