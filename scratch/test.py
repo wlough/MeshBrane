@@ -132,27 +132,42 @@ from src.numdiff import (
     jitcross,
     index_of,
 )
+from numba import njit
+
+
+@njit
+def matrix_to_quaternion(Q):
+    diagQ = np.array([Q[0, 0], Q[1, 1], Q[2, 2]])
+    trQ = Q[0, 0] + Q[1, 1] + Q[2, 2]
+    # cos_theta = (trQ-1)/2
+    # theta = np.arccos(cos_theta)
+    diagQmax = max(diagQ)
+
+    use_alt_form = diagQmax > trQ
+    if use_alt_form:
+        i = index_of(diagQ, diagQmax)
+        j = (i + 1) % 3  # index of the next elements
+        k = (j + 1) % 3  # index of the next next element
+
+    qi = np.sqrt(1 + 2 * diagQmax - trQ) / 2
+    qj = (Q[i, j] + Q[j, i]) / 4 * qi
+    qk = (Q[i, k] + Q[k, i]) / 4 * qi
+    qs = (Q[k, j] - Q[j, k]) / 4 * qi
+
+    # qi = (R[k, j] - R[j, k]) / (4 * qw)
+
+    q = np.zeros(4)
+    q[0] = qs
+    q[i + 1] = qi
+    q[j + 1] = qj
+    q[k + 1] = qk
+    return q
+
 
 Q = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
-diagQ = np.array([Q[0, 0], Q[1, 1], Q[2, 2]])
-trQ = Q[0, 0] + Q[1, 1] + Q[2, 2]
-# cos_theta = (trQ-1)/2
-# theta = np.arccos(cos_theta)
-diagQmax = max(diagQ)
+matrix_to_quaternion(Q)
 
-use_alt_form = diagQmax > trQ
-if use_alt_form:
-    i = index_of(diagQ, diagQmax)
-    j = (i + 1) % 3  # index of the next elements
-    k = (j + 1) % 3  # index of the next next element
-
-qi = np.sqrt(1 + 2 * diagQmax - trQ) / 2
-qj = (Q[i, j] + Q[j, i]) / 4 * qi
-qk = (Q[i, k] + Q[k, i]) / 4 * qi
-qv = np.zeros(3)
-qv[i] = qi
-qv[j] = qj
-qv[k] = qk
+# %%
 # decision_matrix = np.empty((num_rotations, 4))
 # decision_matrix = np.empty(4)
 # # decision_matrix[:, :3] = rot_matrix.diagonal()  # The diagonal elements of the rotation matrix

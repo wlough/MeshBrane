@@ -392,6 +392,7 @@ def polyscope_list_plot(
                "face_rgb_values": face_rgb_values,
                "vertex_rgb_values": vertex_rgb_values}
     """
+
     if point_clouds is None:
         point_clouds = []
 
@@ -487,7 +488,7 @@ def polyscope_list_plot(
             "name": name,
             "points": points,
             "enabled": True,
-            "radius": 0.0025,
+            "radius": 0.025,
             "color": color,
         }
         ps_point_clouds.append(ps.register_point_cloud(**register_point_cloud_kwargs))
