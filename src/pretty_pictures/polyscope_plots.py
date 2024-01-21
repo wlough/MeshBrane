@@ -451,19 +451,31 @@ def polyscope_list_plot(
         #         "vector_color3": (1.0, 0.0, 0.0),
         #     }
         # )
-
-        pq_surfaces.append(
-            {
-                "pq": brane.V_pq.copy(),
-                "faces": brane.faces.copy(),
-                "vertex_scalar_values": brane.V_scalar.copy(),
-                "name": f"brane{_}",
-                # "point_color": point_color,
-                # "vector_color1": vector_color1,
-                # "vector_color2": vector_color2,
-                "vector_color3": (1.0, 0.0, 0.0),
-            }
-        )
+        try:
+            pq_surfaces.append(
+                {
+                    "pq": brane.V_pq.copy(),
+                    "faces": brane.faces.copy(),
+                    "vertex_scalar_values": brane.V_scalar.copy(),
+                    "name": f"brane{_}",
+                    # "point_color": point_color,
+                    # "vector_color1": vector_color1,
+                    # "vector_color2": vector_color2,
+                    "vector_color3": (1.0, 0.0, 0.0),
+                }
+            )
+        except AttributeError:
+            pq_surfaces.append(
+                {
+                    "pq": brane.V_pq.copy(),
+                    "faces": brane.faces.copy(),
+                    "name": f"brane{_}",
+                    # "point_color": point_color,
+                    # "vector_color1": vector_color1,
+                    # "vector_color2": vector_color2,
+                    "vector_color3": (1.0, 0.0, 0.0),
+                }
+            )
     ps_point_clouds = []
     ps_surfaces = []
     ps_vector_point_clouds = []
@@ -731,3 +743,86 @@ def polyscope_list_plot(
     # for ps_struc in ps_structures:
     #     ps_struc.remove()
     # return ps_structures
+
+
+def brane_plot(brane):
+    """."""
+    point_clouds = []
+    surfaces = []
+    vector_point_clouds = []
+    ################################
+    V_rgb = brane.V_rgb
+    V_radius = brane.V_radius
+    H_rgb = brane.H_rgb
+    H_radius = brane.H_radius
+    F_rgb = brane.F_rgb
+    F_opacity = brane.F_opacity
+    H_opacity = brane.H_opacity
+    V_opacity = brane.V_opacity
+
+    vertices = brane.V_pq[:, :3]
+    faces = brane.faces
+    hedges = brane.halfedges
+    ################################
+    ps.init()
+    ps.remove_all_structures()
+    ps.set_navigation_style("free")
+    ps.set_up_dir("z_up")
+    ################################
+    # vert_cloud
+    vert_cloud_kwargs = {
+        "name": "vert_cloud",
+        "points": vertices,
+        "enabled": True,
+    }
+    ps_vert_cloud = ps.register_point_cloud(**vert_cloud_kwargs)
+    ps_vert_cloud.add_scalar_quantity("radius", V_radius)
+    ps_vert_cloud.set_point_radius_quantity("radius")
+    ps_vert_cloud.add_color_quantity("color", V_rgb, enabled=True)
+    ################################
+    # brane_mesh
+    brane_mesh_kwargs = {
+        "name": "brane_mesh",
+        "vertices": vertices,
+        "faces": faces,
+        "enabled": True,
+        "edge_width": 0.0,
+        "transparency": F_opacity,
+    }
+    ps_brane_surf = ps.register_surface_mesh(**brane_mesh_kwargs)
+    ps_brane_surf.add_color_quantity("F_rgb", F_rgb, defined_on="faces", enabled=True)
+    ###############################
+    # hedge_network
+    hedge_net_kwargs = {
+        "name": "hedge_net",
+        "nodes": vertices,
+        "edges": hedges,
+        "enabled": True,
+        "radius": 0.001,
+    }
+    ps_hedge_net = ps.register_curve_network(**hedge_net_kwargs)
+    ps_hedge_net.add_color_quantity("H_rgb", H_rgb, defined_on="edges")
+    ###############################
+    # hedge vecs
+    points, vecs = brane.hedge_vectors()
+    hedge_vec_cloud_kwargs = {
+        "name": "hedge_vec_cloud",
+        "points": points,
+        "enabled": True,
+        "radius": 0,
+    }
+    ps_hedge_vec_cloud = ps.register_point_cloud(**hedge_vec_cloud_kwargs)
+    add_vector_quantity_kwargs = {
+        "name": "hedge_vecs",
+        "values": vecs,
+        "enabled": True,
+        "radius": 0.001,
+        "vectortype": "ambient",
+    }
+
+    # ps.register_point_cloud(**add_vector_quantity_kwargs)
+    ps_hedge_vec_cloud.add_vector_quantity(**add_vector_quantity_kwargs)
+    ###############################
+
+    ps.show()
+    ps.remove_all_structures()

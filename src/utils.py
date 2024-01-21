@@ -36,68 +36,92 @@ def make_implicit_surface_mesh(implicit_fun_str, xyz_minmax, Nxyz):
     return verts, faces, normals
 
 
-def make_sample_mesh(surface_name):
-    if surface_name == "dumbbell":
-        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
-        # Nxyz = [60j, 60j, 60j]
+def make_sample_mesh(surface_name, Nxyz=None, xyz_minmax=None):
+    """ """
+    surface_names = [
+        "dumbbell",
+        "dumbbell2",
+        "torus",
+        "double_torus",
+        "triple_torus",
+        "neovius",
+        "sphere",
+        "oblate",
+        "prolate",
+        "transverse_tori",
+        "pyramid3",
+        "pyramid4",
+    ]
+    if Nxyz is None:
         Nxyz = [30j, 30j, 30j]
-        implicit_fun_str = "(144*y**2 + 144*z**2 + (12*x - 8)**2 - 1)*(144*y**2 + 144*z**2 + (12*x + 8)**2 - 1) - 4200"
-    elif surface_name == "dumbbell2":
+    if xyz_minmax is None:
         xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
-        Nxyz = [20j, 20j, 20j]
-        implicit_fun_str = "9*x**2 + 9*y**2 - 9*(z**2 - 1)*(cos(3*pi*z/4) - 1.25)/4"
-
-    elif surface_name == "torus":
-        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+    if surface_name not in surface_names:
+        msg = f"{surface_name} undefined.\n"
+        msg += "surface_name must be one of: "
+        for _ in surface_names:
+            msg += f"{_}, "
+        raise ValueError(msg)
+    elif surface_name == "dumbbell":
         # Nxyz = [60j, 60j, 60j]
-        Nxyz = [20j, 20j, 20j]
+        # Nxyz = [20j, 20j, 20j]
+        implicit_fun_str = "9*x**2 + 9*y**2 - 9*(z**2 - 1)*(cos(3*pi*z/4) - 1.25)/4"
+    elif surface_name == "dumbbell2":
+        # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        # Nxyz = [60j, 60j, 60j]
+        # Nxyz = [30j, 30j, 30j]
+        implicit_fun_str = "(144*y**2 + 144*z**2 + (12*x - 8)**2 - 1)*(144*y**2 + 144*z**2 + (12*x + 8)**2 - 1) - 4200"
+    elif surface_name == "torus":
+        # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        # Nxyz = [60j, 60j, 60j]
+        # Nxyz = [20j, 20j, 20j]
         R = 0.7  # big radius
         r = 0.7 / 3.0  # small radius
         implicit_fun_str = (
             f"(x**2 + y**2 + z**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * (x**2 + y**2)"
         )
-    elif surface_name == "double torus":
-        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
-        Nxyz = [30j, 30j, 30j]
+    elif surface_name == "double_torus":
+        # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        # Nxyz = [30j, 30j, 30j]
         # implicit_fun_str = "z**2 + (x**2*(x - 1)*(x + 1) + y**2)**2 - 0.01"
         implicit_fun_str = (
             "(z/0.2)**2 + (x**2*(x - 0.7)*(x + 0.7)/0.05 + y**2/0.05)**2 - 1"
         )
-    elif surface_name == "triple torus":
-        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
-        Nxyz = [40j, 40j, 40j]
+    elif surface_name == "triple_torus":
+        # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        # Nxyz = [40j, 40j, 40j]
         # implicit_fun_str = "0.16*z**2 + (-(x + 0.2)*(-3*y**2 + (x + 0.2)**2) + (y**2 + (x + 0.2)**2)**2)**2 - 0.008"
         implicit_fun_str = "1.69*z**2*(1 - 0.769*cos(pi*Abs(y**2 + (x + 0.2)**2)/4))**2 + (-(x + 0.2)*(-3*y**2 + (x + 0.2)**2) + (y**2 + (x + 0.2)**2)**2)**2 - 0.008"
     elif surface_name == "neovius":
-        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
-        Nxyz = [20j, 20j, 20j]
+        # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        # Nxyz = [20j, 20j, 20j]
         implicit_fun_str = "4*cos(3*x + 3)*cos(3*y + 3)*cos(3*z + 3) + 3*cos(3*x + 3) + 3*cos(3*y + 3) + 3*cos(3*z + 3)"
     elif surface_name == "sphere":
-        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
-        Nxyz = [20j, 20j, 20j]
+        # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        # Nxyz = [20j, 20j, 20j]
         R = 0.9
         implicit_fun_str = f"x**2+y**2+z**2-{R**2}"
     elif surface_name == "oblate":
-        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
-        Nxyz = [20j, 20j, 20j]
+        # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        # Nxyz = [20j, 20j, 20j]
         Rxy = 0.9
         Rz = 0.6
         implicit_fun_str = f"(x/{Rxy})**2+(y/{Rxy})**2+(z/{Rz})**2-1"
     elif surface_name == "prolate":
-        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
-        Nxyz = [20j, 20j, 20j]
+        # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        # Nxyz = [20j, 20j, 20j]
         Rxy = 0.6
         Rz = 0.9
         implicit_fun_str = f"(x/{Rxy})**2+(y/{Rxy})**2+(z/{Rz})**2-1"
-    elif surface_name == "transverse tori":
-        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+    elif surface_name == "transverse_tori":
+        # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         # # Nxyz = [60j, 60j, 60j]
         # Nxyz = [20j, 20j, 20j]
         # R = 0.7  # big radius
         # r = 0.7 / 3.0  # small radius
         # b = (0.5 * r) ** 2
         # xyz_minmax = [-1.3, 1.3, -1.3, 1.3, -1.3, 1.3]
-        Nxyz = [60j, 60j, 60j]
+        # Nxyz = [60j, 60j, 60j]
         # Nxyz = [30j, 30j, 30j]
         R = 1.0  # big radius
         r = 0.2  # small radius
@@ -109,26 +133,128 @@ def make_sample_mesh(surface_name):
         F2 = f"((x/.7)**2 + (y/.7)**2 + (z/.7)**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * ((y/.7)**2 + (z/.7)**2)"
         F3 = f"((x/.7)**2 + (y/.7)**2 + (z/.7)**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * ((z/.7)**2 + (x/.7)**2)"
         implicit_fun_str = f"({F1})*({F2})*({F3})-{b}"
-    else:
-        print(f"{surface_name} is not a valid surface")
-        print("how about a nice plane instead?")
-        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
-        Nxyz = [20j, 20j, 20j]
-        implicit_fun_str = "z"
+    elif surface_name == "pyramid3":
+        implicit_fun_str = None
+        verts = np.zeros((4, 3))
+        faces = np.zeros((4, 3), dtype=np.int32)
+        xyz_top = np.array([0.0, 0.0, 1.0])
+        v_top = 0
+        xyz_base1 = np.array([1.0, 0.0, -1.0])
+        v_base1 = 1
+        xyz_base2 = np.array([np.cos(2 * np.pi / 3), np.sin(2 * np.pi / 3), -1.0])
+        v_base2 = 2
+        xyz_base3 = np.array([np.cos(4 * np.pi / 3), np.sin(4 * np.pi / 3), -1.0])
+        v_base3 = 3
+        f_base = np.array([v_base3, v_base2, v_base1])
+        f_side1 = np.array([v_base1, v_base2, v_top])
+        f_side2 = np.array([v_base2, v_base3, v_top])
+        f_side3 = np.array([v_base3, v_base1, v_top])
+        verts[v_top] = xyz_top
+        verts[v_base1] = xyz_base1
+        verts[v_base2] = xyz_base2
+        verts[v_base3] = xyz_base3
+        faces = np.array([f_base, f_side1, f_side2, f_side3], dtype=np.int32)
+        verts *= 0.9
+    elif surface_name == "pyramid4":
+        implicit_fun_str = None
+        verts = np.zeros((5, 3))
+        faces = np.zeros((5, 3), dtype=np.int32)
+        xyz_top = np.array([0.0, 0.0, 1.0])
+        v_top = 0
+        xyz_base1 = np.array([1.0, 0.0, -1.0])
+        v_base1 = 1
+        xyz_base2 = np.array([np.cos(2 * np.pi / 4), np.sin(2 * np.pi / 4), -1.0])
+        v_base2 = 2
+        xyz_base3 = np.array([np.cos(4 * np.pi / 4), np.sin(4 * np.pi / 4), -1.0])
+        v_base3 = 3
+        xyz_base4 = np.array([np.cos(6 * np.pi / 4), np.sin(6 * np.pi / 4), -1.0])
+        v_base4 = 4
 
-    verts, faces, normals = make_implicit_surface_mesh(
-        implicit_fun_str, xyz_minmax, Nxyz
-    )
+        f_base1 = np.array([v_base4, v_base3, v_base2])
+        f_base2 = np.array([v_base2, v_base1, v_base4])
+        f_side1 = np.array([v_base1, v_base2, v_top])
+        f_side2 = np.array([v_base2, v_base3, v_top])
+        f_side3 = np.array([v_base3, v_base4, v_top])
+        f_side4 = np.array([v_base4, v_base1, v_top])
+        verts[v_top] = xyz_top
+        verts[v_base1] = xyz_base1
+        verts[v_base2] = xyz_base2
+        verts[v_base3] = xyz_base3
+        verts[v_base4] = xyz_base4
+        faces = np.array(
+            [f_base1, f_base2, f_side1, f_side2, f_side3, f_side4], dtype=np.int32
+        )
+        verts *= 0.9
+    if implicit_fun_str is None:
+        pass
+    else:
+        verts, faces, normals = make_implicit_surface_mesh(
+            implicit_fun_str, xyz_minmax, Nxyz
+        )
     # normal_norms = np.linalg.norm(normals, axis=1)
-    normals = np.array([n / np.linalg.norm(n) for n in normals])
+    # normals = np.array([n / np.linalg.norm(n) for n in normals])
 
     # surf_dict = {"vertices": verts, "faces": faces, "normals": normals}
     # with open(f"./scratch/{surface_name}_dict.pickle", "wb") as _f:
     #     dill.dump(surf_dict, _f, recurse=True)
 
-    return verts, faces, normals
+    return verts, faces
 
 
+def save_sample_mesh(surface_name, file_path=None, Nxyz=None, xyz_minmax=None):
+    if file_path is None:
+        file_path = f"./data/ply_files/{surface_name}.ply"
+    vertices, faces = make_sample_mesh(surface_name, Nxyz=Nxyz, xyz_minmax=xyz_minmax)
+    save_mesh_to_ply(vertices, faces, file_path)
+
+    # surf_dict = {"vertices": verts, "faces": faces, "normals": normals}
+    # with open(f"./scratch/{surface_name}_dict.pickle", "wb") as _f:
+    #     dill.dump(surf_dict, _f, recurse=True)
+
+
+def save_all_sample_meshes():
+    surface_names = [
+        "dumbbell",
+        "dumbbell2",
+        "torus",
+        "double_torus",
+        "triple_torus",
+        "neovius",
+        "sphere",
+        "oblate",
+        "prolate",
+        "transverse_tori",
+    ]
+    for _ in surface_names:
+        print(_)
+        surface_name = _
+        Nxyz = [30j, 30j, 30j]
+        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        file_path = f"./data/ply_files/{surface_name}.ply"
+        save_sample_mesh(
+            surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax
+        )
+    for _ in surface_names:
+        print(_)
+        surface_name = _
+        Nxyz = [60j, 60j, 60j]
+        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        file_path = f"./data/ply_files/{surface_name}_fine.ply"
+        save_sample_mesh(
+            surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax
+        )
+    for _ in surface_names:
+        print(_)
+        surface_name = _
+        Nxyz = [20j, 20j, 20j]
+        xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        file_path = f"./data/ply_files/{surface_name}_coarse.ply"
+        save_sample_mesh(
+            surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax
+        )
+
+
+# %%
 def make_trisurface_patch(Nfaces=5):
     N = 1 * Nfaces
     dr = 0.25
