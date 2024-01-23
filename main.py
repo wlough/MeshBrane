@@ -6,34 +6,32 @@ from src.utils import load_mesh_from_ply
 # from src.pretty_pictures import polyscope_plots as pp
 from src.pretty_pictures import mayavi_plots as mp
 
-# from src.numdiff import (index_of_nested,)
+from src.numdiff import (
+    quaternion_to_matrix,
+    matrix_to_quaternion,
+    jitdot,
+    jitnorm,
+    jitcross,
+)
 
+# out_path = "./output"
+# hash("heeey")
 
 # %%
 file_path = "./data/ply_files/oblate_ultracoarse.ply"
 vertices, faces = load_mesh_from_ply(file_path)
-b = Brane(vertices, faces)
-bflip = Brane(vertices, faces)
-# bflip.flip_bad_edges()
-h = 207
-# h = 60
+Ke = 1e-2
+Ka = 1e-3
+Kc = 1e-4
+Kb = 1e0
+Ks = 1e-1
+zeta = 1e0
+dt = 1e-2
+params = np.array([Ke, Ka, Kc, Kb, Ks, zeta, dt])
+b = Brane(vertices, faces, params)
 
-bflip.edge_flip(h)
-for bb in [b, bflip]:
-    ht = bb.twin(h)
-    bb.H_rgb[h] = np.array([1.0, 0.0, 0.0])
-    bb.H_rgb[ht] = np.array([0.0, 0.0, 1.0])
-    bb.V_rgb[bb.v_of_h(h)] = np.array([1.0, 0.0, 0.0])
-    bb.V_rgb[bb.v_of_h(ht)] = np.array([0.0, 0.0, 1.0])
-    f1 = bb.f_of_h(h)
-    f2 = bb.f_of_h(ht)
-    bb.F_rgb[f1] = np.array([1.0, 0.0, 0.0])
-    bb.F_rgb[f2] = np.array([0.0, 0.0, 1.0])
 # %%
-for h in b.H_label:
-    v = b.v_of_h(h)
-    val = b.valence(v)
-    print(f"h={h}, valence={val}")
+
 # %%
 mp.brane_plot(
     b,
@@ -41,9 +39,9 @@ mp.brane_plot(
     show_halfedges=True,
     show_edges=False,
     show_vertices=True,
-    show_normals=False,
-    show_tangant1=False,
-    show_tangent2=False,
+    show_normals=True,
+    show_tangent1=True,
+    show_tangent2=True,
     show_plot_axes=False,
 )
 

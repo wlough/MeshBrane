@@ -432,7 +432,7 @@ def brane_plot(
     show_edges=False,
     show_vertices=False,
     show_normals=False,
-    show_tangant1=False,
+    show_tangent1=False,
     show_tangent2=False,
     show_plot_axes=False,
 ):
@@ -452,6 +452,7 @@ def brane_plot(
     vertices = brane.vertex_positions()
     faces = brane.faces
     # hedges = brane.halfedges
+    frame_scale = 0.15
     ################################
     if show:
         mlab.options.offscreen = False
@@ -531,7 +532,7 @@ def brane_plot(
     ###############################
     # hedge vecs
     if show_halfedges:
-        H_points, H_vecs = brane.hedge_vectors()
+        H_points, H_vecs = brane.shifted_hedge_vectors()
         hedge_vec_kwargs = {
             "name": "halfedges",
             "mode": "arrow",
@@ -576,7 +577,7 @@ def brane_plot(
             "name": "normals",
             "mode": "arrow",
             "scale_mode": "vector",
-            "scale_factor": 1.0,
+            "scale_factor": frame_scale,
         }
         V_normal_field = mlab.quiver3d(*vertices.T, *V_normal.T, **V_normal_kwargs)
         V_normal_rgba, V_normal_color_scalars = set_rgba_colors(V_normal_rgb, 1.0)
@@ -593,6 +594,291 @@ def brane_plot(
         V_normal_field.mlab_source.dataset.point_data.scalars = V_normal_color_scalars
         V_normal_field.mlab_source.dataset.point_data.scalars.name = "normal colors"
         V_normal_field.mlab_source.update()
+
+    if show_tangent1:
+        V_tangent1_rgb = brane.V_tangent1_rgb
+        try:
+            V_tangent1 = V_frames[:, :, 0]
+        except NameError:
+            V_frames = brane.orthogonal_matrices()
+            V_tangent1 = V_frames[:, :, 0]
+
+        V_tangent1_kwargs = {
+            "name": "tangent1",
+            "mode": "arrow",
+            "scale_mode": "vector",
+            "scale_factor": frame_scale,
+        }
+        V_tangent1_field = mlab.quiver3d(
+            *vertices.T, *V_tangent1.T, **V_tangent1_kwargs
+        )
+        V_tangent1_rgba, V_tangent1_color_scalars = set_rgba_colors(V_tangent1_rgb, 1.0)
+        V_tangent1_field.glyph.glyph.clamping = False
+        V_tangent1_field.glyph.glyph_source.glyph_source.tip_length = 0.25
+        V_tangent1_field.glyph.glyph_source.glyph_source.tip_radius = 0.03
+        V_tangent1_field.glyph.glyph_source.glyph_source.shaft_radius = 0.01
+        V_tangent1_field.glyph.color_mode = "color_by_scalar"
+
+        V_tangent1_field.module_manager.scalar_lut_manager.lut.number_of_colors = len(
+            V_tangent1_color_scalars
+        )
+        V_tangent1_field.module_manager.scalar_lut_manager.lut.table = V_tangent1_rgba
+        V_tangent1_field.mlab_source.dataset.point_data.scalars = (
+            V_tangent1_color_scalars
+        )
+        V_tangent1_field.mlab_source.dataset.point_data.scalars.name = "tangent1 colors"
+        V_tangent1_field.mlab_source.update()
+
+    if show_tangent2:
+        V_tangent2_rgb = brane.V_tangent2_rgb
+        try:
+            V_tangent2 = V_frames[:, :, 1]
+        except NameError:
+            V_frames = brane.orthogonal_matrices()
+            V_tangent2 = V_frames[:, :, 1]
+
+        V_tangent2_kwargs = {
+            "name": "tangent2",
+            "mode": "arrow",
+            "scale_mode": "vector",
+            "scale_factor": frame_scale,
+        }
+        V_tangent2_field = mlab.quiver3d(
+            *vertices.T, *V_tangent2.T, **V_tangent2_kwargs
+        )
+        V_tangent2_rgba, V_tangent2_color_scalars = set_rgba_colors(V_tangent2_rgb, 1.0)
+        V_tangent2_field.glyph.glyph.clamping = False
+        V_tangent2_field.glyph.glyph_source.glyph_source.tip_length = 0.25
+        V_tangent2_field.glyph.glyph_source.glyph_source.tip_radius = 0.03
+        V_tangent2_field.glyph.glyph_source.glyph_source.shaft_radius = 0.01
+        V_tangent2_field.glyph.color_mode = "color_by_scalar"
+
+        V_tangent2_field.module_manager.scalar_lut_manager.lut.number_of_colors = len(
+            V_tangent2_color_scalars
+        )
+        V_tangent2_field.module_manager.scalar_lut_manager.lut.table = V_tangent2_rgba
+        V_tangent2_field.mlab_source.dataset.point_data.scalars = (
+            V_tangent2_color_scalars
+        )
+        V_tangent2_field.mlab_source.dataset.point_data.scalars.name = "tangent2 colors"
+        V_tangent2_field.mlab_source.update()
+
+    if show_plot_axes:
+        mlab.axes()
+        mlab.orientation_axes()
+    if show:
+        mlab.options.offscreen = False
+        mlab.show()
+    if save:
+        mlab.options.offscreen = True
+        mlab.savefig(fig_path, figure=fig, size=figsize)
+
+    mlab.close(all=True)
+
+
+def plot_from_data(
+    V_pq,
+    faces,
+    V_rgb,
+    V_radius,
+    H_rgb,
+    F_rgb,
+    F_opacity,
+    H_opacity,
+    V_opacity,
+    V_normal_rgb,
+    V_frames,
+    show=True,
+    save=False,
+    fig_path=None,
+    figsize=(2180, 2180),
+    show_surface=True,
+    show_halfedges=False,
+    show_edges=False,
+    show_vertices=False,
+    show_normals=False,
+    show_tangent1=False,
+    show_tangent2=False,
+    show_plot_axes=False,
+):
+    """
+    fig_path=f"{output_directory}/temp_images/fig_{image_count:0>4}.png"
+    """
+    ################################
+
+    vertices = V_pq[:, :3]  # brane.vertex_positions()
+    frame_scale = 0.15
+    ################################
+    if show:
+        mlab.options.offscreen = False
+    else:
+        mlab.options.offscreen = True
+    # figsize = (2180, 2180)
+    title = "Membrane mesh"
+    fig = mlab.figure(title, size=figsize)
+
+    ################################
+    # vert_cloud
+    if show_vertices:
+        vert_cloud_kwargs = {
+            "name": "vert_cloud",
+            "scale_mode": "vector",
+            "scale_factor": 1.0,
+        }
+
+        vert_cloud = mlab.points3d(*vertices.T, **vert_cloud_kwargs)
+        vert_cloud.glyph.glyph.clamping = False
+        V_rad_vecs = np.array([[_, 0, 0] for _ in V_radius])
+        vert_cloud.mlab_source.dataset.point_data.vectors = V_rad_vecs
+        vert_cloud.mlab_source.dataset.point_data.vectors.name = "vertex rads"
+
+        V_rgba, V_color_scalars = set_rgba_colors(V_rgb, V_opacity)
+        vert_cloud.module_manager.scalar_lut_manager.lut.number_of_colors = len(
+            V_color_scalars
+        )
+
+        vert_cloud.module_manager.scalar_lut_manager.lut.table = V_rgba
+        vert_cloud.module_manager.lut_data_mode = "point data"
+        vert_cloud.mlab_source.dataset.point_data.scalars = V_color_scalars
+        vert_cloud.mlab_source.dataset.point_data.scalars.name = "vertex colors"
+        vert_cloud.mlab_source.update()
+        vert_cloud2 = mlab.pipeline.set_active_attribute(
+            vert_cloud, point_scalars="vertex colors", point_vectors="vertex rads"
+        )
+    ################################
+    # brane_mesh
+    if show_surface:
+        brane_mesh_kwargs = {
+            "name": "brane_mesh",
+            # "mask": mask,
+            # "opacity": F_opacity,
+            # "representation": "wireframe",
+            # "representation": "mesh",
+            "representation": "surface",
+            # "representation": "fancymesh",,
+        }
+
+        brane_mesh = mlab.triangular_mesh(*vertices.T, faces, **brane_mesh_kwargs)
+
+        F_rgba, F_scalars = set_rgba_colors(F_rgb, F_opacity)
+        brane_mesh.module_manager.scalar_lut_manager.lut.number_of_colors = len(
+            F_scalars
+        )
+        brane_mesh.module_manager.scalar_lut_manager.lut.table = F_rgba
+        brane_mesh.module_manager.lut_data_mode = "cell data"
+
+        brane_mesh.mlab_source.dataset.cell_data.scalars = F_scalars
+        brane_mesh.mlab_source.dataset.cell_data.scalars.name = "face colors"
+        brane_mesh.mlab_source.update()
+        brane_mesh2 = mlab.pipeline.set_active_attribute(
+            brane_mesh, cell_scalars="face colors"
+        )
+        # surf = mlab.pipeline.surface(brane_mesh)
+    ################################
+    # edge_mesh
+    if show_edges:
+        edge_mesh_kwargs = {
+            "name": "edge_mesh",
+            "color": (1.0, 0.498, 0.0),
+            "representation": "wireframe",
+        }
+
+        edge_mesh = mlab.triangular_mesh(*vertices.T, faces, **edge_mesh_kwargs)
+
+    ###############################
+    if show_normals:
+        V_normal = V_frames[:, :, 2]
+
+        V_normal_kwargs = {
+            "name": "normals",
+            "mode": "arrow",
+            "scale_mode": "vector",
+            "scale_factor": frame_scale,
+        }
+        V_normal_field = mlab.quiver3d(*vertices.T, *V_normal.T, **V_normal_kwargs)
+        V_normal_rgba, V_normal_color_scalars = set_rgba_colors(V_normal_rgb, 1.0)
+        V_normal_field.glyph.glyph.clamping = False
+        V_normal_field.glyph.glyph_source.glyph_source.tip_length = 0.25
+        V_normal_field.glyph.glyph_source.glyph_source.tip_radius = 0.03
+        V_normal_field.glyph.glyph_source.glyph_source.shaft_radius = 0.01
+        V_normal_field.glyph.color_mode = "color_by_scalar"
+
+        V_normal_field.module_manager.scalar_lut_manager.lut.number_of_colors = len(
+            V_normal_color_scalars
+        )
+        V_normal_field.module_manager.scalar_lut_manager.lut.table = V_normal_rgba
+        V_normal_field.mlab_source.dataset.point_data.scalars = V_normal_color_scalars
+        V_normal_field.mlab_source.dataset.point_data.scalars.name = "normal colors"
+        V_normal_field.mlab_source.update()
+
+    # if show_tangent1:
+    #     V_tangent1_rgb = brane.V_tangent1_rgb
+    #     try:
+    #         V_tangent1 = V_frames[:, :, 0]
+    #     except NameError:
+    #         V_frames = brane.orthogonal_matrices()
+    #         V_tangent1 = V_frames[:, :, 0]
+    #
+    #     V_tangent1_kwargs = {
+    #         "name": "tangent1",
+    #         "mode": "arrow",
+    #         "scale_mode": "vector",
+    #         "scale_factor": frame_scale,
+    #     }
+    #     V_tangent1_field = mlab.quiver3d(
+    #         *vertices.T, *V_tangent1.T, **V_tangent1_kwargs
+    #     )
+    #     V_tangent1_rgba, V_tangent1_color_scalars = set_rgba_colors(V_tangent1_rgb, 1.0)
+    #     V_tangent1_field.glyph.glyph.clamping = False
+    #     V_tangent1_field.glyph.glyph_source.glyph_source.tip_length = 0.25
+    #     V_tangent1_field.glyph.glyph_source.glyph_source.tip_radius = 0.03
+    #     V_tangent1_field.glyph.glyph_source.glyph_source.shaft_radius = 0.01
+    #     V_tangent1_field.glyph.color_mode = "color_by_scalar"
+    #
+    #     V_tangent1_field.module_manager.scalar_lut_manager.lut.number_of_colors = len(
+    #         V_tangent1_color_scalars
+    #     )
+    #     V_tangent1_field.module_manager.scalar_lut_manager.lut.table = V_tangent1_rgba
+    #     V_tangent1_field.mlab_source.dataset.point_data.scalars = (
+    #         V_tangent1_color_scalars
+    #     )
+    #     V_tangent1_field.mlab_source.dataset.point_data.scalars.name = "tangent1 colors"
+    #     V_tangent1_field.mlab_source.update()
+
+    # if show_tangent2:
+    #     V_tangent2_rgb = brane.V_tangent2_rgb
+    #     try:
+    #         V_tangent2 = V_frames[:, :, 1]
+    #     except NameError:
+    #         V_frames = brane.orthogonal_matrices()
+    #         V_tangent2 = V_frames[:, :, 1]
+    #
+    #     V_tangent2_kwargs = {
+    #         "name": "tangent2",
+    #         "mode": "arrow",
+    #         "scale_mode": "vector",
+    #         "scale_factor": frame_scale,
+    #     }
+    #     V_tangent2_field = mlab.quiver3d(
+    #         *vertices.T, *V_tangent2.T, **V_tangent2_kwargs
+    #     )
+    #     V_tangent2_rgba, V_tangent2_color_scalars = set_rgba_colors(V_tangent2_rgb, 1.0)
+    #     V_tangent2_field.glyph.glyph.clamping = False
+    #     V_tangent2_field.glyph.glyph_source.glyph_source.tip_length = 0.25
+    #     V_tangent2_field.glyph.glyph_source.glyph_source.tip_radius = 0.03
+    #     V_tangent2_field.glyph.glyph_source.glyph_source.shaft_radius = 0.01
+    #     V_tangent2_field.glyph.color_mode = "color_by_scalar"
+    #
+    #     V_tangent2_field.module_manager.scalar_lut_manager.lut.number_of_colors = len(
+    #         V_tangent2_color_scalars
+    #     )
+    #     V_tangent2_field.module_manager.scalar_lut_manager.lut.table = V_tangent2_rgba
+    #     V_tangent2_field.mlab_source.dataset.point_data.scalars = (
+    #         V_tangent2_color_scalars
+    #     )
+    #     V_tangent2_field.mlab_source.dataset.point_data.scalars.name = "tangent2 colors"
+    #     V_tangent2_field.mlab_source.update()
+
     if show_plot_axes:
         mlab.axes()
         mlab.orientation_axes()
