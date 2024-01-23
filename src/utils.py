@@ -224,37 +224,40 @@ def save_all_sample_meshes():
         "oblate",
         "prolate",
         "transverse_tori",
+        "pyramid3",
+        "pyramid4",
     ]
+    print("saving\n")
     for _ in surface_names:
-        print(_)
         surface_name = _
         Nxyz = [30j, 30j, 30j]
         xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         file_path = f"./data/ply_files/{surface_name}.ply"
+        print(file_path + 10 * " ", end="\r")
         save_sample_mesh(
             surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax
         )
     for _ in surface_names:
-        print(_)
         surface_name = _
         Nxyz = [60j, 60j, 60j]
         xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         file_path = f"./data/ply_files/{surface_name}_fine.ply"
+        print(file_path + 10 * " ", end="\r")
         save_sample_mesh(
             surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax
         )
     for _ in surface_names:
-        print(_)
         surface_name = _
         Nxyz = [20j, 20j, 20j]
         xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+        print(file_path + 10 * " ", end="\r")
         file_path = f"./data/ply_files/{surface_name}_coarse.ply"
         save_sample_mesh(
             surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax
         )
+    print("\ndone")
 
 
-# %%
 def make_trisurface_patch(Nfaces=5):
     N = 1 * Nfaces
     dr = 0.25
@@ -306,40 +309,6 @@ def make_quadsurface_patch(Nfaces=3):
     return vertices, faces
 
 
-# def save_mesh_to_ply(vertices, faces, file_path):
-#     # Create the vertex data
-#     vertex_data = np.array(
-#         [tuple(v) for v in vertices], dtype=[("x", "f8"), ("y", "f8"), ("z", "f8")]
-#     )
-#
-#     # Create the face data
-#     face_data = np.array(
-#         [tuple(f) for f in faces], dtype=[("v0", "i4"), ("v1", "i4"), ("v2", "i4")]
-#     )
-#     # vertex_data = np.array(vertices)
-#     #
-#     # # Create the face data
-#     # face_data = np.array(faces)
-#
-#     # Create the PlyElements
-#     vertex_element = PlyElement.describe(vertex_data, "vertex")
-#     face_element = PlyElement.describe(face_data, "face")
-#
-#     # Write to a .ply file
-#     PlyData([vertex_element, face_element], text=True).write(file_path)
-#
-#
-# def load_mesh_from_ply(file_path):
-#     # Read the ply file
-#     plydata = PlyData.read(file_path)
-#
-#     # Extract the vertex and face data
-#     vertices = np.vstack(
-#         [plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]]
-#     ).T
-#     faces = np.vstack(plydata["face"]["vertex_indices"])
-#
-#     return vertices, faces
 def save_mesh_to_ply(vertices, faces, file_path):
     # Create the vertex data
     vertex_data = np.array(

@@ -157,7 +157,7 @@ def factorial_lookup(n):
     return factorial_table[n]
 
 
-@njit  # ("f8(int32,int32,f8,f8)")
+# @njit("f8(int32,int32,f8,f8)")
 def Ylm(l, m, theta, phi):
     B = (
         1j ** (m + abs(m))
@@ -271,6 +271,16 @@ def jitdot(u, v):
     for i in range(Ndim):
         u_dot_v += u[i] * v[i]
     return u_dot_v
+
+
+@njit("f8(f8[:])")
+def jitnorm(u):
+    normu = 0.0
+    # Ndim = len(u)
+    for ui in u:
+        normu += ui**2
+    normu = np.sqrt(normu)
+    return normu
 
 
 #######################################
@@ -1218,12 +1228,11 @@ def sym_findiff_weights(deriv_order, sample_number):
     return h, a
 
 
-def save_findiff_weight_funs():
+def save_findiff_weight_funs(out_dir="./data/findiff_weights"):
     """
     lambdifies 2nd order difference coefficients for 1st-4th derivatives
     """
 
-    out_dir = "./data"
     h1, a1 = sym_findiff_weights(1, 3)
     h2, a2 = sym_findiff_weights(2, 4)
     h3, a3 = sym_findiff_weights(3, 5)
@@ -1239,20 +1248,240 @@ def save_findiff_weight_funs():
             dill.dump(fun, _f, recurse=True)
 
 
+@njit
+def findiff_weights1(h):
+    """
+    findiff_weights{deriv_order}
+    O(2) accurate finite difference weights
+
+    see:
+    h, a = sym_findiff_weights(deriv_order, sample_number)
+    h.__str__()
+    a.__str__()
+    """
+    h_0, h_1, h_2 = h
+    a = np.array(
+        [
+            (-h_1 - h_2) / ((h_0 - h_1) * (h_0 - h_2)),
+            (h_0 + h_2) / ((h_0 - h_1) * (h_1 - h_2)),
+            (-h_0 - h_1) / ((h_0 - h_2) * (h_1 - h_2)),
+        ]
+    )
+    return a
+
+
+@njit
+def findiff_weights2(h):
+    """
+    findiff_weights{deriv_order}
+    O(2) accurate finite difference weights
+
+    see:
+    h, a = sym_findiff_weights(deriv_order, sample_number)
+    h.__str__()
+    a.__str__()
+    """
+    h_0, h_1, h_2, h_3 = h
+    a = np.array(
+        [
+            2 * (-h_1 - h_2 - h_3) / ((h_0 - h_1) * (h_0 - h_2) * (h_0 - h_3)),
+            2 * (h_0 + h_2 + h_3) / ((h_0 - h_1) * (h_1 - h_2) * (h_1 - h_3)),
+            2 * (-h_0 - h_1 - h_3) / ((h_0 - h_2) * (h_1 - h_2) * (h_2 - h_3)),
+            2
+            * (h_2 * (-h_0 + h_1) - (h_0 - h_1) * (h_0 + h_1))
+            / ((-h_0 + h_1) * (h_0 - h_3) * (h_1 - h_3) * (h_2 - h_3)),
+        ]
+    )
+    return a
+
+
+@njit
+def findiff_weights3(h):
+    """
+    findiff_weights{deriv_order}
+    O(2) accurate finite difference weights
+
+    see:
+    h, a = sym_findiff_weights(deriv_order, sample_number)
+    h.__str__()
+    a.__str__()
+    """
+    h_0, h_1, h_2, h_3, h_4 = h
+    a = np.array(
+        [
+            6
+            * (
+                h_4 * (-h_0 + h_1) ** 2
+                + (h_0 - h_1) * (-h_3 * (-h_0 + h_1) + (h_0 - h_1) * (h_1 + h_2))
+            )
+            / ((-h_0 + h_1) ** 3 * (h_0 - h_2) * (h_0 - h_3) * (h_0 - h_4)),
+            6
+            * (
+                h_4 * (-h_0 + h_1) * (-h_1 + h_2)
+                + (h_0 - h_1) * (h_1 - h_2) * (h_0 + h_2 + h_3)
+            )
+            / ((-h_0 + h_1) ** 2 * (-h_1 + h_2) ** 2 * (h_1 - h_3) * (h_1 - h_4)),
+            6
+            * (-h_3 * (-h_0 + h_1) - h_4 * (-h_0 + h_1) + (h_0 - h_1) * (h_0 + h_1))
+            / ((-h_0 + h_1) * (h_0 - h_2) * (h_1 - h_2) * (h_2 - h_3) * (h_2 - h_4)),
+            6
+            * (
+                h_4 * (-h_0 + h_2) * (-h_1 + h_2)
+                + (h_0 - h_2) * (h_1 - h_2) * (h_0 + h_1 + h_2)
+            )
+            / (
+                (-h_0 + h_2)
+                * (h_0 - h_3)
+                * (-h_1 + h_2)
+                * (h_1 - h_3)
+                * (h_2 - h_3)
+                * (h_3 - h_4)
+            ),
+            6
+            * (
+                -h_3 * (-h_0 + h_2) * (-h_1 + h_2)
+                - (h_0 - h_2) * (h_1 - h_2) * (h_0 + h_1 + h_2)
+            )
+            / (
+                (-h_0 + h_2)
+                * (h_0 - h_4)
+                * (-h_1 + h_2)
+                * (h_1 - h_4)
+                * (h_2 - h_4)
+                * (h_3 - h_4)
+            ),
+        ]
+    )
+    return a
+
+
+@njit
+def findiff_weights4(h):
+    """
+    findiff_weights{deriv_order}
+    O(2) accurate finite difference weights
+
+    see:
+    h, a = sym_findiff_weights(deriv_order, sample_number)
+    h.__str__()
+    a.__str__()
+    """
+    h_0, h_1, h_2, h_3, h_4, h_5 = h
+    a = np.array(
+        [
+            24
+            * (
+                h_5 * (-h_0 + h_1) ** 3
+                - (h_0 - h_1)
+                * (
+                    h_4 * (-h_0 + h_1) ** 2
+                    + (h_0 - h_1) * (-h_3 * (-h_0 + h_1) + (h_0 - h_1) * (h_1 + h_2))
+                )
+            )
+            / (
+                (-h_0 + h_1) ** 4
+                * (h_0 - h_2)
+                * (h_0 - h_3)
+                * (h_0 - h_4)
+                * (h_0 - h_5)
+            ),
+            24
+            * (
+                h_5 * (-h_0 + h_1) ** 2 * (-h_1 + h_2) ** 2
+                + (h_0 - h_1)
+                * (h_1 - h_2)
+                * (
+                    h_4 * (-h_0 + h_1) * (-h_1 + h_2)
+                    + (h_0 - h_1) * (h_1 - h_2) * (h_0 + h_2 + h_3)
+                )
+            )
+            / (
+                (-h_0 + h_1) ** 3
+                * (-h_1 + h_2) ** 3
+                * (h_1 - h_3)
+                * (h_1 - h_4)
+                * (h_1 - h_5)
+            ),
+            24
+            * (
+                -h_3 * (-h_0 + h_1)
+                - h_4 * (-h_0 + h_1)
+                - h_5 * (-h_0 + h_1)
+                + (h_0 - h_1) * (h_0 + h_1)
+            )
+            / (
+                (-h_0 + h_1)
+                * (h_0 - h_2)
+                * (h_1 - h_2)
+                * (h_2 - h_3)
+                * (h_2 - h_4)
+                * (h_2 - h_5)
+            ),
+            24
+            * (
+                h_4 * (-h_0 + h_2) * (-h_1 + h_2)
+                + h_5 * (-h_0 + h_2) * (-h_1 + h_2)
+                + (h_0 - h_2) * (h_1 - h_2) * (h_0 + h_1 + h_2)
+            )
+            / (
+                (-h_0 + h_2)
+                * (h_0 - h_3)
+                * (-h_1 + h_2)
+                * (h_1 - h_3)
+                * (h_2 - h_3)
+                * (h_3 - h_4)
+                * (h_3 - h_5)
+            ),
+            24
+            * (
+                -h_3 * (-h_0 + h_2) * (-h_1 + h_2)
+                - h_5 * (-h_0 + h_2) * (-h_1 + h_2)
+                - (h_0 - h_2) * (h_1 - h_2) * (h_0 + h_1 + h_2)
+            )
+            / (
+                (-h_0 + h_2)
+                * (h_0 - h_4)
+                * (-h_1 + h_2)
+                * (h_1 - h_4)
+                * (h_2 - h_4)
+                * (h_3 - h_4)
+                * (h_4 - h_5)
+            ),
+            24
+            * (
+                h_4 * (-h_0 + h_3) * (-h_1 + h_3) * (-h_2 + h_3)
+                - (h_0 - h_3) * (h_1 - h_3) * (h_2 - h_3) * (h_0 + h_1 + h_2 + h_3)
+            )
+            / (
+                (-h_0 + h_3)
+                * (h_0 - h_5)
+                * (-h_1 + h_3)
+                * (h_1 - h_5)
+                * (-h_2 + h_3)
+                * (h_2 - h_5)
+                * (h_3 - h_5)
+                * (h_4 - h_5)
+            ),
+        ]
+    )
+    return a
+
+
 ##############################################################################
 # save/load finite difference weight functions ###############################
 ##############################################################################
-try:
-    with open("./data/findiff_weights1.pickle", "rb") as _f:
-        findiff_weights1 = dill.load(_f)
-    with open("./data/findiff_weights2.pickle", "rb") as _f:
-        findiff_weights2 = dill.load(_f)
-    with open("./data/findiff_weights3.pickle", "rb") as _f:
-        findiff_weights3 = dill.load(_f)
-    with open("./data/findiff_weights4.pickle", "rb") as _f:
-        findiff_weights4 = dill.load(_f)
-except FileNotFoundError:
-    save_findiff_weight_funs()
+# try:
+#     with open("./data/findiff_weights/findiff_weights1.pickle", "rb") as _f:
+#         findiff_weights1 = dill.load(_f)
+#     with open("./data/findiff_weights/findiff_weights2.pickle", "rb") as _f:
+#         findiff_weights2 = dill.load(_f)
+#     with open("./data/findiff_weights3.pickle", "rb") as _f:
+#         findiff_weights3 = dill.load(_f)
+#     with open("./data/findiff_weights/findiff_weights4.pickle", "rb") as _f:
+#         findiff_weights4 = dill.load(_f)
+# except FileNotFoundError:
+#     print("ehhh")
+#     save_findiff_weight_funs()
 
 
 @njit
