@@ -435,6 +435,7 @@ def brane_plot(
     show_tangent1=False,
     show_tangent2=False,
     show_plot_axes=False,
+    color_by_verts=False,
 ):
     """
     fig_path=f"{output_directory}/temp_images/fig_{image_count:0>4}.png"
@@ -495,29 +496,36 @@ def brane_plot(
     if show_surface:
         brane_mesh_kwargs = {
             "name": "brane_mesh",
-            # "mask": mask,
-            # "opacity": F_opacity,
-            # "representation": "wireframe",
-            # "representation": "mesh",
             "representation": "surface",
-            # "representation": "fancymesh",,
         }
 
         brane_mesh = mlab.triangular_mesh(*vertices.T, faces, **brane_mesh_kwargs)
-
-        F_rgba, F_scalars = set_rgba_colors(F_rgb, F_opacity)
-        brane_mesh.module_manager.scalar_lut_manager.lut.number_of_colors = len(
-            F_scalars
-        )
-        brane_mesh.module_manager.scalar_lut_manager.lut.table = F_rgba
-        brane_mesh.module_manager.lut_data_mode = "cell data"
-
-        brane_mesh.mlab_source.dataset.cell_data.scalars = F_scalars
-        brane_mesh.mlab_source.dataset.cell_data.scalars.name = "face colors"
-        brane_mesh.mlab_source.update()
-        brane_mesh2 = mlab.pipeline.set_active_attribute(
-            brane_mesh, cell_scalars="face colors"
-        )
+        if color_by_verts:
+            F_rgba, F_scalars = set_rgba_colors(V_rgb, F_opacity)
+            brane_mesh.module_manager.scalar_lut_manager.lut.number_of_colors = len(
+                F_scalars
+            )
+            brane_mesh.module_manager.scalar_lut_manager.lut.table = F_rgba
+            brane_mesh.module_manager.lut_data_mode = "point data"
+            brane_mesh.mlab_source.dataset.point_data.scalars = F_scalars
+            brane_mesh.mlab_source.dataset.point_data.scalars.name = "face colors"
+            brane_mesh.mlab_source.update()
+            brane_mesh2 = mlab.pipeline.set_active_attribute(
+                brane_mesh, point_scalars="face colors"
+            )
+        else:
+            F_rgba, F_scalars = set_rgba_colors(F_rgb, F_opacity)
+            brane_mesh.module_manager.scalar_lut_manager.lut.number_of_colors = len(
+                F_scalars
+            )
+            brane_mesh.module_manager.scalar_lut_manager.lut.table = F_rgba
+            brane_mesh.module_manager.lut_data_mode = "cell data"
+            brane_mesh.mlab_source.dataset.cell_data.scalars = F_scalars
+            brane_mesh.mlab_source.dataset.cell_data.scalars.name = "face colors"
+            brane_mesh.mlab_source.update()
+            brane_mesh2 = mlab.pipeline.set_active_attribute(
+                brane_mesh, cell_scalars="face colors"
+            )
         # surf = mlab.pipeline.surface(brane_mesh)
     ################################
     # edge_mesh
@@ -882,6 +890,77 @@ def plot_from_data(
     if show_plot_axes:
         mlab.axes()
         mlab.orientation_axes()
+    if show:
+        mlab.options.offscreen = False
+        mlab.show()
+    if save:
+        mlab.options.offscreen = True
+        mlab.savefig(fig_path, figure=fig, size=figsize)
+
+    mlab.close(all=True)
+
+
+def simple_plot(
+    vertices,
+    faces,
+    show=True,
+    save=False,
+    fig_path=None,
+    figsize=(2180, 2180),
+    show_surface=True,
+    show_edges=False,
+    show_vertices=False,
+):
+    """
+    fig_path=f"{output_directory}/temp_images/fig_{image_count:0>4}.png"
+    """
+    ################################
+
+    if show:
+        mlab.options.offscreen = False
+    else:
+        mlab.options.offscreen = True
+    # figsize = (2180, 2180)
+    title = "Membrane mesh"
+    fig = mlab.figure(title, size=figsize)
+
+    ################################
+    # vert_cloud
+    if show_vertices:
+        vert_cloud_kwargs = {
+            "name": "vert_cloud",
+            "scale_mode": "vector",
+            "scale_factor": 1.0,
+        }
+
+        vert_cloud = mlab.points3d(*vertices.T, **vert_cloud_kwargs)
+
+    ################################
+    # brane_mesh
+    if show_surface:
+        brane_mesh_kwargs = {
+            "name": "brane_mesh",
+            # "mask": mask,
+            # "opacity": F_opacity,
+            # "representation": "wireframe",
+            # "representation": "mesh",
+            "representation": "surface",
+            # "representation": "fancymesh",,
+        }
+
+        brane_mesh = mlab.triangular_mesh(*vertices.T, faces, **brane_mesh_kwargs)
+
+    ################################
+    # edge_mesh
+    if show_edges:
+        edge_mesh_kwargs = {
+            "name": "edge_mesh",
+            "color": (1.0, 0.498, 0.0),
+            "representation": "wireframe",
+        }
+
+        edge_mesh = mlab.triangular_mesh(*vertices.T, faces, **edge_mesh_kwargs)
+
     if show:
         mlab.options.offscreen = False
         mlab.show()

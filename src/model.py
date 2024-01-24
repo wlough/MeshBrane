@@ -70,7 +70,17 @@ Brane_spec = [
 
 @jitclass(Brane_spec)
 class Brane:
-    def __init__(self, vertices, faces, params):
+    def __init__(
+        self,
+        vertices,
+        faces,
+        length_reg_stiffness,
+        area_reg_stiffness,
+        bending_modulus,
+        splay_modulus,
+        linear_drag_coeff,
+        # reinit,
+    ):
         """to do: make fun to check counterclockwise faces
 
         Each vertex knows
@@ -95,58 +105,138 @@ class Brane:
 
         params = [Ke,]
         """
-        # self.faces, self.F_label = self.check_faces(faces, vertices)
         (
-            _vertices,
-            self.V_label,
-            self.faces,
-            self.F_label,
-        ) = self.label_vertices_and_faces(vertices, faces)
-
+            V_label,
+            F_label,
+        ) = self._label_vertices_and_faces(vertices, faces)
         (
-            self.halfedges,
-            self.H_label,
-            self.H_isboundary,
-        ) = self.label_halfedges(vertices, faces)
-
+            halfedges,
+            H_label,
+            H_isboundary,
+        ) = self._label_halfedges(vertices, faces)
         (
-            self.V_hedge,
-            self.H_vertex,
-            self.H_face,
-            self.H_next,
-            self.H_prev,
-            self.H_twin,
-            self.F_hedge,
-        ) = self.get_combinatorial_mesh_data()
+            V_hedge,
+            H_vertex,
+            H_face,
+            H_next,
+            H_prev,
+            H_twin,
+            F_hedge,
+        ) = self._get_combinatorial_mesh_data(
+            V_label, H_label, F_label, halfedges, H_isboundary, faces
+        )
+        V_pq = self._frame_the_mesh(
+            vertices,
+            faces,
+            halfedges,
+            V_label,
+            V_hedge,
+            H_label,
+            H_vertex,
+            H_face,
+            H_next,
+            H_prev,
+            H_twin,
+            H_isboundary,
+            F_label,
+            F_hedge,
+        )
+        (
+            V_rgb,
+            V_normal_rgb,
+            V_tangent1_rgb,
+            V_tangent2_rgb,
+            V_radius,
+            H_rgb,
+            H_radius,
+            F_rgb,
+            F_opacity,
+            H_opacity,
+            V_opacity,
+        ) = self._visual_defaults(V_label, H_label, F_label)
 
-        self.V_pq = self.frame_the_mesh(vertices)
-        Nvertices = len(self.V_label)
-        Nhedges = len(self.H_label)
-        Nfaces = len(self.F_label)
+        L0 = self._average_hedge_length(vertices, H_label, H_twin, H_vertex)
+        A0 = self._average_cell_area(
+            vertices,
+            V_label,
+            V_hedge,
+            H_vertex,
+            H_next,
+            H_prev,
+            H_twin,
+            F_label,
+            F_hedge,
+        )
+        params = np.array(
+            [
+                length_reg_stiffness,
+                area_reg_stiffness,
+                bending_modulus,
+                splay_modulus,
+                linear_drag_coeff,
+                L0,
+                A0,
+            ]
+        )
+        #############################################################
+        self.V_pq = V_pq
+        self.V_label = V_label
+        self.V_hedge = V_hedge
+        self.halfedges = halfedges
+        self.H_label = H_label
+        self.H_vertex = H_vertex
+        self.H_face = H_face
+        self.H_next = H_next
+        self.H_prev = H_prev
+        self.H_twin = H_twin
+        self.H_isboundary = H_isboundary
+        self.faces = faces
+        self.F_label = F_label
+        self.F_hedge = F_hedge
 
-        self.V_scalar = np.zeros(Nvertices)  # self.get_Gaussian_curvature()
-        self.H_scalar = np.zeros(Nhedges)
-        self.F_scalar = np.zeros(Nfaces)
+        self.V_rgb = V_rgb
+        self.V_normal_rgb = V_normal_rgb
+        self.V_tangent1_rgb = V_tangent1_rgb
+        self.V_tangent2_rgb = V_tangent2_rgb
+        self.V_radius = V_radius
+        self.H_rgb = H_rgb
+        self.H_radius = H_radius
+        self.F_rgb = F_rgb
+        self.F_opacity = F_opacity
+        self.H_opacity = H_opacity
+        self.V_opacity = V_opacity
+
+        self.params = params
+        #############################################################
+
+        # Nvertices = len(self.V_label)
+        # Nhedges = len(self.H_label)
+        # Nfaces = len(self.F_label)
+
+        # self.V_scalar = np.zeros(Nvertices)  # self.get_Gaussian_curvature()
+        # self.H_scalar = np.zeros(Nhedges)
+        # self.F_scalar = np.zeros(Nfaces)
         # self.H_psi, self.H_tangent_components = self.get_initial_edge_tangents()
-        self.set_visuals()
-        self.set_undefined_params(params)
+
+        # self._set_undefined_params(params)
 
     ###########################################################################
     ###########################################################################
     # initialization functions #
     ############################
-    def label_vertices_and_faces(self, vertices_in, faces_in):
+    # these don't call any other class functions and are safe to use before any
+    # class attributes have been assigned
+    ###########################################################################
+    def _label_vertices_and_faces(self, vertices, faces):
         """assigns integers to vertices and faces"""
-        vertices = vertices_in.copy()
-        faces = faces_in.copy()
         Nvertices = len(vertices)
         Nfaces = len(faces)
         V_label = np.array([_ for _ in range(Nvertices)], dtype=np.int32)
         F_label = np.array([_ for _ in range(Nfaces)], dtype=np.int32)
 
-        return vertices, V_label, faces, F_label
+        return V_label, F_label
 
-    def label_halfedges(self, vertices, faces):
+    def _label_halfedges(self, vertices, faces):
         """Builds halfedges from vertices and faces, assigns an integer-valued
         label/index to each halfedge, and determines whether the halfedge is
         contained in the boundary of the mesh."""
@@ -187,15 +277,17 @@ class Brane:
             np.array(H_isboundary),
         )
 
-    def get_combinatorial_mesh_data(self):
+    def _get_combinatorial_mesh_data(
+        self, V_label, H_label, F_label, halfedges, H_isboundary, faces
+    ):
         """."""
-        V_label = self.V_label
-        H_label = self.H_label
-        F_label = self.F_label
-        halfedges = self.halfedges
-
-        H_isboundary = self.H_isboundary
-        faces = self.faces.copy()
+        # V_label = self.V_label
+        # H_label = self.H_label
+        # F_label = self.F_label
+        # halfedges = self.halfedges
+        #
+        # H_isboundary = self.H_isboundary
+        # faces = self.faces.copy()
         ####################
         # vertices
         V_hedge = -np.ones_like(V_label)  # outgoing halfedge
@@ -274,21 +366,105 @@ class Brane:
             F_hedge,
         )
 
-    def frame_the_mesh(self, vertices):
-        F_label = self.F_label
+    def _f_adjacent_to_v(self, v, V_hedge, H_face, H_prev, H_twin):
+        """
+        gets faces adjacent to v in counterclockwise order
+        """
+        h_start = V_hedge[v]
+        neighbors = []
+
+        h = h_start
+        while True:
+            neighbors.append(H_face[h])
+            h = H_prev[h]
+            h = H_twin[h]
+            if h == h_start:
+                break
+
+        return neighbors
+
+    def _average_cell_area(
+        self,
+        vertices,
+        V_label,
+        V_hedge,
+        H_vertex,
+        H_next,
+        H_prev,
+        H_twin,
+        F_label,
+        F_hedge,
+    ):
+        A = 0.0
+        N = len(V_label)
+        for v in V_label:
+            # Avec = self._face_area_vector(f)
+            r = vertices[v]
+            Av = 0.0
+            h = V_hedge[v]
+            h_start = h
+            while True:
+                v1 = H_vertex[h]
+                r1 = vertices[v1]
+                h = H_prev[h]
+                h = H_twin[h]
+                v2 = H_vertex[h]
+                r2 = vertices[v2]
+                a = jitcross(r, r1) / 2 + jitcross(r1, r2) / 2 + jitcross(r2, r) / 2
+                Av += np.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2) / 3
+
+                if h == h_start:
+                    break
+
+            A += Av / N
+        return A
+
+    def _average_hedge_length(self, vertices, H_label, H_twin, H_vertex):
+        L = 0.0
+        N = len(H_label)
+        for h in H_label:
+            ht = H_twin[h]
+            v1 = H_vertex[ht]
+            v2 = H_vertex[h]
+            xyz1 = vertices[v1]
+            xyz2 = vertices[v2]
+            u = xyz2 - xyz1
+            L += np.sqrt(u[0] ** 2 + u[1] ** 2 + u[2] ** 2) / N
+        return L
+
+    def _frame_the_mesh(
+        self,
+        vertices,
+        faces,
+        halfedges,
+        V_label,
+        V_hedge,
+        H_label,
+        H_vertex,
+        H_face,
+        H_next,
+        H_prev,
+        H_twin,
+        H_isboundary,
+        F_label,
+        F_hedge,
+    ):
+        # vertices, faces, halfedges, V_label, V_hedge, H_label, H_vertex, H_face, H_next, H_prev, H_twin, H_isboundary, F_label, F_hedge
+        # V_pq
+        F_label = F_label
         Nfaces = len(F_label)
         F_area_vectors = np.zeros((Nfaces, 3))
         # vertices = self.V_pq[:, :3]
 
         for _f in range(Nfaces):
             f = F_label[_f]
-            h = self.F_hedge[f]
-            hn = self.H_next[h]
-            hp = self.H_prev[h]
+            h = F_hedge[f]
+            hn = H_next[h]
+            hp = H_prev[h]
 
-            v0 = self.H_vertex[hp]
-            v1 = self.H_vertex[h]
-            v2 = self.H_vertex[hn]
+            v0 = H_vertex[hp]
+            v1 = H_vertex[h]
+            v2 = H_vertex[hn]
 
             u1 = vertices[v1] - vertices[v0]
             u2 = vertices[v2] - vertices[v1]
@@ -299,11 +475,9 @@ class Brane:
         ey = np.array([0.0, 1.0, 0.0])
         # ez = np.array([0.0, 0.0, 1.0])
         Nverts = len(vertices)
-        # framed_vertices = np.zeros((Nverts, 7))
-        # matrices = np.zeros((Nverts, 3, 3))
-        framed_vertices = np.zeros((Nverts, 7))
+        V_pq = np.zeros((Nverts, 7))
         for i in range(Nverts):
-            F = self.f_adjacent_to_v(i)
+            F = self._f_adjacent_to_v(i, V_hedge, H_face, H_prev, H_twin)
             n = np.zeros(3)
             for f in F:
                 n += F_area_vectors[f]
@@ -321,64 +495,125 @@ class Brane:
             R[:, 0] = e1
             R[:, 1] = e2
             R[:, 2] = n
-            # framed_vertices[i, 3] = np.sqrt(1 + R[0, 0] + R[1, 1] + R[2, 2]) / 2
-            # framed_vertices[i, 4] = (R[2, 1] - R[1, 2]) / (4 * framed_vertices[i, 3])
-            # framed_vertices[i, 5] = (R[0, 2] - R[2, 0]) / (4 * framed_vertices[i, 3])
-            # framed_vertices[i, 6] = (R[1, 0] - R[0, 1]) / (4 * framed_vertices[i, 3])
-            framed_vertices[i, 3:] = matrix_to_quaternion(R)
+            V_pq[i, 3:] = matrix_to_quaternion(R)
 
-            framed_vertices[i, :3] = vertices[i, :]
-        return framed_vertices
+            V_pq[i, :3] = vertices[i, :]
+        return V_pq
 
-    def set_visuals(self):
-        # face_color = np.array([0.0, 0.2667, 0.1059])
+    def _visual_defaults(self, V_label, H_label, F_label):
         face_color = np.array([0.0, 0.63335, 0.05295])
-        face_alpha = 0.8
+        F_opacity = 0.8
 
         hedge_color = np.array([1.0, 0.498, 0.0])
-        hedge_alpha = 1.0
+        H_opacity = 1.0
         hedge_radius = 0.0025
 
         vertex_color = np.array([1.0, 0.498, 0.0])  # np.array([0.7057, 0.0156, 0.1502])
-        vertex_alpha = 1.0
+        V_opacity = 1.0
         vertex_radius = 0.025
 
         normal_color = np.array([0.0, 0.0, 0.0])  # (1.0, 0.0, 0.0)
         tangent_color1 = np.array([0.7057, 0.0156, 0.1502])  # (1.0, 0.0, 0.0)
         tangent_color2 = np.array([0.2298, 0.2987, 0.7537])
 
-        Nverts = len(self.V_label)
-        Nhedges = len(self.H_label)
-        Nfaces = len(self.F_label)
+        Nverts = len(V_label)
+        Nhedges = len(H_label)
+        Nfaces = len(F_label)
 
-        self.V_rgb = np.zeros((Nverts, 3))
-        self.V_normal_rgb = np.zeros((Nverts, 3))
-        self.V_tangent1_rgb = np.zeros((Nverts, 3))
-        self.V_tangent2_rgb = np.zeros((Nverts, 3))
-        self.V_radius = np.zeros(Nverts)
+        V_rgb = np.zeros((Nverts, 3))
+        V_normal_rgb = np.zeros((Nverts, 3))
+        V_tangent1_rgb = np.zeros((Nverts, 3))
+        V_tangent2_rgb = np.zeros((Nverts, 3))
+        V_radius = np.zeros(Nverts)
         for _ in range(Nverts):
-            self.V_rgb[_] = vertex_color
-            self.V_normal_rgb[_] = normal_color
-            self.V_tangent1_rgb[_] = tangent_color1
-            self.V_tangent2_rgb[_] = tangent_color2
-            self.V_radius[_] = vertex_radius
-        self.H_rgb = np.zeros((Nhedges, 3))
-        self.H_radius = np.zeros(Nhedges)
+            V_rgb[_] = vertex_color
+            V_normal_rgb[_] = normal_color
+            V_tangent1_rgb[_] = tangent_color1
+            V_tangent2_rgb[_] = tangent_color2
+            V_radius[_] = vertex_radius
+        H_rgb = np.zeros((Nhedges, 3))
+        H_radius = np.zeros(Nhedges)
         for _ in range(Nhedges):
-            self.H_rgb[_] = hedge_color
-            self.H_radius[_] = hedge_radius
-        self.F_rgb = np.zeros((Nfaces, 3))
+            H_rgb[_] = hedge_color
+            H_radius[_] = hedge_radius
+        F_rgb = np.zeros((Nfaces, 3))
         for _ in range(Nfaces):
-            self.F_rgb[_] = face_color
+            F_rgb[_] = face_color
         # V_scalar = np.array([])
         # H_scalar = np.array([])
         # F_scalar = np.array([])
-        self.F_opacity = face_alpha
-        self.H_opacity = hedge_alpha
-        self.V_opacity = vertex_alpha
+        ##########################
+        return (
+            V_rgb,
+            V_normal_rgb,
+            V_tangent1_rgb,
+            V_tangent2_rgb,
+            V_radius,
+            H_rgb,
+            H_radius,
+            F_rgb,
+            F_opacity,
+            H_opacity,
+            V_opacity,
+        )
 
-        # self.F_opacity = F_opacity
+    # def _set_undefined_params(self, params_in):
+    #     """params = [Ke, Ka, Kb, Ks, zeta, dt, L0, A0]"""
+    #     # Ke,Ka,Kc,Kb,Ks,zeta,...
+    #     Nparams = 9
+    #     self.params = np.zeros(Nparams)
+    #     self.params[:7] = params_in
+    #
+    #     Nmax_time_samples = 3
+    #     Nvertices = len(self.V_pq)
+    #     self.sample_times = np.zeros(Nmax_time_samples)
+    #     self.V_pq_samples = np.zeros((Nmax_time_samples, Nvertices, 7))
+    #
+    #     L0 = self.average_hedge_length()
+    #     A0 = self.average_face_area()
+    #     C0 = 0.0
+    #     self.params[7] = L0
+    #     self.params[8] = A0
+    #     self.params[9] = C0
 
+    # def _face_area_vector(self, f, vertices, H_next, H_vertex, F_hedge):
+    #     """directed area of face f"""
+    #     Avec = np.zeros(3)
+    #     h_start = F_hedge[f]
+    #     h = h_start
+    #     while True:
+    #         h_next = H_next[h]
+    #         i = H_vertex[h]
+    #         i_next = H_vertex[h_next]
+    #         Avec += 0.5 * jitcross(vertices[i], vertices[i_next])
+    #         h = h_next
+    #         if h == h_start:
+    #             break
+    #
+    #     return Avec
+
+    # def _average_face_area(self, vertices, H_next, H_vertex, F_label, F_hedge):
+    #     A = 0.0
+    #     N = len(F_label)
+    #     for f in F_label:
+    #         # Avec = self._face_area_vector(f)
+    #         Avec = np.zeros(3)
+    #         h_start = F_hedge[f]
+    #         h = h_start
+    #         while True:
+    #             h_next = H_next[h]
+    #             i = H_vertex[h]
+    #             i_next = H_vertex[h_next]
+    #             Avec += 0.5 * jitcross(vertices[i], vertices[i_next])
+    #             h = h_next
+    #             if h == h_start:
+    #                 break
+    #         A += np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / N
+    #     return A
+
+    ###########################################################################
+    # simulation functions #
+    ############################
     # def get_cosserat_data(self):
     #     Nhedges = len(self.H_label)
     #     H_azim = np.zeros(Nhedges)
@@ -486,59 +721,41 @@ class Brane:
         self.V_pq = V_pq_samples[0]
 
     ###########################################################################
-    # parameter functions #
+    # get parameter functions #
     ############################
-    def set_undefined_params(self, params_in):
-        """params = [Ke, Ka, Kc, Kb, Ks, zeta, dt, L0, A0, C0]"""
-        # Ke,Ka,Kc,Kb,Ks,zeta,...
-        Nparams = 9
-        self.params = np.zeros(Nparams)
-        self.params[:7] = params_in
 
-        Nmax_time_samples = 3
-        Nvertices = len(self.V_pq)
-        self.sample_times = np.zeros(Nmax_time_samples)
-        self.V_pq_samples = np.zeros((Nmax_time_samples, Nvertices, 7))
-
-        L0 = self.average_hedge_length()
-        A0 = self.average_face_area()
-        C0 = 0.0
-        self.params[7] = L0
-        self.params[8] = A0
-        self.params[9] = C0
-
-    def length_reg_stiffness(self):
-        return self.params[0]
-
-    def area_reg_stiffness(self):
-        return self.params[1]
-
-    def conformal_reg_stiffness(self):
-        return self.params[2]
-
-    def bending_modulus(self):
-        return self.params[3]
-
-    def splay_modulus(self):
-        return self.params[4]
-
-    def linear_drag_coeff(self):
-        return self.params[5]
-
-    def dt0(self):
-        return self.params[6]
-
-    def length_reg_L0(self):
-        return self.params[7]
-
-    def area_reg_A0(self):
-        return self.params[8]
-
-    def conformal_reg_C0(self):
-        return self.params[9]
-
-    def time_stepsize(self, t1, t2):
-        return self.sample_times[t2] - self.sample_times[t1]
+    # def length_reg_stiffness(self):
+    #     return self.params[0]
+    #
+    # def area_reg_stiffness(self):
+    #     return self.params[1]
+    #
+    # def conformal_reg_stiffness(self):
+    #     return self.params[2]
+    #
+    # def bending_modulus(self):
+    #     return self.params[3]
+    #
+    # def splay_modulus(self):
+    #     return self.params[4]
+    #
+    # def linear_drag_coeff(self):
+    #     return self.params[5]
+    #
+    # def dt0(self):
+    #     return self.params[6]
+    #
+    # def length_reg_L0(self):
+    #     return self.params[7]
+    #
+    # def area_reg_A0(self):
+    #     return self.params[8]
+    #
+    # def conformal_reg_C0(self):
+    #     return self.params[9]
+    #
+    # def time_stepsize(self, t1, t2):
+    #     return self.sample_times[t2] - self.sample_times[t1]
 
     ###########################################################################
     # mesh navigation functions #
@@ -599,8 +816,12 @@ class Brane:
         v0, v1 = halfedge
         self.halfedges[h] = np.array([v0, v1], dtype=np.int32)
 
+    def update_vertex_position(self, v, xyz):
+        x, y, z = xyz
+        self.V_pq[v, :3] = np.array([x, y, z])
+
     ###########################################################################
-    # mesh regularization functions #
+    # mesh mutation/regularization functions #
     ###############################
     def edge_flip(self, h):
         r"""
@@ -674,68 +895,6 @@ class Brane:
         self.update_h_of_v(v2, h2)
         self.update_h_of_v(v4, h4)
 
-    def should_we_flip_edge(self, h, L):
-        r"""
-        h/ht can not be on boundary!
-          o              o
-         / \            /|\
-        o---o  |---->  o | o
-         \ /            \|/
-          o              o
-
-               v2                           v2
-             /    \                       /  |  \
-            /      \                     /   |   \
-           /h2    h1\                   /h2  |  h1\
-          /    f1    \                 /     |     \
-         /            \               /  f1  |  f2  \
-        /      h       \             /       |       \
-       v3--------------v1  |----->  v3      h|ht     v1
-        \      ht      /             \       |       /
-         \            /               \      |      /
-          \    f2    /                 \     |     /
-           \h3    h4/                   \h3  |  h4/
-            \      /                     \   |   /
-             \    /                       \  |  /
-               v4                           v4
-        """
-        # flip_its = []
-        flip_it = True
-        ht = self.twin(h)
-        h1 = self.next(h)
-        # h2 = self.prev(h)
-        h3 = self.next(ht)
-        # h4 = self.prev(ht)
-        v1 = self.v_of_h(h)
-        v2 = self.v_of_h(h1)
-        v3 = self.v_of_h(ht)
-        v4 = self.v_of_h(h3)
-
-        xyz1 = self.vertex_position(v1)
-        xyz2 = self.vertex_position(v2)
-        xyz3 = self.vertex_position(v3)
-        xyz4 = self.vertex_position(v4)
-        u_before = xyz1 - xyz3
-        u_after = xyz2 - xyz4
-        L_before = np.sqrt(u_before[0] ** 2 + u_before[1] ** 2 + u_before[2] ** 2)
-        L_after = np.sqrt(u_after[0] ** 2 + u_after[1] ** 2 + u_after[2] ** 2)
-        # flip_its.append(abs(L_after - L) < abs(L_before - L))
-        # flip_it = flip_it and (abs(L_after - L) < abs(L_before - L))
-        val1 = self.valence(v1)
-        val2 = self.valence(v2)
-        val3 = self.valence(v3)
-        val4 = self.valence(v4)
-        # flip_its.append(val3 > 2)
-        # flip_its.append(val1 > 2)
-        # flip_it = flip_it and (val3 > 3)
-        # flip_it = flip_it and (val1 > 3)
-        flip_it = flip_it and (val1 > val2)
-        flip_it = flip_it and (val3 > val4)
-        # flip_it = flip_it and (val1 > 3)
-
-        # flip_it = all(flip_its)
-        return flip_it
-
     def flip_helps_valence(self, h):
         r"""
         h/ht can not be on boundary!
@@ -781,38 +940,137 @@ class Brane:
 
         return flip_it
 
-    def get_bad_hedges(self):
-        bad = []
+    def shift_vertex_towards_barycenter(self, v, weight):
+        r0 = self.vertex_position(v)
+        h = self.h_of_v(v)
+        h_start = h
+        r = np.zeros(3)
+        val = 0
+        while True:
+            vb = self.v_of_h(h)
+            r += self.vertex_position(vb)
+            val += 1
+            h = self.prev(h)
+            h = self.twin(h)
+            if h == h_start:
+                break
+        r /= val
+        r = weight * r + (1 - weight) * r0
+        self.update_vertex_position(v, r)
+
+    # def edge_colapse(self, h):
+
+    # def should_we_flip_edge(self, h, L):
+    #     r"""
+    #     h/ht can not be on boundary!
+    #       o              o
+    #      / \            /|\
+    #     o---o  |---->  o | o
+    #      \ /            \|/
+    #       o              o
+    #
+    #            v2                           v2
+    #          /    \                       /  |  \
+    #         /      \                     /   |   \
+    #        /h2    h1\                   /h2  |  h1\
+    #       /    f1    \                 /     |     \
+    #      /            \               /  f1  |  f2  \
+    #     /      h       \             /       |       \
+    #    v3--------------v1  |----->  v3      h|ht     v1
+    #     \      ht      /             \       |       /
+    #      \            /               \      |      /
+    #       \    f2    /                 \     |     /
+    #        \h3    h4/                   \h3  |  h4/
+    #         \      /                     \   |   /
+    #          \    /                       \  |  /
+    #            v4                           v4
+    #     """
+    #     # flip_its = []
+    #     flip_it = True
+    #     ht = self.twin(h)
+    #     h1 = self.next(h)
+    #     # h2 = self.prev(h)
+    #     h3 = self.next(ht)
+    #     # h4 = self.prev(ht)
+    #     v1 = self.v_of_h(h)
+    #     v2 = self.v_of_h(h1)
+    #     v3 = self.v_of_h(ht)
+    #     v4 = self.v_of_h(h3)
+    #
+    #     xyz1 = self.vertex_position(v1)
+    #     xyz2 = self.vertex_position(v2)
+    #     xyz3 = self.vertex_position(v3)
+    #     xyz4 = self.vertex_position(v4)
+    #     u_before = xyz1 - xyz3
+    #     u_after = xyz2 - xyz4
+    #     L_before = np.sqrt(u_before[0] ** 2 + u_before[1] ** 2 + u_before[2] ** 2)
+    #     L_after = np.sqrt(u_after[0] ** 2 + u_after[1] ** 2 + u_after[2] ** 2)
+    #     # flip_its.append(abs(L_after - L) < abs(L_before - L))
+    #     # flip_it = flip_it and (abs(L_after - L) < abs(L_before - L))
+    #     val1 = self.valence(v1)
+    #     val2 = self.valence(v2)
+    #     val3 = self.valence(v3)
+    #     val4 = self.valence(v4)
+    #     # flip_its.append(val3 > 2)
+    #     # flip_its.append(val1 > 2)
+    #     # flip_it = flip_it and (val3 > 3)
+    #     # flip_it = flip_it and (val1 > 3)
+    #     flip_it = flip_it and (val1 > val2)
+    #     flip_it = flip_it and (val3 > val4)
+    #     # flip_it = flip_it and (val1 > 3)
+    #
+    #     # flip_it = all(flip_its)
+    #     return flip_it
+
+    # def get_bad_hedges(self):
+    #     bad = []
+    #     for h in self.H_label:
+    #         flip_it = self.should_we_flip_edge(h, 1.0)
+    #
+    #         if flip_it:
+    #             bad.append(h)
+    #
+    #     # Nbad = len(bad)
+    #     # bada = np.zeros(Nbad)
+    #     bada = np.array(bad, dtype=np.int32)
+    #     return bada
+
+    # def flip_bad_edges(self):
+    #     L0 = self.average_hedge_length()
+    #     for h in self.H_label:
+    #         flip_it = self.should_we_flip_edge(h, L0)
+    #
+    #         if flip_it:
+    #             self.edge_flip(h)
+    #             # self.edge_flip(h)
+    #             ht = self.twin(h)
+    #             self.H_rgb[h] = np.array([1.0, 0.0, 0.0])
+    #             self.H_rgb[ht] = np.array([0.0, 0.0, 1.0])
+    #             f1 = self.f_of_h(h)
+    #             f2 = self.f_of_h(ht)
+    #             self.F_rgb[f1] = np.array([1.0, 0.0, 0.0])
+    #             self.F_rgb[f2] = np.array([0.0, 0.0, 1.0])
+    def regularize_by_flips(self):
+        Nflips = 0
         for h in self.H_label:
-            flip_it = self.should_we_flip_edge(h, 1.0)
-
-            if flip_it:
-                bad.append(h)
-
-        # Nbad = len(bad)
-        # bada = np.zeros(Nbad)
-        bada = np.array(bad, dtype=np.int32)
-        return bada
-
-    def flip_bad_edges(self):
-        L0 = self.average_hedge_length()
-        for h in self.H_label:
-            flip_it = self.should_we_flip_edge(h, L0)
-
+            flip_it = self.flip_helps_valence(h)
             if flip_it:
                 self.edge_flip(h)
-                # self.edge_flip(h)
-                ht = self.twin(h)
-                self.H_rgb[h] = np.array([1.0, 0.0, 0.0])
-                self.H_rgb[ht] = np.array([0.0, 0.0, 1.0])
-                f1 = self.f_of_h(h)
-                f2 = self.f_of_h(ht)
-                self.F_rgb[f1] = np.array([1.0, 0.0, 0.0])
-                self.F_rgb[f2] = np.array([0.0, 0.0, 1.0])
+                Nflips += 1
+        return Nflips
 
+    def regularize_by_shifts(self, weight):
+        for v in self.V_label:
+            self.shift_vertex_towards_barycenter(v, weight)
+
+    ###########################################################################
+    # forces and time evolution #
+    #############################
     def length_reg_force(self, v):
-        L0 = self.length_reg_L0()
-        Ke = self.length_reg_stiffness()
+        """E ~ 1/2*Ke*(L-L0)**2/L0"""
+        Ke, Kf, Kb, Ks, zeta, L0, A0 = self.params
+        # L0 = self.length_reg_L0()
+        # Ke = self.length_reg_stiffness()
         xyz = self.vertex_position(v)
         neighbors = self.v_adjacent_to_v(v)
         N = len(neighbors)
@@ -833,8 +1091,36 @@ class Brane:
         return F
 
     def area_reg_force(self, v):
-        A0 = self.area_reg_A0()
-        Ka = self.area_reg_stiffness()
+        """E ~ 1/2*Kf*(A-A0)**2"""
+        Ke, Kf, Kb, Ks, zeta, L0, A0 = self.params
+        r = self.vertex_position(v)
+        F = np.zeros(3)
+
+        h_start = self.h_of_v(v)
+        h = h_start
+        while True:
+            v1 = self.v_of_h(h)
+            r1 = self.vertex_position(v1)
+            h = self.prev(h)
+            h = self.twin(h)
+            v2 = self.v_of_h(h)
+            r2 = self.vertex_position(v2)
+
+            Avec = (jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)) / 2
+            A = np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / 3
+
+            gradA = jitcross(Avec, r2 - r1) / (2 * A)
+
+            F += -Kf * (A - A0) * gradA / A0
+
+            if h == h_start:
+                break
+        return F
+
+    def face_area_reg_force(self, v):
+        Ke, Kf, Kb, Ks, zeta, L0, A0 = self.params
+        # A0 = self.area_reg_A0()
+        # Ka = self.area_reg_stiffness()
         r = self.vertex_position(v)
         F = np.zeros(3)
 
@@ -852,7 +1138,7 @@ class Brane:
             A = np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2)
 
             gradA = 0.5 * jitcross(Avec, r2 - r1) / A
-            F += -Ka * (A - A0) * gradA / A0
+            F += -Kf * (A - A0) * gradA / A0
 
             if h == h_start:
                 break
@@ -861,7 +1147,7 @@ class Brane:
     def forward_euler_reg_step(self, dt):
         # Nverts = len(self.V_pq)
         # pq = np.zeros_like(self.V_pq)
-        zeta = self.linear_drag_coeff()
+        Ke, Kf, Kb, Ks, zeta, L0, A0 = self.params
 
         # self.V_pq[:, :3] = self.V_pq[:, :3] + dt * F / zeta
         for v in self.V_label:
@@ -873,7 +1159,6 @@ class Brane:
         # for v in self.V_label:
         #     self.V_pq[v, 3:] = self.get_new_quat_dumb(v)
 
-    #############################################
     def get_new_quat_dumb(self, v):
         qw, qx, qy, qz = self.V_pq[v, 3:]
         Q = np.zeros((3, 3))
@@ -988,41 +1273,41 @@ class Brane:
     ###########################################################################
     # testing functions #
     ##########################
-    def test_next(self):
-        success = True
-        bad = []
-        for h in self.H_label:
-            h0 = self.next(h)
-            h1 = self.next(h0)
-            h2 = self.next(h1)
-            if h - h2 != 0:
-                success = False
-                bad.append(h)
-        return success, bad
-
-    def test_prev(self):
-        success = True
-        bad = []
-        for h in self.H_label:
-            h0 = self.prev(h)
-            h1 = self.prev(h0)
-            h2 = self.prev(h1)
-            if h - h2 != 0:
-                success = False
-                bad.append(h)
-
-        return success, bad
-
-    def test_twin(self):
-        success = True
-        bad = []
-        for h in self.H_label:
-            h1 = self.twin(h)
-            h2 = self.twin(h1)
-            if h - h2 != 0:
-                success = False
-                bad.append(h)
-        return success, bad
+    # def test_next(self):
+    #     success = True
+    #     bad = []
+    #     for h in self.H_label:
+    #         h0 = self.next(h)
+    #         h1 = self.next(h0)
+    #         h2 = self.next(h1)
+    #         if h - h2 != 0:
+    #             success = False
+    #             bad.append(h)
+    #     return success, bad
+    #
+    # def test_prev(self):
+    #     success = True
+    #     bad = []
+    #     for h in self.H_label:
+    #         h0 = self.prev(h)
+    #         h1 = self.prev(h0)
+    #         h2 = self.prev(h1)
+    #         if h - h2 != 0:
+    #             success = False
+    #             bad.append(h)
+    #
+    #     return success, bad
+    #
+    # def test_twin(self):
+    #     success = True
+    #     bad = []
+    #     for h in self.H_label:
+    #         h1 = self.twin(h)
+    #         h2 = self.twin(h1)
+    #         if h - h2 != 0:
+    #             success = False
+    #             bad.append(h)
+    #     return success, bad
 
     ###########################################################################
     ###########################################################################
@@ -1124,19 +1409,59 @@ class Brane:
 
         return A
 
-    # def face_area_vector_tri(self, f):
-    #     """directed area of face f"""
-    #     A = np.zeros(3)
-    #
-    #     v0, v1, v2 = self.face(f)
-    #     r0 = self.vertex_position(v0)
-    #     r1 = self.vertex_position(v1)
-    #     r2 = self.vertex_position(v2)
-    #     A[:] = 0.5 * (jitcross(r0, r1) + jitcross(r1, r2) + jitcross(r2, r0))
-    # 0.5 * (jitcross(r0, r1) + jitcross(r1, r2) + jitcross(r2, r0))
-    # 0.5 * (-jitcross(r1, r0) + jitcross(r2, r0))
+    def cell_area(self, v):
+        """area of cell dual to vertex v"""
+        r = self.vertex_position(v)
+        A = 0.0
+        h = self.h_of_v(v)
+        h_start = h
+        while True:
+            v1 = self.v_of_h(h)
+            r1 = self.vertex_position(v1)
+            h = self.prev(h)
+            h = self.twin(h)
+            v2 = self.v_of_h(h)
+            r2 = self.vertex_position(v2)
+            A_face_vec = (
+                jitcross(r, r1) / 2 + jitcross(r1, r2) / 2 + jitcross(r2, r) / 2
+            )
+            A_face = np.sqrt(
+                A_face_vec[0] ** 2 + A_face_vec[1] ** 2 + A_face_vec[2] ** 2
+            )
+            A += A_face / 3
 
-    #     return A
+            if h == h_start:
+                break
+        return A
+
+    def angle_defect(self, v):
+        """
+        2*pi - sum_f (angle_f)
+        """
+        r = self.vertex_position(v)
+        h = self.h_of_v(v)
+        h_start = h
+        defect = 2 * np.pi
+        h = h_start
+        while True:
+            v1 = self.v_of_h(h)
+            r1 = self.vertex_position(v1)
+            h = self.prev(h)
+            h = self.twin(h)
+            v2 = self.v_of_h(h)
+            r2 = self.vertex_position(v2)
+            e1 = r1 - r
+            e2 = r2 - r
+            norm_e1 = np.sqrt(e1[0] ** 2 + e1[1] ** 2 + e1[2] ** 2)
+            norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
+            cos_angle = (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (
+                norm_e1 * norm_e2
+            )
+            defect -= np.arccos(cos_angle)
+            if h == h_start:
+                break
+
+        return defect
 
     def hedge_vector(self, h):
         hp = self.prev(h)
@@ -1164,13 +1489,13 @@ class Brane:
             L += self.hedge_length(h) / N
         return L
 
-    def average_face_area(self):
-        A = 0.0
-        N = len(self.F_label)
-        for f in self.F_label:
-            Avec = self.face_area_vector(f)
-            A += np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / N
-        return A
+    # def average_face_area(self):
+    #     A = 0.0
+    #     N = len(self.F_label)
+    #     for f in self.F_label:
+    #         Avec = self.face_area_vector(f)
+    #         A += np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / N
+    #     return A
 
     def area_weighted_vertex_normal(self, v):
         """."""
@@ -1316,7 +1641,7 @@ class Brane:
     #         # mu_g = mul_se3_quaternion(exp_se3_quaternion(Psi), mu_g)
     #     return mu_g
 
-    def angle_defect(self, v):
+    def old_angle_defect(self, v):
         """
         2*pi - sum_f (angle_f)
         """
@@ -1391,74 +1716,47 @@ class Brane:
         K = np.zeros(Nverts)
         # V = self.V_label
         # for v0 in range(Nverts):
-        v0 = 0
-        K = np.random.rand(Nverts)
-        while True:
-            # p0 = self.V_pq[v, :3]
-            h_start = self.V_hedge[v0]
-            defect = 2 * np.pi
-            area = 0.0
-
-            h = h_start
-            v = self.H_vertex[h]
-            e2 = self.V_pq[v, :3] - self.V_pq[v0, :3]
-            norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
-            h = self.H_next[self.H_twin[h]]
-
-            while True:
-                e1 = e2
-                norm_e1 = norm_e2
-                v = self.H_vertex[h]  # 2nd vert
-                e2 = self.V_pq[v, :3] - self.V_pq[v0, :3]
-                norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
-                # e1_cross_e2 = jitcross(e1, e2)
-                # norm_e1_cross_e2 = np.sqrt(
-                #     e1_cross_e2[0] ** 2 + e1_cross_e2[1] ** 2 + e1_cross_e2[2] ** 2
-                # )
-                # sin_angle = norm_e1_cross_e2 / (norm_e1 * norm_e2)
-                cos_angle = (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (
-                    norm_e1 * norm_e2
-                )
-                angle = np.arccos(cos_angle)
-
-                defect -= angle
-                area += 0.5 * norm_e1 * norm_e2 * np.sin(angle) / 3
-
-                h = self.H_next[self.H_twin[h]]
-                if h == h_start:
-                    break
-            K[v0] = defect / area
+        # v0 = 0
+        # K = np.random.rand(Nverts)
+        # while True:
+        #     # p0 = self.V_pq[v, :3]
+        #     h_start = self.V_hedge[v0]
+        #     defect = 2 * np.pi
+        #     area = 0.0
+        #
+        #     h = h_start
+        #     v = self.H_vertex[h]
+        #     e2 = self.V_pq[v, :3] - self.V_pq[v0, :3]
+        #     norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
+        #     h = self.H_next[self.H_twin[h]]
+        #
+        #     while True:
+        #         e1 = e2
+        #         norm_e1 = norm_e2
+        #         v = self.H_vertex[h]  # 2nd vert
+        #         e2 = self.V_pq[v, :3] - self.V_pq[v0, :3]
+        #         norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
+        #         # e1_cross_e2 = jitcross(e1, e2)
+        #         # norm_e1_cross_e2 = np.sqrt(
+        #         #     e1_cross_e2[0] ** 2 + e1_cross_e2[1] ** 2 + e1_cross_e2[2] ** 2
+        #         # )
+        #         # sin_angle = norm_e1_cross_e2 / (norm_e1 * norm_e2)
+        #         cos_angle = (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (
+        #             norm_e1 * norm_e2
+        #         )
+        #         angle = np.arccos(cos_angle)
+        #
+        #         defect -= angle
+        #         area += 0.5 * norm_e1 * norm_e2 * np.sin(angle) / 3
+        #
+        #         h = self.H_next[self.H_twin[h]]
+        #         if h == h_start:
+        #             break
+        #     K[v0] = defect / area
+        for v in self.V_label:
+            K[v] = self.gaussian_curvature(v)
 
         return K
-
-    def cell_area(self, v):
-        r = self.vertex_position(v)
-        A = 0.0
-        h = self.h_of_v(v)
-        h_start = h
-        while True:
-            v1 = self.v_of_h(h)
-            _r1 = self.vertex_position(v1)
-            h = self.prev(h)
-            h = self.twin(h)
-            v2 = self.v_of_h(h)
-            _r2 = self.vertex_position(v2)
-            rc = (r + _r1 + _r2) / 3
-            r1 = (r + _r1) / 2
-            r2 = (r + _r2) / 2
-            u1 = r1 - r
-            u2 = rc - r
-            a = jitcross(u1, u2) / 2
-            A += np.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2)
-
-            u1 = rc - r
-            u2 = r2 - r
-            a = jitcross(u1, u2) / 2
-            A += np.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2)
-
-            if h == h_start:
-                break
-        return A
 
     def gaussian_curvature(self, v):
         K = self.angle_defect(v)
