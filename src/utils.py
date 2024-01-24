@@ -1,8 +1,80 @@
 import numpy as np
 import sympy as sp
 from skimage.measure import marching_cubes
-from src.numdiff import jitcross
+from src.numdiff import jitcross, jitdot, index_of_nested, transpose_csr
 from plyfile import PlyData, PlyElement
+from numba import njit
+from src.model import Brane
+import os
+
+
+def regularize_and_resave_ply(surface_name, backup=True):
+    iters = 40
+    weight = 0.1
+    file_path = f"./data/ply_files/{surface_name}.ply"
+    if backup:
+        backup_file_path = f"./data/ply_files/{surface_name}_backup.ply"
+        os.system(f"cp {file_path} {backup_file_path}")
+
+    vertices0, faces0 = load_mesh_from_ply(file_path)
+    brane_init_data = {
+        "vertices": vertices0,
+        "faces": faces0,
+        "length_reg_stiffness": 1.0,
+        "area_reg_stiffness": 1.0,
+        "bending_modulus": 1.0,
+        "splay_modulus": 1.0,
+        "linear_drag_coeff": 1.0,
+    }
+
+    b = Brane(**brane_init_data)
+    for iter in range(iters):
+        Nflips = b.regularize_by_flips()
+        b.regularize_by_shifts(weight)
+        # print(f"iter={iter+1} of {iters}, Nflips={Nflips}            ", end="\r")
+    vertices = b.V_pq[:, :3]
+    faces = b.faces
+    save_mesh_to_ply(vertices, faces, file_path)
+
+
+def regularize_all_sample_meshes():
+    surface_names = [
+        "dumbbell",
+        "dumbbell2",
+        "torus",
+        "double_torus",
+        "triple_torus",
+        "sphere",
+        "oblate",
+        "prolate",
+        "transverse_tori",
+        "dumbbell_coarse",
+        "dumbbell2_coarse",
+        "torus_coarse",
+        "double_torus_coarse",
+        "triple_torus_coarse",
+        "sphere_coarse",
+        "oblate_coarse",
+        "prolate_coarse",
+        "transverse_tori_coarse",
+        "dumbbell_fine",
+        "dumbbell2_fine",
+        "torus_fine",
+        "double_torus_fine",
+        "triple_torus_fine",
+        "sphere_fine",
+        "oblate_fine",
+        "prolate_fine",
+        "transverse_tori_fine",
+    ]
+    print("saving...\n")
+    for _ in surface_names:
+        surface_name = _
+        file_path = f"./data/ply_files/{surface_name}.ply"
+        print(file_path + 10 * " ", end="\n")
+        regularize_and_resave_ply(surface_name, backup=True)
+        print(30 * " ")
+    print("\ndone")
 
 
 def make_implicit_surface_mesh(implicit_fun_str, xyz_minmax, Nxyz):
@@ -348,10 +420,347 @@ def load_mesh_from_ply(file_path):
 
 
 ##########################
-def check_face_orientation(vertices, faces):
-    return vertices, faces
+@njit
+def jit_boundary_ops_csr_data(vertices, faces):
+    """
+    Computes edges and boundary operators from vertices and faces
+    """
+    Nvertices = len(vertices)
+    Nfaces = len(faces)
+    edges_list = []
+
+    # Afe ###############
+    Afe_data_list = []  # [-1,1,...]
+    Afe_indices_list = []  #
+    Afe_indptr = np.array([3 * f for f in range(Nfaces + 1)], dtype=np.int32)
+
+    # Aev ###############
+    # Aev_data_list = []  # [-1,1,...]
+    Aev_indices_list = []  # vertex indices
+    # Aev_indptr = []  # [0,2,4,...]
+
+    #######################
+    Afv_indices = faces.ravel()
+    Afv_indptr = [3 * f for f in range(Nfaces + 1)]
+    Afv_data = np.ones(3 * Nfaces)
+
+    for f in range(Nfaces):
+        face = faces[f]
+        for _v in range(3):
+            vm = face[_v]
+            vp = face[np.mod(_v + 1, 3)]
+            edge_p = [vm, vp]
+            edge_m = [vp, vm]
+            try:  # is negative edge already in edges?
+                e = edges_list.index(edge_m)
+                fe_orientation = -1
+            except Exception:
+                try:  # is positive edge already in edges?
+                    e = edges_list.index(edge_p)
+                    fe_orientation = 1
+                except Exception:  # if neither, add positive edge to edges
+                    edges_list.append(edge_p)
+                    e = len(edges_list) - 1
+                    fe_orientation = 1
+                    Aev_indices_list.append(vm)
+                    Aev_indices_list.append(vp)
+
+            Afe_indices_list.append(e)
+            Afe_data_list.append(fe_orientation)
+
+    Afe_data = np.array(Afe_data_list, dtype=np.int32)
+    Afe_indices = np.array(Afe_indices_list, dtype=np.int32)
+    Aev_indices = np.array(Aev_indices_list, dtype=np.int32)
+    edges = np.array(edges_list, dtype=np.int32)
+    Nedges = len(edges)
+    Aev_data = np.array(Nedges * [-1, 1], dtype=np.int32)
+    Aev_indptr = np.array(
+        [2 * _ for _ in range(Nedges + 1)], dtype=np.int32
+    )  # [0,2,4,...]
+    return (
+        Afv_indices,
+        Afv_indptr,
+        Afv_data,
+        Afe_data,
+        Afe_indices,
+        Afe_indptr,
+        Aev_data,
+        Aev_indices,
+        Aev_indptr,
+        edges,
+    )
 
 
+@njit
+def jit_face_data(vertices, faces, surface_com):
+    """
+    computes what are hopefully outward pointing unit normal vectors
+    and directed area vectors of the faces. Reorders vertices of each face to
+    match unit normal direction.
+    """
+    # Nvertices = len(vertices)
+    # surface_com = np.einsum("vx->x", vertices)
+
+    Nfaces = len(faces)
+    face_normals = np.zeros((Nfaces, 3))
+    face_areas = np.zeros((Nfaces, 3))
+    face_centroids = np.zeros((Nfaces, 3))
+    for f in range(Nfaces):
+        fv0, fv1, fv2 = faces[f]
+        v0_xyz = vertices[fv0]
+        v1_xyz = vertices[fv1]
+        v2_xyz = vertices[fv2]
+
+        # this is just (v1_xyz-v0_xyz) x (v2_xyz-v1_xyz)
+        f_normal = (
+            jitcross(v0_xyz, v1_xyz)
+            + jitcross(v1_xyz, v2_xyz)
+            + jitcross(v2_xyz, v0_xyz)
+        )
+        f_area = 0.5 * f_normal
+
+        f_normal /= np.sqrt(f_normal @ f_normal)
+        face_com = (v0_xyz + v1_xyz + v2_xyz) / 3.0
+        face_centroids[f] = face_com
+        n_dot_dr = f_normal @ (face_com - surface_com)
+        if n_dot_dr > 0:
+            # faces[f, :] = np.array([fv0, fv1, fv2])
+            face_normals[f, :] = f_normal
+            face_areas[f, :] = f_area
+        else:
+            faces[f, :] = np.array([fv1, fv0, fv2])
+            face_normals[f, :] = -f_normal
+            face_areas[f, :] = -f_area
+    return faces, face_centroids, face_normals, face_areas
+
+
+@njit
+def jit_area_weighted_vertex_normals(vertices, Avf_indices, Avf_indptr, face_areas):
+    """
+    computes unit normal vectors at vertices.
+    Avf_indices, Avf_indptr
+    """
+    Nvertices = len(vertices)
+    vertex_normals = np.zeros((Nvertices, 3))
+    for v in range(Nvertices):
+        # Nfaces_of_v = len(faces_of_vertices[v])
+        # Nfaces_of_v = max([1,len(faces_of_vertices[v])])
+        faces_of_v = Avf_indices[Avf_indptr[v] : Avf_indptr[v + 1]]
+        for f in faces_of_v:
+            vertex_normals[v] += face_areas[f]
+        normal_norm = np.sqrt(vertex_normals[v] @ vertex_normals[v])
+        if normal_norm > 0:
+            vertex_normals[v] /= normal_norm
+    return vertex_normals
+
+
+@njit
+def jit_y_of_x_csr(Axy_indices, Axy_indptr):
+    # indices, indptr = Axy_csr.indices, Axy_csr.indptr
+    Nx = len(Axy_indptr) - 1
+    x_of_y = []
+    for nx in range(Nx):
+        x_of_y.append(Axy_indices[Axy_indptr[nx] : Axy_indptr[nx + 1]])
+
+    return x_of_y
+
+
+@njit
+def check_faces(vertices, faces, keep_face=0):
+    """
+    something doesn't work!
+    """
+    (
+        Afv_indices,
+        Afv_indptr,
+        Afv_data,
+        Afe_data,
+        Afe_indices,
+        Afe_indptr,
+        Aev_data,
+        Aev_indices,
+        Aev_indptr,
+        edges,
+    ) = jit_boundary_ops_csr_data(vertices, faces)
+    Nfaces, Nedges, Nvertices = len(faces), len(edges), len(vertices)
+    Aef_data, Aef_indices, Aef_indptr = transpose_csr(Afe_data, Afe_indices, Afe_indptr)
+    E_of_F = jit_y_of_x_csr(Afe_indices, Afe_indptr)
+    F_of_E = jit_y_of_x_csr(Aef_indices, Aef_indptr)
+
+    F_of_F = np.zeros((Nfaces, 3), dtype=np.int32)
+    for f in range(Nfaces):
+        for n_e in range(3):
+            e = E_of_F[f][n_e]
+            for n_f in range(2):
+                _f = F_of_E[e][n_f]
+                if _f != f:
+                    F_of_F[f][n_e] = _f
+
+    checked = np.zeros(Nfaces, dtype=np.int32)
+    flipped = np.zeros(Nfaces, dtype=np.int32)
+    checked[keep_face] = 1
+    flipped[keep_face] = 1
+    for f in range(Nfaces):
+        ###########
+        F_of_f = F_of_F[f]
+        ###########
+        v1, v2, v3 = faces[f]
+        r1, r2, r3 = vertices[v1], vertices[v2], vertices[v3]
+        Af = jitcross(r1, r2) + jitcross(r2, r3) + jitcross(r3, r1)
+        flip_all_neighbors = True
+        for ff in F_of_f:
+            if checked[ff] == 1:
+                flip_all_neighbors = False
+                v1ff, v2ff, v3ff = faces[ff]
+                r1ff, r2ff, r3ff = vertices[v1ff], vertices[v2ff], vertices[v3ff]
+                Aff = jitcross(r1ff, r2ff) + jitcross(r2ff, r3ff) + jitcross(r3ff, r1ff)
+                AfdotAff = jitdot(Af, Aff)
+                if AfdotAff < 0:
+                    print(f"flipping f={f}")
+                    # faces[f] = np.array([v2, v1, v3], dtype=np.int32)
+                    faces[f] = np.flip(faces[f])
+                    flipped[f] = 1
+                checked[f] = 1
+                break
+        if flip_all_neighbors:
+            for ff in F_of_f:
+                v1ff, v2ff, v3ff = faces[ff]
+                r1ff, r2ff, r3ff = vertices[v1ff], vertices[v2ff], vertices[v3ff]
+                Aff = jitcross(r1ff, r2ff) + jitcross(r2ff, r3ff) + jitcross(r3ff, r1ff)
+                AfdotAff = jitdot(Af, Aff)
+                if AfdotAff < 0:
+                    print(f"flipping ff={ff}")
+                    # faces[ff] = np.array([v2ff, v1ff, v3ff], dtype=np.int32)
+                    faces[ff] = np.flip(faces[ff])
+                    flipped[ff] = 1
+                checked[ff] = 1
+    return faces, flipped, checked
+
+
+def save_flipped_mesh(surface_name, file_path=None, Nxyz=None, xyz_minmax=None):
+    if file_path is None:
+        file_path = f"./data/ply_files/{surface_name}_flipped.ply"
+    vertices, faces = make_sample_mesh(surface_name, Nxyz=Nxyz, xyz_minmax=xyz_minmax)
+    faces[0] = np.flip(faces[0])
+    faces, flipped, checked = check_faces(vertices, faces, keep_face=0)
+    save_mesh_to_ply(vertices, faces, file_path)
+
+    # surf_dict = {"vertices": verts, "faces": faces, "normals": normals}
+    # with open(f"./scratch/{surface_name}_dict.pickle", "wb") as _f:
+    #     dill.dump(surf_dict, _f, recurse=True)
+
+
+# surface_names = [
+#     "dumbbell",
+#     "torus",
+#     "sphere",
+#     "oblate",
+#     "prolate",
+#     "pyramid3",
+#     "pyramid4",
+# ]
+# print("saving\n")
+# for _ in surface_names:
+#     surface_name = _
+#     Nxyz = [30j, 30j, 30j]
+#     xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+#     file_path = f"./data/ply_files/{surface_name}.ply"
+#     print(file_path + 10 * " ", end="\r")
+#     save_sample_mesh(
+#         surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax
+#     )
+# for _ in surface_names:
+#     surface_name = _
+#     Nxyz = [60j, 60j, 60j]
+#     xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+#     file_path = f"./data/ply_files/{surface_name}_fine.ply"
+#     print(file_path + 10 * " ", end="\r")
+#     save_sample_mesh(
+#         surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax
+#     )
+# for _ in surface_names:
+#     surface_name = _
+#     Nxyz = [20j, 20j, 20j]
+#     xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
+#     # print(file_path + 10 * " ", end="\r")
+#     file_path = f"./data/ply_files/{surface_name}_flipped.ply"
+#     save_flipped_mesh(
+#         surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax
+#     )
+
+# %%
+#
+# vertices0, faces0 = make_sample_mesh("dumbbell")
+# vertices, faces = vertices0.copy(), faces0.copy()
+# faces[0] = np.flip(faces[0])
+# faces, flipped, checked = check_faces(vertices, faces)
+# # %%
+# faces - faces0
+# for i in range(len(flipped)):
+#     if flipped[i] == 1:
+#         print(f"flipping f={i}")
+# flipped[:5]
+# # %%
+# from scipy.sparse import csr_matrix
+#
+# vertices, faces = make_sample_mesh("dumbbell")
+# ply_path = "./data/ply_files/pyramid3.ply"
+# vertices, faces = load_mesh_from_ply(ply_path)
+# (
+#     Afv_indices,
+#     Afv_indptr,
+#     Afv_data,
+#     Afe_data,
+#     Afe_indices,
+#     Afe_indptr,
+#     Aev_data,
+#     Aev_indices,
+#     Aev_indptr,
+#     edges,
+# ) = jit_boundary_ops_csr_data(vertices, faces)
+# Nfaces, Nedges, Nvertices = len(faces), len(edges), len(vertices)
+# Aef_data, Aef_indices, Aef_indptr = transpose_csr(Afe_data, Afe_indices, Afe_indptr)
+# E_of_F = jit_y_of_x_csr(Afe_indices, Afe_indptr)
+# F_of_E = jit_y_of_x_csr(Aef_indices, Aef_indptr)
+#
+# F_of_F = np.zeros((Nfaces, 3), dtype=np.int32)
+# for f in range(Nfaces):
+#     for n_e in range(3):
+#         e = E_of_F[f][n_e]
+#         for n_f in range(2):
+#             _f = F_of_E[e][n_f]
+#             if _f != f:
+#                 F_of_F[f][n_e] = _f
+# Afe = csr_matrix((Afe_data, Afe_indices, Afe_indptr), shape=(Nfaces, Nedges))
+# Afv = csr_matrix((Afv_data, Afv_indices, Afv_indptr), shape=(Nfaces, Nvertices))
+# Aev = csr_matrix((Aev_data, Aev_indices, Aev_indptr), shape=(Nedges, Nvertices))
+#
+# Aef = Afe.T.tocsr()
+# Ave = Aev.T.tocsr()
+# Avf = Afv.T.tocsr()
+# E_of_F = jit_y_of_x_csr(Afe_indices, Afe_indptr)
+# F_of_E = jit_y_of_x_csr(Aef_indices, Aef_indptr)
+#
+# F_of_F = np.zeros((Nfaces, 3), dtype=np.int32)
+# for f in range(Nfaces):
+#     for n_e in range(3):
+#         e = E_of_F[f][n_e]
+#         for n_f in range(2):
+#             _f = F_of_E[e][n_f]
+#             if _f != f:
+#                 F_of_F[f][n_e] = _f
+# # f_of_e = jit_y_of_x_csr(Aef_indices, Aef_indptr)
+#
+# # csr_to_csc(Afe_data, Afe_indices, Afe_indptr)
+# Afe_data_T, Afe_indices_T, Afe_indptr_T = transpose_csr(
+#     Afe_data, Afe_indices, Afe_indptr
+# )
+# Afe_T = csr_matrix((Afe_data_T, Afe_indices_T, Afe_indptr_T), shape=(Nedges, Nfaces))
+# Afe_T.toarray() - Aef.toarray()
+
+
+# %%
+###########################################
 def get_face_data(vertices, faces, surface_com=None):
     """
     computes what are hopefully outward pointing unit normal vectors
@@ -416,79 +825,161 @@ def get_area_weighted_vertex_normals(vertices, faces_of_vertices, face_areas):
     return vertex_normals
 
 
-# def get_boundary_ops_csr(vertices, faces):
-#     Nvertices = len(vertices)
-#     (
-#         Afe_data,
-#         Afe_indices,
-#         Aev_indices,
-#         edges,
-#     ) = get_boundary_ops_csr_data(vertices, faces)
-#     # edges = np.array(edges, dtype=np.int32)
-#     # Afe ###############
-#     Nfaces = len(faces)
-#     # Afe_data = np.array(Afe_data_list, dtype=np.int32)  # [-1,1,...]
-#     # Afe_indices = np.array(Afe_indices_list, dtype=np.int32)  #
-#     Afe_indptr = np.array([3 * f for f in range(Nfaces + 1)], dtype=np.int32)
-#
-#     # Aev ###############
-#     Nedges = len(edges)
-#     Aev_data = np.array(Nedges * [-1, 1], dtype=np.int32)  # [-1,1,...]
-#     # Aev_indices = np.array(Aev_indices_list, dtype=np.int32)  # vertex indices
-#     Aev_indptr = np.array(
-#         [2 * _ for _ in range(Nedges + 1)], dtype=np.int32
-#     )  # [0,2,4,...]
-#
-#     Afe = csr_matrix((Afe_data, Afe_indices, Afe_indptr), shape=(Nfaces, Nedges))
-#     Aev = csr_matrix((Aev_data, Aev_indices, Aev_indptr), shape=(Nedges, Nvertices))
-#
-#     return Afe, Aev, edges
-
-
-def get_boundary_ops_csr_data(vertices, faces):
-    """
-    Computes edges and boundary operators from vertices and faces
-    """
-    # Nvertices = len(vertices)
+def _label_vertices_and_faces(vertices, faces):
+    """assigns integers to vertices and faces"""
+    Nvertices = len(vertices)
     Nfaces = len(faces)
-    edges_list = []
+    V_label = np.array([_ for _ in range(Nvertices)], dtype=np.int32)
+    F_label = np.array([_ for _ in range(Nfaces)], dtype=np.int32)
 
-    # Afe ###############
-    Afe_data_list = []  # [-1,1,...]
-    Afe_indices_list = []  #
-    # Afe_indptr = np.array([3 * f for f in range(Nfaces + 1)], dtype=np.int32)
+    return V_label, F_label
 
-    # Aev ###############
-    # Aev_data_list = []  # [-1,1,...]
-    Aev_indices_list = []  # vertex indices
-    # Aev_indptr = []  # [0,2,4,...]
 
-    for f in range(Nfaces):
+def _label_halfedges(vertices, faces):
+    """Builds halfedges from vertices and faces, assigns an integer-valued
+    label/index to each halfedge, and determines whether the halfedge is
+    contained in the boundary of the mesh."""
+    halfedges = []
+    H_isboundary = []
+    H_label = []
+    ####################
+    # save and label halfedges
+    h = 0
+    for face in faces:
+        # face = faces[f]
+        N_v_of_f = len(face)
+        for _ in range(N_v_of_f):
+            # index shift to get next
+            _next = (_ + 1) % N_v_of_f
+            v0 = face[_]  #
+            v1 = face[_next]
+            hedge = [v0, v1]
+            halfedges.append(hedge)
+            H_isboundary.append(False)
+            H_label.append(h)
+            h += 1
+
+    for hedge in halfedges:
+        v0, v1 = hedge
+        hedge_twin = [v1, v0]
+        try:
+            halfedges.index(hedge_twin)
+        except Exception:
+            halfedges.append(hedge_twin)
+            H_isboundary.append(True)
+            H_label.append(h)
+            h += 1
+
+    return (
+        np.array(halfedges, dtype=np.int32),
+        np.array(H_label, dtype=np.int32),
+        np.array(H_isboundary),
+    )
+
+
+def _get_combinatorial_mesh_data(
+    V_label, H_label, F_label, halfedges, H_isboundary, faces
+):
+    """."""
+    # V_label = self.V_label
+    # H_label = self.H_label
+    # F_label = self.F_label
+    # halfedges = self.halfedges
+    #
+    # H_isboundary = self.H_isboundary
+    # faces = self.faces.copy()
+    ####################
+    # vertices
+    V_hedge = -np.ones_like(V_label)  # outgoing halfedge
+    ####################
+    # faces
+    F_hedge = -np.ones_like(F_label)  # one of the halfedges bounding it
+    ####################
+    # halfedges
+    H_vertex = -np.ones_like(H_label)  # vertex it points to
+    H_face = -np.ones_like(H_label)  # face it belongs to
+    # next/previous halfedge inside the face (ordered counter-clockwise)
+    H_next = -np.ones_like(H_label)
+    H_prev = -np.ones_like(H_label)
+    H_twin = -np.ones_like(H_label)  # opposite halfedge
+    ####################
+
+    # assign each face a halfedge
+    # assign each interior halfedge previous/next halfedge
+    # assign each interior halfedge a face
+    # assign each halfedge a twin halfedge
+    for f in F_label:
         face = faces[f]
-        for _v in range(3):
-            vm = face[_v]
-            vp = face[np.mod(_v + 1, 3)]
-            edge_p = [vm, vp]
-            edge_m = [vp, vm]
-            try:  # is negative edge already in edges?
-                e = edges_list.index(edge_m)
-                fe_orientation = -1
-            except Exception:
-                try:  # is positive edge already in edges?
-                    e = edges_list.index(edge_p)
-                    fe_orientation = 1
-                except Exception:  # if neither, add positive edge to edges
-                    edges_list.append(edge_p)
-                    e = len(edges_list) - 1
-                    fe_orientation = 1
-                    Aev_indices_list.append(vm)
-                    Aev_indices_list.append(vp)
+        N_v_of_f = len(face)
+        hedge0 = np.array([face[0], face[1]])
+        h0 = index_of_nested(halfedges, hedge0)
+        F_hedge[f] = h0  # assign each face a halfedge
+        for _ in range(N_v_of_f):
+            # for each vertex in face, get the indices of the
+            # previous/next vertex
+            _p1 = (_ + 1) % N_v_of_f
+            _m1 = (_ - 1) % N_v_of_f
+            vm1 = face[_m1]
+            v0 = face[_]
+            vp1 = face[_p1]
+            # get outgoing halfedge
+            hedge = np.array([v0, vp1])
+            h = index_of_nested(halfedges, hedge)
+            # get incident halfedge
+            hedge_prev = np.array([vm1, v0])
+            h_prev = index_of_nested(halfedges, hedge_prev)
+            # assign previous/next halfedge
+            H_prev[h] = h_prev
+            H_next[h_prev] = h
+            # assign face to halfedge
+            H_face[h] = f
 
-            Afe_indices_list.append(e)
-            Afe_data_list.append(fe_orientation)
+            hedge_twin = np.array([vp1, v0])
+            h_t = index_of_nested(halfedges, hedge_twin)
+            H_twin[h] = h_t
+            H_twin[h_t] = h
 
-    Afe_data = np.array(Afe_data_list, dtype=np.int32)
-    Afe_indices = np.array(Afe_indices_list, dtype=np.int32)
-    Aev_indices = np.array(Aev_indices_list, dtype=np.int32)
-    edges = np.array(edges_list, dtype=np.int32)
-    return Afe_data, Afe_indices, Aev_indices, edges
+    # assign each halfedge a vertex
+    # assign each vertex a halfedge
+    # assign each boundary halfedge previous/next halfedge
+    for h in H_label:
+        v0, v1 = halfedges[h]
+        H_vertex[h] = v1
+        if V_hedge[v0] == -1:
+            V_hedge[v0] = h
+        if H_isboundary[h]:
+            h_next = H_twin[h]
+            while True:
+                h_next = H_twin[H_prev[h_next]]
+                if H_isboundary[h_next]:
+                    break
+            H_next[h] = h_next
+            H_prev[h_next] = h
+
+    return (
+        V_hedge,
+        H_vertex,
+        H_face,
+        H_next,
+        H_prev,
+        H_twin,
+        F_hedge,
+    )
+
+
+def _f_adjacent_to_v(v, V_hedge, H_face, H_prev, H_twin):
+    """
+    gets faces adjacent to v in counterclockwise order
+    """
+    h_start = V_hedge[v]
+    neighbors = []
+
+    h = h_start
+    while True:
+        neighbors.append(H_face[h])
+        h = H_prev[h]
+        h = H_twin[h]
+        if h == h_start:
+            break
+
+    return neighbors

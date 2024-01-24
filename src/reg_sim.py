@@ -5,8 +5,48 @@ import os
 from src.pretty_pictures import mayavi_plots as mp
 import dill
 from copy import deepcopy
+from matplotlib import colormaps as plt_cmap
 
 # from src.numdiff import (quaternion_to_matrix,matrix_to_quaternion,jitdot,jitnorm, jitcross)
+
+
+def get_cmap(cmin=0.0, cmax=1.0, name="hsv"):
+    """
+    Returns a function that maps each index in 0, 1, ..., n-1 to a distinct
+    RGB color; the keyword argument name must be a standard mpl colormap name.
+
+    'Accent', 'Accent_r', 'Blues', 'Blues_r', 'BrBG', 'BrBG_r', 'BuGn',
+    'BuGn_r', 'BuPu', 'BuPu_r', 'CMRmap', 'CMRmap_r', 'Dark2', 'Dark2_r',
+    'GnBu', 'GnBu_r', 'Greens', 'Greens_r', 'Greys', 'Greys_r', 'OrRd',
+    'OrRd_r', 'Oranges', 'Oranges_r', 'PRGn', 'PRGn_r', 'Paired', 'Paired_r',
+    'Pastel1', 'Pastel1_r', 'Pastel2', 'Pastel2_r', 'PiYG', 'PiYG_r', 'PuBu',
+    'PuBuGn', 'PuBuGn_r', 'PuBu_r', 'PuOr', 'PuOr_r', 'PuRd', 'PuRd_r',
+    'Purples', 'Purples_r', 'RdBu', 'RdBu_r', 'RdGy', 'RdGy_r', 'RdPu',
+    'RdPu_r', 'RdYlBu', 'RdYlBu_r', 'RdYlGn', 'RdYlGn_r', 'Reds', 'Reds_r',
+    'Set1', 'Set1_r', 'Set2', 'Set2_r', 'Set3', 'Set3_r', 'Spectral',
+    'Spectral_r', 'Wistia', 'Wistia_r', 'YlGn', 'YlGnBu', 'YlGnBu_r', 'YlGn_r',
+    'YlOrBr', 'YlOrBr_r', 'YlOrRd', 'YlOrRd_r', 'afmhot', 'afmhot_r', 'autumn',
+    'autumn_r', 'binary', 'binary_r', 'bone', 'bone_r', 'brg', 'brg_r', 'bwr',
+    'bwr_r', 'cividis', 'cividis_r', 'cool', 'cool_r', 'coolwarm', 'coolwarm_r',
+    'copper', 'copper_r', 'cubehelix', 'cubehelix_r', 'flag', 'flag_r',
+    'gist_earth', 'gist_earth_r', 'gist_gray', 'gist_gray_r',
+    'gist_heat', 'gist_heat_r', 'gist_ncar', 'gist_ncar_r', 'gist_rainbow',
+    'gist_rainbow_r', 'gist_stern', 'gist_stern_r', 'gist_yarg', 'gist_yarg_r',
+    'gnuplot', 'gnuplot2', 'gnuplot2_r', 'gnuplot_r', 'gray', 'gray_r', 'hot',
+    'hot_r', 'hsv', 'hsv_r', 'inferno', 'inferno_r', 'jet', 'jet_r', 'magma',
+    'magma_r', 'nipy_spectral', 'nipy_spectral_r', 'ocean', 'ocean_r', 'pink',
+    'pink_r', 'plasma', 'plasma_r', 'prism', 'prism_r', 'rainbow', 'rainbow_r',
+    'seismic', 'seismic_r', 'spring', 'spring_r', 'summer', 'summer_r', 'tab10',
+    'tab10_r', 'tab20', 'tab20_r', 'tab20b', 'tab20b_r', 'tab20c', 'tab20c_r',
+    'terrain', 'terrain_r', 'turbo', 'turbo_r', 'twilight', 'twilight_r',
+    'twilight_shifted', 'twilight_shifted_r', 'viridis', 'viridis_r', 'winter',
+    'winter_r'
+
+    """
+    cnum = lambda x: (x - cmin) / (cmax - cmin)
+    cmap01 = plt_cmap[name]
+    my_cmap = lambda x: cmap01(cnum(float(x)))
+    return my_cmap
 
 
 def initialize_sim(
@@ -16,7 +56,6 @@ def initialize_sim(
     Tsave,
     length_reg_stiffness,
     area_reg_stiffness,
-    conformal_reg_stiffness,
     bending_modulus,
     splay_modulus,
     linear_drag_coeff,
@@ -28,13 +67,12 @@ def initialize_sim(
         "faces": faces,
         "Tplot": 5e-2,
         "Tsave": 5e-1,
-        "length_reg_stiffness": 1.0,
-        "area_reg_stiffness": 1.0,
-        "conformal_reg_stiffness": 1.0,
-        "bending_modulus": 1.0,
-        "splay_modulus": 1.0,
-        "linear_drag_coeff": 1.0,
-        "dt": 1e-2,
+        "length_reg_stiffness": length_reg_stiffness,
+        "area_reg_stiffness": area_reg_stiffness,
+        "bending_modulus": bending_modulus,
+        "splay_modulus": splay_modulus,
+        "linear_drag_coeff": linear_drag_coeff,
+        "dt": dt,
         "output_directory": "./output/reg_sim",
     }
     os.system(f"rm -r {output_directory}")
@@ -46,22 +84,14 @@ def initialize_sim(
     with open(f"{output_directory}/init_data.pickle", "wb") as _f:
         dill.dump(init_data, _f)
 
-    params = np.array(
-        [
-            length_reg_stiffness,
-            area_reg_stiffness,
-            conformal_reg_stiffness,
-            bending_modulus,
-            splay_modulus,
-            linear_drag_coeff,
-            dt,
-        ]
-    )
-    b = Brane(vertices, faces, params)
     brane_init_data = {
         "vertices": vertices,
         "faces": faces,
-        "params": params,
+        "length_reg_stiffness": length_reg_stiffness,
+        "area_reg_stiffness": area_reg_stiffness,
+        "bending_modulus": bending_modulus,
+        "splay_modulus": splay_modulus,
+        "linear_drag_coeff": linear_drag_coeff,
     }
 
     b = Brane(**brane_init_data)
@@ -254,6 +284,7 @@ def run(sim_state, Trun, make_plots=True):
 
     while Trun - t > 0.5 * dt and success:
         # while t < tstop and success:
+        # b.regularize_by_shifts(0.2)
         while tstop - t > 0.5 * dt and success:
             b.forward_euler_reg_step(dt)
             if success:
@@ -294,33 +325,194 @@ def run(sim_state, Trun, make_plots=True):
     return sim_state
 
 
+def regularize_by_shifts_run(sim_state, make_plots=True, weight=5e-2, iters=20):
+    b = sim_state["b"]
+    image_count = sim_state["image_count"]
+
+    if make_plots:
+        fig_kwargs = save_fig_data(sim_state)
+        mp.plot_from_data(**fig_kwargs)
+        image_count += 1
+    for iter in range(iters):
+        for v in b.V_label:
+            b.shift_vertex_towards_barycenter(v, weight)
+
+        if make_plots:
+            sim_state["image_count"] = image_count
+            fig_kwargs = save_fig_data(sim_state)
+            mp.plot_from_data(**fig_kwargs)
+            image_count += 1
+
+    return sim_state
+
+
+def regularize_by_flips_run(sim_state, make_plots=True, iters=20):
+    b = sim_state["b"]
+    image_count = sim_state["image_count"]
+
+    if make_plots:
+        fig_kwargs = save_fig_data(sim_state)
+        mp.plot_from_data(**fig_kwargs)
+        image_count += 1
+    for iter in range(iters):
+        Nflips = b.regularize_by_flips()
+        print(f"Nflips={Nflips}            ", end="\r")
+
+        if make_plots:
+            sim_state["image_count"] = image_count
+            fig_kwargs = save_fig_data(sim_state)
+            mp.plot_from_data(**fig_kwargs)
+            image_count += 1
+
+    return sim_state
+
+
+def regularize_by_random_run(sim_state, make_plots=True, weight=5e-2, iters=20):
+    b = sim_state["b"]
+    H_rgb = b.H_rgb.copy()
+    F_rgb = b.F_rgb.copy()
+    V_rgb = b.V_rgb.copy()
+    V_radius = b.V_radius.copy()
+    image_count = sim_state["image_count"]
+    fig_kwargs = save_fig_data(sim_state)
+    if make_plots:
+        mp.plot_from_data(**fig_kwargs)
+    image_count += 1
+    h = 0
+    v = 0
+    Nh = len(b.H_label)
+    Nv = len(b.V_label)
+    Hgo = True
+    Vgo = True
+    f1, f2 = 0, 0
+    # for iter in range(iters):
+    while Hgo or Vgo:
+        print(f"v/Nv={v/Nv}, h/Nh={h/Nh}")
+
+        x = np.random.rand(1)[0]
+        if x <= 0.5:
+            b.shift_vertex_towards_barycenter(v, weight)
+            b.V_rgb[v] = np.array([1.0, 0.0, 0.0])
+            b.V_radius[v] = 0.1
+            v += 1
+        if v >= Nv:
+            v = 0
+            Vgo = False
+
+        if x > 0.5:
+            flip_it = False
+            while True:
+                flip_it = b.flip_helps_valence(h)
+                if flip_it:
+                    b.edge_flip(h)
+                    f1 = b.f_of_h(h)
+                    f2 = b.f_of_h(b.twin(h))
+                    b.F_rgb[f1] = np.array([1.0, 0.0, 0.0])
+                    b.F_rgb[f2] = np.array([0.0, 0.0, 1.0])
+                    h += 1
+                    break
+                else:
+                    h += 1
+                if h >= Nh:
+                    h = 0
+                    Hgo = False
+                    break
+
+        sim_state["image_count"] = image_count
+        fig_kwargs = save_fig_data(sim_state)
+        fig_kwargs = save_fig_data(sim_state)
+
+        fig_kwargs["show_halfedges"] = True
+        fig_kwargs["show_vertices"] = True
+
+        if make_plots:
+            mp.plot_from_data(**fig_kwargs)
+            image_count += 1
+            b.V_rgb[v - 1 % Nv] = V_rgb[v - 1 % Nv]
+            b.V_radius[v - 1 % Nv] = V_radius[v - 1 % Nv]
+            b.F_rgb[f1] = F_rgb[f1]
+            b.F_rgb[f2] = F_rgb[f2]
+
+    return sim_state
+
+
+def reg_sim_run(sim_state, make_plots=True, iters=20, weight=0.1):
+    b = sim_state["b"]
+    image_count = sim_state["image_count"]
+
+    if make_plots:
+        fig_kwargs = save_fig_data(sim_state)
+        mp.plot_from_data(**fig_kwargs)
+        image_count += 1
+    for iter in range(iters):
+        Nflips = b.regularize_by_flips()
+        b.regularize_by_shifts(weight)
+        print(f"iter={iter} of {iters}, Nflips={Nflips}            ", end="\n")
+
+        if make_plots:
+            sim_state["image_count"] = image_count
+            fig_kwargs = save_fig_data(sim_state)
+            mp.plot_from_data(**fig_kwargs)
+            image_count += 1
+
+    return sim_state
+
+
 # %%
-ply_path = "./data/ply_files/pyramid3.ply"
+ply_path = "./data/ply_files/sphere.ply"
 vertices, faces = load_mesh_from_ply(ply_path)
+
 init_data = {
     "vertices": vertices,
     "faces": faces,
     "Tplot": 5e-2,
     "Tsave": 5e-1,
-    "length_reg_stiffness": 1.0,
-    "area_reg_stiffness": 1.0,
-    "conformal_reg_stiffness": 1.0,
+    "length_reg_stiffness": 1e-1,
+    "area_reg_stiffness": 1e-2,
     "bending_modulus": 1.0,
     "splay_modulus": 1.0,
     "linear_drag_coeff": 1.0,
     "dt": 1e-3,
     "output_directory": "./output/reg_sim",
 }
-Trun = 0.5
+Trun = 15
 sim_state = initialize_sim(**init_data)
-# sim_state0 = initialize_sim(**init_data)
 sim_state = run(sim_state, Trun)
+# sim_state = reg_sim_run(sim_state, make_plots=True, iters=40, weight=0.1)
 movie_dir = sim_state["output_directory"] + "/temp_images"
 mp.movie(movie_dir)
 
+# %%
+brane_init_data = {
+    "vertices": vertices,
+    "faces": faces,
+    "length_reg_stiffness": 1e-1,
+    "area_reg_stiffness": 1e-2,
+    "bending_modulus": 1.0,
+    "splay_modulus": 1.0,
+    "linear_drag_coeff": 1.0,
+}
+
+b = Brane(**brane_init_data)
+# %%
+# b = sim_state["b"]
+# b.forward_euler_reg_step(1e-3)
+b._average_hedge_length(b.V_pq[:, :3], b.H_label, b.H_twin, b.H_vertex)
+b.average_hedge_length()
+mp.brane_plot(b)
+for v in b.V_label:
+    F1 = b.length_reg_force(v)
+    F2 = b.area_reg_force(v)
+    print(f"{F1@F1}, {F2@F2}")
+# %%
+for _ in range(100):
+    b.forward_euler_reg_step(1e-3)
+    print(_)
 
 # %%
-ply_path = "./data/ply_files/oblate_coarse.ply"
+import matplotlib.pyplot as plt
+
+ply_path = "./data/ply_files/torus_coarse.ply"
 vertices, faces = load_mesh_from_ply(ply_path)
 init_data = {
     "vertices": vertices,
@@ -336,17 +528,25 @@ init_data = {
     "dt": 1e-3,
     "output_directory": "./output/reg_sim",
 }
-Trun = 0.5
+Trun = 0.1
 sim_state = initialize_sim(**init_data)
+sim_state = run(sim_state, Trun)
 b = sim_state["b"]
 Ac = 0
+K = np.zeros(len(b.V_label))
 for v in b.V_label:
-    Ac += b.cell_area(v)
+    # Ac += b.cell_area(v)
+    K[v] = b.gaussian_curvature(v)
 
-Af = 0.0
-N = len(b.F_label)
-for f in b.F_label:
-    Avec = b.face_area_vector(f)
-    Af += np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2)
+# %%
+Kmin = min(K)
+Kmax = max(K) * 0 + 100.0
+cmap = get_cmap(cmin=Kmin, cmax=Kmax, name="coolwarm")
 
-(Af - Ac) / Ac
+for v in b.V_label:
+    Kv = K[v]
+    b.V_rgb[v] = cmap(Kv)[:-1]
+plt.plot(K)
+for h in b.H_label:
+    b.flip_helps_valence(h)
+b.flip_bad_edges
