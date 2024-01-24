@@ -483,17 +483,23 @@ movie_dir = sim_state["output_directory"] + "/temp_images"
 mp.movie(movie_dir)
 
 # %%
-brane_init_data = {
-    "vertices": vertices,
-    "faces": faces,
-    "length_reg_stiffness": 1e-1,
-    "area_reg_stiffness": 1e-2,
-    "bending_modulus": 1.0,
-    "splay_modulus": 1.0,
-    "linear_drag_coeff": 1.0,
-}
-
-b = Brane(**brane_init_data)
+# brane_init_data = {
+#     "vertices": vertices,
+#     "faces": faces,
+#     "length_reg_stiffness": 1e-1,
+#     "area_reg_stiffness": 1e-2,
+#     "bending_modulus": 1.0,
+#     "splay_modulus": 1.0,
+#     "linear_drag_coeff": 1.0,
+# }
+#
+# b = Brane(**brane_init_data)
+# K = b.get_Gaussian_curvature()
+# K = sum(K)/len(K)
+# Vpq = np.sqrt(np.einsum("si,si->", b.V_pq[:, :3], b.V_pq[:, :3])/len(b.V_pq))
+# k = 1/Vpq**2
+# k
+# K
 # %%
 # b = sim_state["b"]
 # b.forward_euler_reg_step(1e-3)
