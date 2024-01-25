@@ -5,6 +5,7 @@ from src.numdiff import (
     jitcross,
     jitdot,
     jitnorm,
+    triprod,
     transpose_csr,
     quaternion_to_matrix,
     matrix_to_quaternion,
@@ -22,6 +23,8 @@ from src.numdiff import (
 # from mayavi import mlab
 
 Brane_spec = [
+    ###########################
+    # mesh data
     ("faces", int32[:, :]),
     ("halfedges", int32[:, :]),
     ("V_label", int32[:]),
@@ -37,11 +40,25 @@ Brane_spec = [
     ("F_hedge", int32[:]),
     ("V_pq", float64[:, :]),
     ###########################
-    # Cosseratt stuff
-    # ("H_azim", float64[:, :]),  # angle from e1 about n that halfedge curve intersects v_of_h(h)
-    # ("H_ds", float64[:, :]),   # arclength of halfedge curve
+    # physical parameters
+    ("Kbend", float64),
+    ("Ksplay", float64),
+    ("Kvolume", float64),
+    ("Karea", float64),
+    ("Klength", float64),
+    ("zeta_linear", float64),
+    ("preferred_curvature", float64),
     ###########################
-    # plotting stuff
+    # geometric stuff
+    ("total_volume", float64),
+    ("total_area", float64),
+    ("preferred_total_volume", float64),
+    ("preferred_total_area", float64),
+    ("preferred_cell_area", float64),
+    ("preferred_cell_volume", float64),
+    ("preferred_edge_length", float64),
+    ###########################
+    # visualization stuff
     ("V_rgb", float64[:, :]),
     ("H_rgb", float64[:, :]),
     ("F_rgb", float64[:, :]),
@@ -56,11 +73,8 @@ Brane_spec = [
     ("F_opacity", float64),
     ("H_opacity", float64),
     ("V_opacity", float64),
-    # ("name", str),
-    # ("H_tangent_components", float64[:, :]),
-    # ("H_psi", float64[:, :]),
     ###########################
-    # simulation parameters
+    # simulation data
     ("params", float64[:]),
     ("sample_times", float64[:]),
     ("V_pq_samples", float64[:, :, :]),
@@ -76,9 +90,12 @@ class Brane:
         faces,
         length_reg_stiffness,
         area_reg_stiffness,
+        volume_reg_stiffness,
         bending_modulus,
         splay_modulus,
         linear_drag_coeff,
+        zeta_linear,
+        preferred_curvature
         # reinit,
     ):
         """to do: make fun to check counterclockwise faces
@@ -103,8 +120,9 @@ class Brane:
         -if it's contained in the boundary of the mesh
             H_isboundary
 
-        params = [Ke,]
         """
+        ###########################
+        # mesh data
         (
             V_label,
             F_label,
@@ -141,44 +159,6 @@ class Brane:
             F_label,
             F_hedge,
         )
-        (
-            V_rgb,
-            V_normal_rgb,
-            V_tangent1_rgb,
-            V_tangent2_rgb,
-            V_radius,
-            H_rgb,
-            H_radius,
-            F_rgb,
-            F_opacity,
-            H_opacity,
-            V_opacity,
-        ) = self._visual_defaults(V_label, H_label, F_label)
-
-        L0 = self._average_hedge_length(vertices, H_label, H_twin, H_vertex)
-        A0 = self._average_cell_area(
-            vertices,
-            V_label,
-            V_hedge,
-            H_vertex,
-            H_next,
-            H_prev,
-            H_twin,
-            F_label,
-            F_hedge,
-        )
-        params = np.array(
-            [
-                length_reg_stiffness,
-                area_reg_stiffness,
-                bending_modulus,
-                splay_modulus,
-                linear_drag_coeff,
-                L0,
-                A0,
-            ]
-        )
-        #############################################################
         self.V_pq = V_pq
         self.V_label = V_label
         self.V_hedge = V_hedge
@@ -193,7 +173,78 @@ class Brane:
         self.faces = faces
         self.F_label = F_label
         self.F_hedge = F_hedge
-
+        ###########################
+        # physical parameters
+        params = np.array(
+            [
+                bending_modulus,
+                splay_modulus,
+                volume_reg_stiffness,
+                area_reg_stiffness,
+                length_reg_stiffness,
+                zeta_linear,
+                preferred_curvature,
+            ]
+        )
+        self.Kbend = bending_modulus
+        self.Ksplay = splay_modulus
+        self.Kvolume = volume_reg_stiffness
+        self.Karea = area_reg_stiffness
+        self.Klength = length_reg_stiffness
+        self.zeta_linear = zeta_linear
+        self.preferred_curvature = preferred_curvature
+        self.params = params
+        ###########################
+        # geometric stuff
+        preferred_edge_length = self._average_hedge_length(
+            vertices, H_label, H_twin, H_vertex
+        )
+        preferred_cell_area = self._average_cell_area(
+            vertices,
+            V_label,
+            V_hedge,
+            H_vertex,
+            H_next,
+            H_prev,
+            H_twin,
+            F_label,
+            F_hedge,
+        )
+        preferred_total_volume = self._total_volume(vertices, faces)
+        total_volume = preferred_total_volume
+        preferred_total_area = self._total_area(
+            vertices,
+            V_label,
+            V_hedge,
+            H_vertex,
+            H_next,
+            H_prev,
+            H_twin,
+            F_label,
+            F_hedge,
+        )
+        total_area = preferred_total_area
+        self.preferred_edge_length = preferred_edge_length
+        self.preferred_cell_area = preferred_cell_area
+        self.preferred_total_volume = preferred_total_volume
+        self.total_volume = total_volume
+        self.preferred_total_area = preferred_total_area
+        self.total_area = total_area
+        ###########################
+        # visualization stuff
+        (
+            V_rgb,
+            V_normal_rgb,
+            V_tangent1_rgb,
+            V_tangent2_rgb,
+            V_radius,
+            H_rgb,
+            H_radius,
+            F_rgb,
+            F_opacity,
+            H_opacity,
+            V_opacity,
+        ) = self._visual_defaults(V_label, H_label, F_label)
         self.V_rgb = V_rgb
         self.V_normal_rgb = V_normal_rgb
         self.V_tangent1_rgb = V_tangent1_rgb
@@ -205,20 +256,7 @@ class Brane:
         self.F_opacity = F_opacity
         self.H_opacity = H_opacity
         self.V_opacity = V_opacity
-
-        self.params = params
         #############################################################
-
-        # Nvertices = len(self.V_label)
-        # Nhedges = len(self.H_label)
-        # Nfaces = len(self.F_label)
-
-        # self.V_scalar = np.zeros(Nvertices)  # self.get_Gaussian_curvature()
-        # self.H_scalar = np.zeros(Nhedges)
-        # self.F_scalar = np.zeros(Nfaces)
-        # self.H_psi, self.H_tangent_components = self.get_initial_edge_tangents()
-
-        # self._set_undefined_params(params)
 
     ###########################################################################
     ###########################################################################
@@ -419,6 +457,41 @@ class Brane:
             A += Av / N
         return A
 
+    def _total_area(
+        self,
+        vertices,
+        V_label,
+        V_hedge,
+        H_vertex,
+        H_next,
+        H_prev,
+        H_twin,
+        F_label,
+        F_hedge,
+    ):
+        A = 0.0
+        for v in V_label:
+            # Avec = self._face_area_vector(f)
+            r = vertices[v]
+            Av = 0.0
+            h = V_hedge[v]
+            h_start = h
+            while True:
+                v1 = H_vertex[h]
+                r1 = vertices[v1]
+                h = H_prev[h]
+                h = H_twin[h]
+                v2 = H_vertex[h]
+                r2 = vertices[v2]
+                a = jitcross(r, r1) / 2 + jitcross(r1, r2) / 2 + jitcross(r2, r) / 2
+                Av += np.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2) / 3
+
+                if h == h_start:
+                    break
+
+            A += Av
+        return A
+
     def _average_hedge_length(self, vertices, H_label, H_twin, H_vertex):
         L = 0.0
         N = len(H_label)
@@ -431,6 +504,29 @@ class Brane:
             u = xyz2 - xyz1
             L += np.sqrt(u[0] ** 2 + u[1] ** 2 + u[2] ** 2) / N
         return L
+
+    def _average_signed_volume_of_faces(self, vertices, faces):
+        vol = 0.0
+        Nfaces = len(faces)
+        for face in faces:
+            v0, v1, v2 = face
+            p0 = vertices[v0]
+            p1 = vertices[v1]
+            p2 = vertices[v2]
+            vol_f = triprod(p0, p1, p2) / 6
+            vol += vol_f / Nfaces
+        return vol
+
+    def _total_volume(self, vertices, faces):
+        vol = 0.0
+        for face in faces:
+            v0, v1, v2 = face
+            p0 = vertices[v0]
+            p1 = vertices[v1]
+            p2 = vertices[v2]
+            vol_f = triprod(p0, p1, p2) / 6
+            vol += vol_f
+        return abs(vol)
 
     def _frame_the_mesh(
         self,
@@ -557,68 +653,394 @@ class Brane:
             V_opacity,
         )
 
-    # def _set_undefined_params(self, params_in):
-    #     """params = [Ke, Ka, Kb, Ks, zeta, dt, L0, A0]"""
-    #     # Ke,Ka,Kc,Kb,Ks,zeta,...
-    #     Nparams = 9
-    #     self.params = np.zeros(Nparams)
-    #     self.params[:7] = params_in
-    #
-    #     Nmax_time_samples = 3
-    #     Nvertices = len(self.V_pq)
-    #     self.sample_times = np.zeros(Nmax_time_samples)
-    #     self.V_pq_samples = np.zeros((Nmax_time_samples, Nvertices, 7))
-    #
-    #     L0 = self.average_hedge_length()
-    #     A0 = self.average_face_area()
-    #     C0 = 0.0
-    #     self.params[7] = L0
-    #     self.params[8] = A0
-    #     self.params[9] = C0
+    ###########################################################################
+    # mesh navigation functions #
+    # require self.(***)
+    # *** =
+    ############################
+    def face1(self, f):
+        """"""
+        face = []
+        h = self.F_hedge[f]
+        h_start = h
+        while True:
+            face.append(self.H_vertex[h])
+            h = self.H_next[h]
+            if h == h_start:
+                break
+        return np.array(face, dtype=np.int32)
 
-    # def _face_area_vector(self, f, vertices, H_next, H_vertex, F_hedge):
-    #     """directed area of face f"""
-    #     Avec = np.zeros(3)
-    #     h_start = F_hedge[f]
-    #     h = h_start
-    #     while True:
-    #         h_next = H_next[h]
-    #         i = H_vertex[h]
-    #         i_next = H_vertex[h_next]
-    #         Avec += 0.5 * jitcross(vertices[i], vertices[i_next])
-    #         h = h_next
-    #         if h == h_start:
-    #             break
-    #
-    #     return Avec
+    def face(self, f):
+        """consistent with initial face assignment"""
+        face = []
+        h = self.H_prev[self.F_hedge[f]]
+        h_start = h
+        while True:
+            face.append(self.H_vertex[h])
+            h = self.H_next[h]
+            if h == h_start:
+                break
+        return np.array(face, dtype=np.int32)
 
-    # def _average_face_area(self, vertices, H_next, H_vertex, F_label, F_hedge):
-    #     A = 0.0
-    #     N = len(F_label)
-    #     for f in F_label:
-    #         # Avec = self._face_area_vector(f)
-    #         Avec = np.zeros(3)
-    #         h_start = F_hedge[f]
-    #         h = h_start
-    #         while True:
-    #             h_next = H_next[h]
-    #             i = H_vertex[h]
-    #             i_next = H_vertex[h_next]
-    #             Avec += 0.5 * jitcross(vertices[i], vertices[i_next])
-    #             h = h_next
-    #             if h == h_start:
-    #                 break
-    #         A += np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / N
-    #     return A
+    def halfedge(self, h):
+        v1 = self.H_vertex[h]
+        v0 = self.H_vertex[self.H_prev[h]]
+        hedge = np.array([v0, v1], dtype=np.int32)
+        return hedge
+        # return self.halfedges[h]
+
+    def twin(self, h):
+        return self.H_twin[h]
+
+    def next(self, h):
+        return self.H_next[h]
+
+    def prev(self, h):
+        return self.H_prev[h]
+
+    def v_of_h(self, h):
+        return self.H_vertex[h]
+
+    def f_of_h(self, h):
+        return self.H_face[h]
+
+    def h_of_v(self, v):
+        return self.V_hedge[v]
+
+    def h_of_f(self, f):
+        return self.F_hedge[f]
 
     ###########################################################################
-    # simulation functions #
+    # mesh mutation/regularization functions #
+    ###############################
+    def update_h_of_f(self, f, h_new):
+        self.F_hedge[f] = h_new
+
+    def update_h_of_v(self, v, h_new):
+        self.V_hedge[v] = h_new
+
+    def update_twin(self, h, h_twin):
+        self.H_twin[h] = h_twin
+        self.H_twin[h_twin] = h
+
+    def update_next_prev(self, h0, h1):
+        """assigns next(h0)=h1 and prev(h1)=h0"""
+        self.H_next[h0] = h1
+        self.H_prev[h1] = h0
+
+    def update_v_of_h(self, h, v):
+        self.H_vertex[h] = v
+
+    def update_f_of_h(self, h, f):
+        self.H_face[h] = f
+
+    def update_face(self, f, face):
+        v0, v1, v2 = face
+        self.faces[f] = np.array([v0, v1, v2], dtype=np.int32)
+
+    def update_halfedge(self, h, halfedge):
+        v0, v1 = halfedge
+        self.halfedges[h] = np.array([v0, v1], dtype=np.int32)
+
+    def update_vertex_position(self, v, xyz):
+        x, y, z = xyz
+        self.V_pq[v, :3] = np.array([x, y, z])
+
+    def edge_flip(self, h):
+        r"""
+        h/ht can not be on boundary!
+               v2                           v2
+             /    \                       /  |  \
+            /      \                     /   |   \
+           /h2    h1\                   /h2  |  h1\
+          /    f1    \                 /     |     \
+         /            \               /  f1  |  f2  \
+        /      h       \             /       |       \
+       v3--------------v1  |----->  v3      h|ht     v1
+        \      ht      /             \       |       /
+         \            /               \      |      /
+          \    f2    /                 \     |     /
+           \h3    h4/                   \h3  |  h4/
+            \      /                     \   |   /
+             \    /                       \  |  /
+               v4                           v4
+        """
+
+        ht = self.twin(h)
+        h1 = self.next(h)
+        h2 = self.prev(h)
+        h3 = self.next(ht)
+        h4 = self.prev(ht)
+        f1 = self.f_of_h(h)
+        f2 = self.f_of_h(ht)
+        v1 = self.v_of_h(h4)
+        v2 = self.v_of_h(h1)
+        v3 = self.v_of_h(h2)
+        v4 = self.v_of_h(h3)
+
+        self.update_face(f1, np.array([v2, v3, v4]))
+        self.update_face(f2, np.array([v4, v1, v2]))
+        # and halfedge referenced by new faces
+        self.update_h_of_f(f1, h2)
+        self.update_h_of_f(f2, h4)
+
+        self.update_halfedge(h, np.array([v4, v2]))
+        self.update_halfedge(ht, np.array([v2, v4]))
+        # update next/prev halfedge
+        self.update_next_prev(h, h2)
+        self.update_next_prev(h2, h3)
+        self.update_next_prev(h3, h)
+        self.update_next_prev(ht, h4)
+        self.update_next_prev(h4, h1)
+        self.update_next_prev(h1, ht)
+        # update face referenced by halfedges
+        self.update_f_of_h(h3, f1)
+        # if self.h_of_f(f1) == h1:
+        self.update_f_of_h(h1, f2)
+        # if self.h_of_f(f2) == h3:
+
+        # update vert referenced by new halfedges
+        # and halfedge referenced by verts
+        self.update_v_of_h(h, v2)
+        self.update_v_of_h(ht, v4)
+        # if self.h_of_v(v3) == h:
+        # self.update_h_of_v(v3, h3)
+        # # if self.h_of_v(v1) == ht:
+        # self.update_h_of_v(v1, h1)
+        self.update_h_of_v(v3, h3)
+        self.update_h_of_v(v1, h1)
+        self.update_h_of_v(v2, h2)
+        self.update_h_of_v(v4, h4)
+
+    def flip_helps_valence(self, h):
+        r"""
+        Returns True if flipping edge 'h' decreases variance
+        of the valence of the four vertices illustrated below.
+        \sum_{i=1}^4 valence(i)^2/4 - (\sum_{i=1}^4 valence(i))^2/4
+        This favors vertices with valence=6 and is equivalent
+        returning True if the flip decreases the energy
+        \sum_{i in all vertices} (valence(i)-6)^2.
+          v2             v2
+         / \            /|\
+       v3---v1  |---> v3 | v1
+         \ /            \|/
+          v4             v4
+        """
+
+        ht = self.twin(h)
+        h1 = self.next(h)
+        h3 = self.next(ht)
+        v1 = self.v_of_h(h)
+        v2 = self.v_of_h(h1)
+        v3 = self.v_of_h(ht)
+        v4 = self.v_of_h(h3)
+
+        val1 = self.valence(v1)
+        val2 = self.valence(v2)
+        val3 = self.valence(v3)
+        val4 = self.valence(v4)
+
+        flip_it = val1 - val2 + val3 - val4 > 2
+
+        return flip_it
+
+    def shift_vertex_towards_barycenter(self, v, weight):
+        """Translates vertex in the direction of the barycenter of
+        its neighbors. weight=1 means all the way to the barycenter."""
+        r0 = self.vertex_position(v)
+        h = self.h_of_v(v)
+        h_start = h
+        r = np.zeros(3)
+        val = 0
+        while True:
+            vb = self.v_of_h(h)
+            r += self.vertex_position(vb)
+            val += 1
+            h = self.prev(h)
+            h = self.twin(h)
+            if h == h_start:
+                break
+        r /= val
+        r = weight * r + (1 - weight) * r0
+        self.update_vertex_position(v, r)
+
+    def regularize_by_flips(self):
+        Nflips = 0
+        for h in self.H_label:
+            flip_it = self.flip_helps_valence(h)
+            if flip_it:
+                self.edge_flip(h)
+                Nflips += 1
+        return Nflips
+
+    def regularize_by_shifts(self, weight):
+        for v in self.V_label:
+            self.shift_vertex_towards_barycenter(v, weight)
+
+    ###########################################################################
+    # simulation/data functions #
     ############################
-    # def get_cosserat_data(self):
-    #     Nhedges = len(self.H_label)
-    #     H_azim = np.zeros(Nhedges)
-    #     for h in self.H_label:
-    #         ht = self.twin(h)
+    def mesh_data_min(self):
+        """minimum data required to reconstruct mesh"""
+        V_pq = self.V_pq
+        V_label = self.V_label
+        V_hedge = self.V_hedge
+        H_label = self.H_label
+        H_vertex = self.H_vertex
+        H_face = self.H_face
+        H_next = self.H_next
+        H_prev = self.H_prev
+        H_twin = self.H_twin
+        F_label = self.F_label
+        F_hedge = self.F_hedge
+        return (
+            V_pq,
+            V_label,
+            V_hedge,
+            H_label,
+            H_vertex,
+            H_face,
+            H_next,
+            H_prev,
+            H_twin,
+            F_label,
+            F_hedge,
+        )
+
+    # def mesh_data_pack(self):
+    #     """minimum data required to reconstruct mesh"""
+    #     V_pq = self.V_pq
+    #     V_label = self.V_label
+    #     V_hedge = self.V_hedge
+    #
+    #     H_label = self.H_label
+    #     H_vertex = self.H_vertex
+    #     H_face = self.H_face
+    #     H_next = self.H_next
+    #     H_prev = self.H_prev
+    #     H_twin = self.H_twin
+    #
+    #     F_label = self.F_label
+    #     F_hedge = self.F_hedge
+    #
+    #     Nvertices = len(V_label)
+    #     Nhalfedges = len(H_label)
+    #     Nfaces = len(F_label)
+    #
+    #     Vfloats = V_pq
+    #     Vints = np.zeros((Nvertices, 2), dtype=np.int32)
+    #     Hints = np.zeros((Nvertices, 6), dtype=np.int32)
+    #     Fints = np.zeros((Nvertices, 2), dtype=np.int32)
+    #
+    #
+    #     Vints[:,0] = V_label
+    #     Vints[:,1] = V_hedge
+    #
+    #     Hints[:,0] = H_label
+    #     Hints[:,1] = H_vertex
+    #     Hints[:,2] = H_face
+    #     Hints[:,3] = H_next
+    #     Hints[:,4] = H_prev
+    #     Hints[:,5] = H_twin
+    #
+    #     Vints[:,0] = V_label
+    #     Vints[:,1] = V_hedge
+    #
+    #     return (
+    #         Vfloats,
+    #         VHFints
+    #     )
+
+    def mesh_data(self):
+        """to reconstruct mesh"""
+        V_pq = self.V_pq
+        V_label = self.V_label
+        V_hedge = self.V_hedge
+        H_label = self.H_label
+        H_vertex = self.H_vertex
+        H = self.halfedges
+        H_face = self.H_face
+        H_next = self.H_next
+        H_prev = self.H_prev
+        H_twin = self.H_twin
+        F = self.faces
+        F_label = self.F_label
+        F_hedge = self.F_hedge
+        return (
+            V_pq,
+            V_label,
+            V_hedge,
+            H,
+            H_label,
+            H_vertex,
+            H_face,
+            H_next,
+            H_prev,
+            H_twin,
+            F,
+            F_label,
+            F_hedge,
+        )
+
+    def param_data(self):
+        """to reconstruct mesh"""
+        bending_modulus = self.Kbend
+        splay_modulus = self.Ksplay
+        volume_reg_stiffness = self.Kvolume
+        area_reg_stiffness = self.Karea
+        length_reg_stiffness = self.Klength
+        zeta_linear = self.zeta_linear
+        preferred_curvature = self.preferred_curvature
+        params = self.params
+        preferred_edge_length = self.preferred_edge_length
+        preferred_cell_area = self.preferred_cell_area
+        preferred_total_volume = self.preferred_total_volume
+        total_volume = self.total_volume
+        preferred_total_area = self.preferred_total_area
+        total_area = self.total_area
+        return (
+            bending_modulus,
+            splay_modulus,
+            volume_reg_stiffness,
+            area_reg_stiffness,
+            length_reg_stiffness,
+            zeta_linear,
+            preferred_curvature,
+            params,
+            preferred_edge_length,
+            preferred_cell_area,
+            preferred_total_volume,
+            total_volume,
+            preferred_total_area,
+            total_area,
+        )
+
+    def visual_data(self):
+        V_rgb = self.V_rgb
+        V_normal_rgb = self.V_normal_rgb
+        V_tangent1_rgb = self.V_tangent1_rgb
+        V_tangent2_rgb = self.V_tangent2_rgb
+        V_radius = self.V_radius
+        H_rgb = self.H_rgb
+        H_radius = self.H_radius
+        F_rgb = self.F_rgb
+        F_opacity = self.F_opacity
+        H_opacity = self.H_opacity
+        V_opacity = self.V_opacity
+        return (
+            V_rgb,
+            V_normal_rgb,
+            V_tangent1_rgb,
+            V_tangent2_rgb,
+            V_radius,
+            H_rgb,
+            H_radius,
+            F_rgb,
+            F_opacity,
+            H_opacity,
+            V_opacity,
+        )
+
     def get_state_data(self):
         sample_times = self.sample_times
         V_pq_samples = self.V_pq_samples
@@ -721,356 +1143,45 @@ class Brane:
         self.V_pq = V_pq_samples[0]
 
     ###########################################################################
-    # get parameter functions #
-    ############################
-
-    # def length_reg_stiffness(self):
-    #     return self.params[0]
-    #
-    # def area_reg_stiffness(self):
-    #     return self.params[1]
-    #
-    # def conformal_reg_stiffness(self):
-    #     return self.params[2]
-    #
-    # def bending_modulus(self):
-    #     return self.params[3]
-    #
-    # def splay_modulus(self):
-    #     return self.params[4]
-    #
-    # def linear_drag_coeff(self):
-    #     return self.params[5]
-    #
-    # def dt0(self):
-    #     return self.params[6]
-    #
-    # def length_reg_L0(self):
-    #     return self.params[7]
-    #
-    # def area_reg_A0(self):
-    #     return self.params[8]
-    #
-    # def conformal_reg_C0(self):
-    #     return self.params[9]
-    #
-    # def time_stepsize(self, t1, t2):
-    #     return self.sample_times[t2] - self.sample_times[t1]
-
-    ###########################################################################
-    # mesh navigation functions #
-    ############################
-    def face(self, f):
-        return self.faces[f]
-
-    def halfedge(self, h):
-        return self.halfedges[h]
-
-    def twin(self, h):
-        return self.H_twin[h]
-
-    def next(self, h):
-        return self.H_next[h]
-
-    def prev(self, h):
-        return self.H_prev[h]
-
-    def v_of_h(self, h):
-        return self.H_vertex[h]
-
-    def f_of_h(self, h):
-        return self.H_face[h]
-
-    def h_of_v(self, v):
-        return self.V_hedge[v]
-
-    def h_of_f(self, f):
-        return self.F_hedge[f]
-
-    def update_h_of_f(self, f, h_new):
-        self.F_hedge[f] = h_new
-
-    def update_h_of_v(self, v, h_new):
-        self.V_hedge[v] = h_new
-
-    def update_twin(self, h, h_twin):
-        self.H_twin[h] = h_twin
-        self.H_twin[h_twin] = h
-
-    def update_next_prev(self, h0, h1):
-        """assigns next(h0)=h1 and prev(h1)=h0"""
-        self.H_next[h0] = h1
-        self.H_prev[h1] = h0
-
-    def update_v_of_h(self, h, v):
-        self.H_vertex[h] = v
-
-    def update_f_of_h(self, h, f):
-        self.H_face[h] = f
-
-    def update_face(self, f, face):
-        v0, v1, v2 = face
-        self.faces[f] = np.array([v0, v1, v2], dtype=np.int32)
-
-    def update_halfedge(self, h, halfedge):
-        v0, v1 = halfedge
-        self.halfedges[h] = np.array([v0, v1], dtype=np.int32)
-
-    def update_vertex_position(self, v, xyz):
-        x, y, z = xyz
-        self.V_pq[v, :3] = np.array([x, y, z])
-
-    ###########################################################################
-    # mesh mutation/regularization functions #
-    ###############################
-    def edge_flip(self, h):
-        r"""
-        h/ht can not be on boundary!
-          o              o
-         / \            /|\
-        o---o  |---->  o | o
-         \ /            \|/
-          o              o
-
-               v2                           v2
-             /    \                       /  |  \
-            /      \                     /   |   \
-           /h2    h1\                   /h2  |  h1\
-          /    f1    \                 /     |     \
-         /            \               /  f1  |  f2  \
-        /      h       \             /       |       \
-       v3--------------v1  |----->  v3      h|ht     v1
-        \      ht      /             \       |       /
-         \            /               \      |      /
-          \    f2    /                 \     |     /
-           \h3    h4/                   \h3  |  h4/
-            \      /                     \   |   /
-             \    /                       \  |  /
-               v4                           v4
-        """
-
-        ht = self.twin(h)
-        h1 = self.next(h)
-        h2 = self.prev(h)
-        h3 = self.next(ht)
-        h4 = self.prev(ht)
-        f1 = self.f_of_h(h)
-        f2 = self.f_of_h(ht)
-        v1 = self.v_of_h(h4)
-        v2 = self.v_of_h(h1)
-        v3 = self.v_of_h(h2)
-        v4 = self.v_of_h(h3)
-
-        self.update_face(f1, np.array([v2, v3, v4]))
-        self.update_face(f2, np.array([v4, v1, v2]))
-        # and halfedge referenced by new faces
-        self.update_h_of_f(f1, h2)
-        self.update_h_of_f(f2, h4)
-
-        self.update_halfedge(h, np.array([v4, v2]))
-        self.update_halfedge(ht, np.array([v2, v4]))
-        # update next/prev halfedge
-        self.update_next_prev(h, h2)
-        self.update_next_prev(h2, h3)
-        self.update_next_prev(h3, h)
-        self.update_next_prev(ht, h4)
-        self.update_next_prev(h4, h1)
-        self.update_next_prev(h1, ht)
-        # update face referenced by halfedges
-        self.update_f_of_h(h3, f1)
-        # if self.h_of_f(f1) == h1:
-        self.update_f_of_h(h1, f2)
-        # if self.h_of_f(f2) == h3:
-
-        # update vert referenced by new halfedges
-        # and halfedge referenced by verts
-        self.update_v_of_h(h, v2)
-        self.update_v_of_h(ht, v4)
-        # if self.h_of_v(v3) == h:
-        # self.update_h_of_v(v3, h3)
-        # # if self.h_of_v(v1) == ht:
-        # self.update_h_of_v(v1, h1)
-        self.update_h_of_v(v3, h3)
-        self.update_h_of_v(v1, h1)
-        self.update_h_of_v(v2, h2)
-        self.update_h_of_v(v4, h4)
-
-    def flip_helps_valence(self, h):
-        r"""
-        h/ht can not be on boundary!
-          o              o
-         / \            /|\
-        o---o  |---->  o | o
-         \ /            \|/
-          o              o
-
-               v2                           v2
-             /    \                       /  |  \
-            /      \                     /   |   \
-           /h2    h1\                   /h2  |  h1\
-          /    f1    \                 /     |     \
-         /            \               /  f1  |  f2  \
-        /      h       \             /       |       \
-       v3--------------v1  |----->  v3      h|ht     v1
-        \      ht      /             \       |       /
-         \            /               \      |      /
-          \    f2    /                 \     |     /
-           \h3    h4/                   \h3  |  h4/
-            \      /                     \   |   /
-             \    /                       \  |  /
-               v4                           v4
-        """
-        # flip_its = []
-        flip_it = True
-        ht = self.twin(h)
-        h1 = self.next(h)
-        h3 = self.next(ht)
-        v1 = self.v_of_h(h)
-        v2 = self.v_of_h(h1)
-        v3 = self.v_of_h(ht)
-        v4 = self.v_of_h(h3)
-
-        val1 = self.valence(v1)
-        val2 = self.valence(v2)
-        val3 = self.valence(v3)
-        val4 = self.valence(v4)
-
-        flip_it = flip_it and (val1 > val2)
-        flip_it = flip_it and (val3 > val4)
-
-        return flip_it
-
-    def shift_vertex_towards_barycenter(self, v, weight):
-        r0 = self.vertex_position(v)
-        h = self.h_of_v(v)
-        h_start = h
-        r = np.zeros(3)
-        val = 0
-        while True:
-            vb = self.v_of_h(h)
-            r += self.vertex_position(vb)
-            val += 1
-            h = self.prev(h)
-            h = self.twin(h)
-            if h == h_start:
-                break
-        r /= val
-        r = weight * r + (1 - weight) * r0
-        self.update_vertex_position(v, r)
-
-    # def edge_colapse(self, h):
-
-    # def should_we_flip_edge(self, h, L):
-    #     r"""
-    #     h/ht can not be on boundary!
-    #       o              o
-    #      / \            /|\
-    #     o---o  |---->  o | o
-    #      \ /            \|/
-    #       o              o
-    #
-    #            v2                           v2
-    #          /    \                       /  |  \
-    #         /      \                     /   |   \
-    #        /h2    h1\                   /h2  |  h1\
-    #       /    f1    \                 /     |     \
-    #      /            \               /  f1  |  f2  \
-    #     /      h       \             /       |       \
-    #    v3--------------v1  |----->  v3      h|ht     v1
-    #     \      ht      /             \       |       /
-    #      \            /               \      |      /
-    #       \    f2    /                 \     |     /
-    #        \h3    h4/                   \h3  |  h4/
-    #         \      /                     \   |   /
-    #          \    /                       \  |  /
-    #            v4                           v4
-    #     """
-    #     # flip_its = []
-    #     flip_it = True
-    #     ht = self.twin(h)
-    #     h1 = self.next(h)
-    #     # h2 = self.prev(h)
-    #     h3 = self.next(ht)
-    #     # h4 = self.prev(ht)
-    #     v1 = self.v_of_h(h)
-    #     v2 = self.v_of_h(h1)
-    #     v3 = self.v_of_h(ht)
-    #     v4 = self.v_of_h(h3)
-    #
-    #     xyz1 = self.vertex_position(v1)
-    #     xyz2 = self.vertex_position(v2)
-    #     xyz3 = self.vertex_position(v3)
-    #     xyz4 = self.vertex_position(v4)
-    #     u_before = xyz1 - xyz3
-    #     u_after = xyz2 - xyz4
-    #     L_before = np.sqrt(u_before[0] ** 2 + u_before[1] ** 2 + u_before[2] ** 2)
-    #     L_after = np.sqrt(u_after[0] ** 2 + u_after[1] ** 2 + u_after[2] ** 2)
-    #     # flip_its.append(abs(L_after - L) < abs(L_before - L))
-    #     # flip_it = flip_it and (abs(L_after - L) < abs(L_before - L))
-    #     val1 = self.valence(v1)
-    #     val2 = self.valence(v2)
-    #     val3 = self.valence(v3)
-    #     val4 = self.valence(v4)
-    #     # flip_its.append(val3 > 2)
-    #     # flip_its.append(val1 > 2)
-    #     # flip_it = flip_it and (val3 > 3)
-    #     # flip_it = flip_it and (val1 > 3)
-    #     flip_it = flip_it and (val1 > val2)
-    #     flip_it = flip_it and (val3 > val4)
-    #     # flip_it = flip_it and (val1 > 3)
-    #
-    #     # flip_it = all(flip_its)
-    #     return flip_it
-
-    # def get_bad_hedges(self):
-    #     bad = []
-    #     for h in self.H_label:
-    #         flip_it = self.should_we_flip_edge(h, 1.0)
-    #
-    #         if flip_it:
-    #             bad.append(h)
-    #
-    #     # Nbad = len(bad)
-    #     # bada = np.zeros(Nbad)
-    #     bada = np.array(bad, dtype=np.int32)
-    #     return bada
-
-    # def flip_bad_edges(self):
-    #     L0 = self.average_hedge_length()
-    #     for h in self.H_label:
-    #         flip_it = self.should_we_flip_edge(h, L0)
-    #
-    #         if flip_it:
-    #             self.edge_flip(h)
-    #             # self.edge_flip(h)
-    #             ht = self.twin(h)
-    #             self.H_rgb[h] = np.array([1.0, 0.0, 0.0])
-    #             self.H_rgb[ht] = np.array([0.0, 0.0, 1.0])
-    #             f1 = self.f_of_h(h)
-    #             f2 = self.f_of_h(ht)
-    #             self.F_rgb[f1] = np.array([1.0, 0.0, 0.0])
-    #             self.F_rgb[f2] = np.array([0.0, 0.0, 1.0])
-    def regularize_by_flips(self):
-        Nflips = 0
-        for h in self.H_label:
-            flip_it = self.flip_helps_valence(h)
-            if flip_it:
-                self.edge_flip(h)
-                Nflips += 1
-        return Nflips
-
-    def regularize_by_shifts(self, weight):
-        for v in self.V_label:
-            self.shift_vertex_towards_barycenter(v, weight)
-
-    ###########################################################################
     # forces and time evolution #
     #############################
+    def get_total_area(self):
+        vertices = self.V_pq[:, :3]
+        V_label = self.V_label
+        V_hedge = self.V_hedge
+        H_vertex = self.H_vertex
+        H_next = self.H_next
+        H_prev = self.H_prev
+        H_twin = self.H_twin
+        F_label = self.F_label
+        F_hedge = self.F_hedge
+        A = 0.0
+        for v in V_label:
+            # Avec = self._face_area_vector(f)
+            r = vertices[v]
+            Av = 0.0
+            h = V_hedge[v]
+            h_start = h
+            while True:
+                v1 = H_vertex[h]
+                r1 = vertices[v1]
+                h = H_prev[h]
+                h = H_twin[h]
+                v2 = H_vertex[h]
+                r2 = vertices[v2]
+                a = jitcross(r, r1) / 2 + jitcross(r1, r2) / 2 + jitcross(r2, r) / 2
+                Av += np.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2) / 3
+
+                if h == h_start:
+                    break
+
+            A += Av
+        return A
+
     def length_reg_force(self, v):
         """E ~ 1/2*Ke*(L-L0)**2/L0"""
-        Ke, Kf, Kb, Ks, zeta, L0, A0 = self.params
-        # L0 = self.length_reg_L0()
-        # Ke = self.length_reg_stiffness()
+        Ke = self.Klength
+        L0 = self.preferred_edge_length
         xyz = self.vertex_position(v)
         neighbors = self.v_adjacent_to_v(v)
         N = len(neighbors)
@@ -1090,9 +1201,10 @@ class Brane:
 
         return F
 
-    def area_reg_force(self, v):
-        """E ~ 1/2*Kf*(A-A0)**2"""
-        Ke, Kf, Kb, Ks, zeta, L0, A0 = self.params
+    def LOCAL_area_reg_force(self, v):
+        """E ~ 1/2*Ka*(A-A0)**2"""
+        A0 = self.preferred_cell_area
+        Ka = self.Karea
         r = self.vertex_position(v)
         F = np.zeros(3)
 
@@ -1111,17 +1223,61 @@ class Brane:
 
             gradA = jitcross(Avec, r2 - r1) / (2 * A)
 
-            F += -Kf * (A - A0) * gradA / A0
+            F += -Ka * (A - A0) * gradA / A0
 
             if h == h_start:
                 break
         return F
 
-    def face_area_reg_force(self, v):
-        Ke, Kf, Kb, Ks, zeta, L0, A0 = self.params
-        # A0 = self.area_reg_A0()
-        # Ka = self.area_reg_stiffness()
+    def area_reg_force(self, v):
+        """E ~ 1/2*Ka*(A-A0)**2"""
         r = self.vertex_position(v)
+        F = np.zeros(3)
+        area0 = self.preferred_total_area
+        area = self.total_area
+        Ka = self.Karea
+
+        h_start = self.h_of_v(v)
+        h = h_start
+        while True:
+            v1 = self.v_of_h(h)
+            r1 = self.vertex_position(v1)
+            h = self.prev(h)
+            h = self.twin(h)
+            v2 = self.v_of_h(h)
+            r2 = self.vertex_position(v2)
+
+            Avec = (jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)) / 2
+            A = np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / 3
+
+            gradA = jitcross(Avec, r2 - r1) / (2 * A)
+
+            F += -Ka * (area - area0) * gradA / area0
+
+            if h == h_start:
+                break
+        return F
+
+    def signed_volume_of_face(self, f):
+        v0, v1, v2 = self.face(f)
+        p0 = self.vertex_position(v0)
+        p1 = self.vertex_position(v1)
+        p2 = self.vertex_position(v2)
+        vol = triprod(p0, p1, p2) / 6
+        return vol
+
+    def volume_of_mesh(self):
+        vol = 0.0
+        for f in self.F_label:
+            vol += self.signed_volume_of_face(f)
+        return vol
+
+    def volume_reg_force(self, v):
+        """."""
+        vol0 = self.preferred_total_volume
+        vol = self.total_volume
+        Kv = self.Kvolume
+
         F = np.zeros(3)
 
         h_start = self.h_of_v(v)
@@ -1134,11 +1290,9 @@ class Brane:
             v2 = self.v_of_h(h)
             r2 = self.vertex_position(v2)
 
-            Avec = 0.5 * (jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r))
-            A = np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2)
+            # grad_vol = jitcross(r1, r2) / (2 * A)
 
-            gradA = 0.5 * jitcross(Avec, r2 - r1) / A
-            F += -Kf * (A - A0) * gradA / A0
+            F += -Kv * (vol - vol0) * jitcross(r1, r2) / (18 * vol0)
 
             if h == h_start:
                 break
@@ -1147,14 +1301,18 @@ class Brane:
     def forward_euler_reg_step(self, dt):
         # Nverts = len(self.V_pq)
         # pq = np.zeros_like(self.V_pq)
-        Ke, Kf, Kb, Ks, zeta, L0, A0 = self.params
+        # Ke, Kf, Kb, Ks, zeta, L0, A0 = self.params
+        zeta_linear = self.zeta_linear
+        self.total_volume = self.volume_of_mesh()
+        self.total_area = self.get_total_area()
 
         # self.V_pq[:, :3] = self.V_pq[:, :3] + dt * F / zeta
         for v in self.V_label:
             F = np.zeros(3)
             F += self.length_reg_force(v)
             F += self.area_reg_force(v)
-            self.V_pq[v, :3] = self.V_pq[v, :3] + dt * F / zeta
+            F += self.volume_reg_force(v)
+            self.V_pq[v, :3] = self.V_pq[v, :3] + dt * F / zeta_linear
 
         # for v in self.V_label:
         #     self.V_pq[v, 3:] = self.get_new_quat_dumb(v)
@@ -1269,45 +1427,6 @@ class Brane:
         u *= 1 - shift_to_center
 
         return p, u
-
-    ###########################################################################
-    # testing functions #
-    ##########################
-    # def test_next(self):
-    #     success = True
-    #     bad = []
-    #     for h in self.H_label:
-    #         h0 = self.next(h)
-    #         h1 = self.next(h0)
-    #         h2 = self.next(h1)
-    #         if h - h2 != 0:
-    #             success = False
-    #             bad.append(h)
-    #     return success, bad
-    #
-    # def test_prev(self):
-    #     success = True
-    #     bad = []
-    #     for h in self.H_label:
-    #         h0 = self.prev(h)
-    #         h1 = self.prev(h0)
-    #         h2 = self.prev(h1)
-    #         if h - h2 != 0:
-    #             success = False
-    #             bad.append(h)
-    #
-    #     return success, bad
-    #
-    # def test_twin(self):
-    #     success = True
-    #     bad = []
-    #     for h in self.H_label:
-    #         h1 = self.twin(h)
-    #         h2 = self.twin(h1)
-    #         if h - h2 != 0:
-    #             success = False
-    #             bad.append(h)
-    #     return success, bad
 
     ###########################################################################
     ###########################################################################
@@ -1489,14 +1608,6 @@ class Brane:
             L += self.hedge_length(h) / N
         return L
 
-    # def average_face_area(self):
-    #     A = 0.0
-    #     N = len(self.F_label)
-    #     for f in self.F_label:
-    #         Avec = self.face_area_vector(f)
-    #         A += np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / N
-    #     return A
-
     def area_weighted_vertex_normal(self, v):
         """."""
         n = np.zeros(3)
@@ -1515,131 +1626,6 @@ class Brane:
 
         n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
         return n
-
-    # def area_weighted_vertex_normal(self, v):
-    #     """."""
-    #     n = np.zeros(3)
-    #
-    #     h_start = self.V_hedge[v]
-    #     h = h_start
-    #     while True:
-    #         f = self.H_face[h]
-    #         n += self.face_area_vector(f)
-    #
-    #         h = self.H_prev[h]
-    #         h = self.H_twin[h]
-    #
-    #         if h == h_start:
-    #             break
-    #
-    #     n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
-    #     return n
-
-    #######################################################
-    ###########################################################################
-    ###########################################################################
-    ###########################################################################
-
-    # def get_face_area_vectors(self):
-    #     F_label = self.F_label
-    #     Nfaces = len(F_label)
-    #     F_area_vectors = np.zeros((Nfaces, 3))
-    #     vertices = self.V_pq[:, :3]
-    #
-    #     for _f in range(Nfaces):
-    #         f = F_label[_f]
-    #         h = self.F_hedge[f]
-    #         hn = self.H_next[h]
-    #         hp = self.H_prev[h]
-    #
-    #         v0 = self.H_vertex[hp]
-    #         v1 = self.H_vertex[h]
-    #         v2 = self.H_vertex[hn]
-    #
-    #         u1 = vertices[v1] - vertices[v0]
-    #         u2 = vertices[v2] - vertices[v1]
-    #
-    #         F_area_vectors[_f] = jitcross(u1, u2)
-    #     # n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
-    #     return F_area_vectors
-
-    # def get_vertex_normal(self, v):
-    #     F = self.f_adjacent_to_v(v)
-    #     n = np.zeros(3)
-    #
-    #     for f in F:
-    #         n += self.face_area_vector(f)
-    #
-    #     n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
-    #     return n
-
-    # def rcm_pose(self, vertex_list):
-    #     """computes the SE3-valued Riemannian center of mass of the euclidean transformations associated with vertices in vertex_list"""
-    #     iters = 4
-    #     pq = self.V_pq
-    #     Nsamps = len(vertex_list)
-    #     G = np.zeros((Nsamps, 7))
-    #     # G[:] = np.array([pq[i] for i in vertex_list])
-    #     ##########################################
-    #     g0 = pq[vertex_list[0]]  # G[0]
-    #     g0_inv = inv_se3_quaternion(g0)
-    #     for i in range(Nsamps):
-    #         G[i] = mul_se3_quaternion(g0_inv, pq[vertex_list[i]])
-    #     ##########################################
-    #     mu_g = np.array([G[0, 0], G[0, 1], G[0, 2], G[0, 3], G[0, 4], G[0, 5], G[0, 6]])
-    #     # mu_g = np.zeros(7)  # sum(G) / Nsamps
-    #     # for g in G:
-    #     #     mu_g += g / Nsamps
-    #     # mu_g[3:] /= np.sqrt(mu_g[3] ** 2 + mu_g[4] ** 2 + mu_g[5] ** 2 + mu_g[6] ** 2)
-    #
-    #     for iter in range(iters):
-    #         mu_g_inv = inv_se3_quaternion(mu_g)
-    #         Psi = np.zeros(6)
-    #         for g in G:
-    #             mu_g_inv_g = mul_se3_quaternion(mu_g_inv, g)
-    #             Psi += log_se3_quaternion(mu_g_inv_g) / Nsamps
-    #         mu_g = mul_se3_quaternion(mu_g, exp_se3_quaternion(Psi))
-    #         # for g in G:
-    #         #     g_mu_g_inv = mul_se3_quaternion(g, mu_g_inv)
-    #         #     Psi += log_se3_quaternion(g_mu_g_inv) / Nsamps
-    #         # mu_g = mul_se3_quaternion(exp_se3_quaternion(Psi), mu_g)
-    #     ##########################################
-    #     mu_g = mul_se3_quaternion(g0, mu_g)
-    #     ##########################################
-    #     return mu_g
-    #
-    # def acm_pose(self, vertex_list):
-    #     """computes the affine center of mass of the euclidean transformations associated with vertices in vertex_list"""
-    #     G = self.V_pq
-    #     Nsamps = len(vertex_list)
-    #     g0 = G[vertex_list[0]]
-    #     mu_g = np.zeros_like(g0)
-    #     for i in vertex_list:
-    #         g = G[i]
-    #         mu_g += g / Nsamps
-    #     mu_g[3:] /= np.sqrt(mu_g[3] ** 2 + mu_g[4] ** 2 + mu_g[5] ** 2 + mu_g[6] ** 2)
-    #     return mu_g
-    #
-    # def rcm_quaternion(self, vertex_list):
-    #     """computes the unit quaternion-valued Riemannian center of mass of the euclidean transformations associated with vertices in vertex_list"""
-    #     iters = 4
-    #
-    #     G = self.V_pq[:, 3:]
-    #     Nsamps = len(vertex_list)
-    #     g0 = G[vertex_list[0]]
-    #     mu_g = np.zeros_like(g0)
-    #     mu_g[:] = g0
-    #     for iter in range(iters):
-    #         mu_g_inv = inv_quaternion(mu_g)
-    #         Psi = np.zeros(3)
-    #         for i in vertex_list:
-    #             g = G[i]
-    #             mu_g_inv_g = mul_quaternion(mu_g_inv, g)
-    #             Psi += log_unit_quaternion(mu_g_inv_g) / Nsamps
-    #             # Psi += log_se3_quaternion(mul_se3_quaternion(g, mu_g_inv)) / Nsamps
-    #         mu_g = mul_quaternion(mu_g, exp_unit_quaternion(Psi))
-    #         # mu_g = mul_se3_quaternion(exp_se3_quaternion(Psi), mu_g)
-    #     return mu_g
 
     def old_angle_defect(self, v):
         """
@@ -1763,6 +1749,400 @@ class Brane:
         K /= self.cell_area(v)
         return K
 
+    def get_initial_edge_tangents(self):
+        # H_label = self.H_label
+        Nhedges = len(self.H_label)
+        H_tangent_components = np.zeros((Nhedges, 2))
+        H_psi = np.zeros((Nhedges, 6))
+
+        for h in range(Nhedges):
+            hp = self.H_prev[h]
+            v0 = self.H_vertex[hp]
+            v1 = self.H_vertex[h]
+            pq0 = self.V_pq[v0]
+            pq1 = self.V_pq[v1]
+            pq0inv = inv_se3_quaternion(pq0)
+            pq01 = mul_se3_quaternion(pq0inv, pq1)
+            psi01 = log_se3_quaternion(pq01)
+
+            ell01 = psi01[:3]
+            the01 = psi01[3:]
+            H_psi[h] = psi01
+            H_tangent_components[h] = ell01[:2]
+
+        return H_psi, H_tangent_components
+
+    def build_minimesh_from_psi(self, v_c):
+        pq_c = self.V_pq[v_c]  # center vertex pose
+
+        poses = [[*pq_c]]
+        faces = []
+
+        h_start = self.V_hedge[v_c]
+        h = h_start  # halfedge from center to boundary vertex
+        v_new = 0
+        while True:
+            v_new += 1
+            faces.append([0, v_new, v_new + 1])
+
+            pq_c2b = exp_se3_quaternion(
+                self.H_psi[h]
+            )  # center to boundary transformation
+            # pq_b = mul_se3_quaternion(pq_c, pq_c2b)  # boundary pose
+            poses.append([*mul_se3_quaternion(pq_c, pq_c2b)])
+            h = self.H_twin[self.H_prev[h]]  # halfedge from center to boundary vertex
+            if h == h_start:
+                break
+
+        faces[-1][-1] = 1  # relabel vertex of last vertex of last face
+        F = np.array(faces, dtype=np.int32)
+        V_pq = np.array(poses, dtype=np.float64)
+        return V_pq, F
+
+    ##########################################################
+    ###############################################################
+    ###########################################################
+    ###########################################################
+    ###########################################################
+    #  HERE HERE HEREHEREHEREHEREHEREHEREHEREHERE
+    # HERE         HERE         HERE       HERE     HERE     HERE   HERE
+    # HERE         HERE         HERE       HERE     HERE     HERE   HERE
+    # HERE         HERE         HERE       HERE     HERE     HERE   HERE
+    # HERE         HERE         HERE       HERE     HERE     HERE   HERE
+    # HERE         HERE         HERE       HERE     HERE     HERE   HERE
+    # HERE         HERE         HERE       HERE     HERE     HERE   HERE
+    # HERE         HERE         HERE       HERE     HERE     HERE   HERE
+    # HERE         HERE         HERE       HERE     HERE     HERE   HERE
+    # HERE         HERE         HERE       HERE     HERE     HERE   HERE
+
+    ###########################################################################
+    ###########################################################################
+    # initialization functions #
+    ############################
+    # these don't call any other class functions and are safe to use before any
+    # class attributes have been assigned
+    ###########################################################################
+
+    # def _face_area_vector(self, f, vertices, H_next, H_vertex, F_hedge):
+    #     """directed area of face f"""
+    #     Avec = np.zeros(3)
+    #     h_start = F_hedge[f]
+    #     h = h_start
+    #     while True:
+    #         h_next = H_next[h]
+    #         i = H_vertex[h]
+    #         i_next = H_vertex[h_next]
+    #         Avec += 0.5 * jitcross(vertices[i], vertices[i_next])
+    #         h = h_next
+    #         if h == h_start:
+    #             break
+    #
+    #     return Avec
+
+    # def _average_face_area(self, vertices, H_next, H_vertex, F_label, F_hedge):
+    #     A = 0.0
+    #     N = len(F_label)
+    #     for f in F_label:
+    #         # Avec = self._face_area_vector(f)
+    #         Avec = np.zeros(3)
+    #         h_start = F_hedge[f]
+    #         h = h_start
+    #         while True:
+    #             h_next = H_next[h]
+    #             i = H_vertex[h]
+    #             i_next = H_vertex[h_next]
+    #             Avec += 0.5 * jitcross(vertices[i], vertices[i_next])
+    #             h = h_next
+    #             if h == h_start:
+    #                 break
+    #         A += np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / N
+    #     return A
+
+    ###########################################################################
+    # simulation functions #
+    ############################
+
+    ###########################################################################
+    # mesh navigation functions #
+    ############################
+
+    ###########################################################################
+    # mesh mutation/regularization functions #
+    ###############################
+
+    # def edge_colapse(self, h):
+
+    # def should_we_flip_edge(self, h, L):
+    #     r"""
+    #     h/ht can not be on boundary!
+    #       o              o
+    #      / \            /|\
+    #     o---o  |---->  o | o
+    #      \ /            \|/
+    #       o              o
+    #
+    #            v2                           v2
+    #          /    \                       /  |  \
+    #         /      \                     /   |   \
+    #        /h2    h1\                   /h2  |  h1\
+    #       /    f1    \                 /     |     \
+    #      /            \               /  f1  |  f2  \
+    #     /      h       \             /       |       \
+    #    v3--------------v1  |----->  v3      h|ht     v1
+    #     \      ht      /             \       |       /
+    #      \            /               \      |      /
+    #       \    f2    /                 \     |     /
+    #        \h3    h4/                   \h3  |  h4/
+    #         \      /                     \   |   /
+    #          \    /                       \  |  /
+    #            v4                           v4
+    #     """
+    #     # flip_its = []
+    #     flip_it = True
+    #     ht = self.twin(h)
+    #     h1 = self.next(h)
+    #     # h2 = self.prev(h)
+    #     h3 = self.next(ht)
+    #     # h4 = self.prev(ht)
+    #     v1 = self.v_of_h(h)
+    #     v2 = self.v_of_h(h1)
+    #     v3 = self.v_of_h(ht)
+    #     v4 = self.v_of_h(h3)
+    #
+    #     xyz1 = self.vertex_position(v1)
+    #     xyz2 = self.vertex_position(v2)
+    #     xyz3 = self.vertex_position(v3)
+    #     xyz4 = self.vertex_position(v4)
+    #     u_before = xyz1 - xyz3
+    #     u_after = xyz2 - xyz4
+    #     L_before = np.sqrt(u_before[0] ** 2 + u_before[1] ** 2 + u_before[2] ** 2)
+    #     L_after = np.sqrt(u_after[0] ** 2 + u_after[1] ** 2 + u_after[2] ** 2)
+    #     # flip_its.append(abs(L_after - L) < abs(L_before - L))
+    #     # flip_it = flip_it and (abs(L_after - L) < abs(L_before - L))
+    #     val1 = self.valence(v1)
+    #     val2 = self.valence(v2)
+    #     val3 = self.valence(v3)
+    #     val4 = self.valence(v4)
+    #     # flip_its.append(val3 > 2)
+    #     # flip_its.append(val1 > 2)
+    #     # flip_it = flip_it and (val3 > 3)
+    #     # flip_it = flip_it and (val1 > 3)
+    #     flip_it = flip_it and (val1 > val2)
+    #     flip_it = flip_it and (val3 > val4)
+    #     # flip_it = flip_it and (val1 > 3)
+    #
+    #     # flip_it = all(flip_its)
+    #     return flip_it
+
+    # def get_bad_hedges(self):
+    #     bad = []
+    #     for h in self.H_label:
+    #         flip_it = self.should_we_flip_edge(h, 1.0)
+    #
+    #         if flip_it:
+    #             bad.append(h)
+    #
+    #     # Nbad = len(bad)
+    #     # bada = np.zeros(Nbad)
+    #     bada = np.array(bad, dtype=np.int32)
+    #     return bada
+
+    # def flip_bad_edges(self):
+    #     L0 = self.average_hedge_length()
+    #     for h in self.H_label:
+    #         flip_it = self.should_we_flip_edge(h, L0)
+    #
+    #         if flip_it:
+    #             self.edge_flip(h)
+    #             # self.edge_flip(h)
+    #             ht = self.twin(h)
+    #             self.H_rgb[h] = np.array([1.0, 0.0, 0.0])
+    #             self.H_rgb[ht] = np.array([0.0, 0.0, 1.0])
+    #             f1 = self.f_of_h(h)
+    #             f2 = self.f_of_h(ht)
+    #             self.F_rgb[f1] = np.array([1.0, 0.0, 0.0])
+    #             self.F_rgb[f2] = np.array([0.0, 0.0, 1.0])
+
+    ###########################################################################
+    # forces and time evolution #
+    #############################
+
+    ###########################################################################
+    # visualization functions #
+    ##########################
+
+    ###########################################################################
+    # testing functions #
+    ##########################
+    # def test_next(self):
+    #     success = True
+    #     bad = []
+    #     for h in self.H_label:
+    #         h0 = self.next(h)
+    #         h1 = self.next(h0)
+    #         h2 = self.next(h1)
+    #         if h - h2 != 0:
+    #             success = False
+    #             bad.append(h)
+    #     return success, bad
+    #
+    # def test_prev(self):
+    #     success = True
+    #     bad = []
+    #     for h in self.H_label:
+    #         h0 = self.prev(h)
+    #         h1 = self.prev(h0)
+    #         h2 = self.prev(h1)
+    #         if h - h2 != 0:
+    #             success = False
+    #             bad.append(h)
+    #
+    #     return success, bad
+    #
+    # def test_twin(self):
+    #     success = True
+    #     bad = []
+    #     for h in self.H_label:
+    #         h1 = self.twin(h)
+    #         h2 = self.twin(h1)
+    #         if h - h2 != 0:
+    #             success = False
+    #             bad.append(h)
+    #     return success, bad
+
+    ###########################################################################
+    ###########################################################################
+    # helper functions #
+    ####################################
+
+    # def average_face_area(self):
+    #     A = 0.0
+    #     N = len(self.F_label)
+    #     for f in self.F_label:
+    #         Avec = self.face_area_vector(f)
+    #         A += np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / N
+    #     return A
+
+    # def area_weighted_vertex_normal(self, v):
+    #     """."""
+    #     n = np.zeros(3)
+    #
+    #     h_start = self.V_hedge[v]
+    #     h = h_start
+    #     while True:
+    #         f = self.H_face[h]
+    #         n += self.face_area_vector(f)
+    #
+    #         h = self.H_prev[h]
+    #         h = self.H_twin[h]
+    #
+    #         if h == h_start:
+    #             break
+    #
+    #     n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
+    #     return n
+
+    # def get_face_area_vectors(self):
+    #     F_label = self.F_label
+    #     Nfaces = len(F_label)
+    #     F_area_vectors = np.zeros((Nfaces, 3))
+    #     vertices = self.V_pq[:, :3]
+    #
+    #     for _f in range(Nfaces):
+    #         f = F_label[_f]
+    #         h = self.F_hedge[f]
+    #         hn = self.H_next[h]
+    #         hp = self.H_prev[h]
+    #
+    #         v0 = self.H_vertex[hp]
+    #         v1 = self.H_vertex[h]
+    #         v2 = self.H_vertex[hn]
+    #
+    #         u1 = vertices[v1] - vertices[v0]
+    #         u2 = vertices[v2] - vertices[v1]
+    #
+    #         F_area_vectors[_f] = jitcross(u1, u2)
+    #     # n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
+    #     return F_area_vectors
+
+    # def get_vertex_normal(self, v):
+    #     F = self.f_adjacent_to_v(v)
+    #     n = np.zeros(3)
+    #
+    #     for f in F:
+    #         n += self.face_area_vector(f)
+    #
+    #     n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
+    #     return n
+
+    # def rcm_pose(self, vertex_list):
+    #     """computes the SE3-valued Riemannian center of mass of the euclidean transformations associated with vertices in vertex_list"""
+    #     iters = 4
+    #     pq = self.V_pq
+    #     Nsamps = len(vertex_list)
+    #     G = np.zeros((Nsamps, 7))
+    #     # G[:] = np.array([pq[i] for i in vertex_list])
+    #     ##########################################
+    #     g0 = pq[vertex_list[0]]  # G[0]
+    #     g0_inv = inv_se3_quaternion(g0)
+    #     for i in range(Nsamps):
+    #         G[i] = mul_se3_quaternion(g0_inv, pq[vertex_list[i]])
+    #     ##########################################
+    #     mu_g = np.array([G[0, 0], G[0, 1], G[0, 2], G[0, 3], G[0, 4], G[0, 5], G[0, 6]])
+    #     # mu_g = np.zeros(7)  # sum(G) / Nsamps
+    #     # for g in G:
+    #     #     mu_g += g / Nsamps
+    #     # mu_g[3:] /= np.sqrt(mu_g[3] ** 2 + mu_g[4] ** 2 + mu_g[5] ** 2 + mu_g[6] ** 2)
+    #
+    #     for iter in range(iters):
+    #         mu_g_inv = inv_se3_quaternion(mu_g)
+    #         Psi = np.zeros(6)
+    #         for g in G:
+    #             mu_g_inv_g = mul_se3_quaternion(mu_g_inv, g)
+    #             Psi += log_se3_quaternion(mu_g_inv_g) / Nsamps
+    #         mu_g = mul_se3_quaternion(mu_g, exp_se3_quaternion(Psi))
+    #         # for g in G:
+    #         #     g_mu_g_inv = mul_se3_quaternion(g, mu_g_inv)
+    #         #     Psi += log_se3_quaternion(g_mu_g_inv) / Nsamps
+    #         # mu_g = mul_se3_quaternion(exp_se3_quaternion(Psi), mu_g)
+    #     ##########################################
+    #     mu_g = mul_se3_quaternion(g0, mu_g)
+    #     ##########################################
+    #     return mu_g
+    #
+    # def acm_pose(self, vertex_list):
+    #     """computes the affine center of mass of the euclidean transformations associated with vertices in vertex_list"""
+    #     G = self.V_pq
+    #     Nsamps = len(vertex_list)
+    #     g0 = G[vertex_list[0]]
+    #     mu_g = np.zeros_like(g0)
+    #     for i in vertex_list:
+    #         g = G[i]
+    #         mu_g += g / Nsamps
+    #     mu_g[3:] /= np.sqrt(mu_g[3] ** 2 + mu_g[4] ** 2 + mu_g[5] ** 2 + mu_g[6] ** 2)
+    #     return mu_g
+    #
+    # def rcm_quaternion(self, vertex_list):
+    #     """computes the unit quaternion-valued Riemannian center of mass of the euclidean transformations associated with vertices in vertex_list"""
+    #     iters = 4
+    #
+    #     G = self.V_pq[:, 3:]
+    #     Nsamps = len(vertex_list)
+    #     g0 = G[vertex_list[0]]
+    #     mu_g = np.zeros_like(g0)
+    #     mu_g[:] = g0
+    #     for iter in range(iters):
+    #         mu_g_inv = inv_quaternion(mu_g)
+    #         Psi = np.zeros(3)
+    #         for i in vertex_list:
+    #             g = G[i]
+    #             mu_g_inv_g = mul_quaternion(mu_g_inv, g)
+    #             Psi += log_unit_quaternion(mu_g_inv_g) / Nsamps
+    #             # Psi += log_se3_quaternion(mul_se3_quaternion(g, mu_g_inv)) / Nsamps
+    #         mu_g = mul_quaternion(mu_g, exp_unit_quaternion(Psi))
+    #         # mu_g = mul_se3_quaternion(exp_se3_quaternion(Psi), mu_g)
+    #     return mu_g
+
     # def regularize_mesh_rcm(self):
     #     pq = np.zeros_like(self.V_pq)
     #
@@ -1826,53 +2206,3 @@ class Brane:
     #             break
     #
     #     return np.array(V, dtype=np.int32)
-
-    def get_initial_edge_tangents(self):
-        # H_label = self.H_label
-        Nhedges = len(self.H_label)
-        H_tangent_components = np.zeros((Nhedges, 2))
-        H_psi = np.zeros((Nhedges, 6))
-
-        for h in range(Nhedges):
-            hp = self.H_prev[h]
-            v0 = self.H_vertex[hp]
-            v1 = self.H_vertex[h]
-            pq0 = self.V_pq[v0]
-            pq1 = self.V_pq[v1]
-            pq0inv = inv_se3_quaternion(pq0)
-            pq01 = mul_se3_quaternion(pq0inv, pq1)
-            psi01 = log_se3_quaternion(pq01)
-
-            ell01 = psi01[:3]
-            the01 = psi01[3:]
-            H_psi[h] = psi01
-            H_tangent_components[h] = ell01[:2]
-
-        return H_psi, H_tangent_components
-
-    def build_minimesh_from_psi(self, v_c):
-        pq_c = self.V_pq[v_c]  # center vertex pose
-
-        poses = [[*pq_c]]
-        faces = []
-
-        h_start = self.V_hedge[v_c]
-        h = h_start  # halfedge from center to boundary vertex
-        v_new = 0
-        while True:
-            v_new += 1
-            faces.append([0, v_new, v_new + 1])
-
-            pq_c2b = exp_se3_quaternion(
-                self.H_psi[h]
-            )  # center to boundary transformation
-            # pq_b = mul_se3_quaternion(pq_c, pq_c2b)  # boundary pose
-            poses.append([*mul_se3_quaternion(pq_c, pq_c2b)])
-            h = self.H_twin[self.H_prev[h]]  # halfedge from center to boundary vertex
-            if h == h_start:
-                break
-
-        faces[-1][-1] = 1  # relabel vertex of last vertex of last face
-        F = np.array(faces, dtype=np.int32)
-        V_pq = np.array(poses, dtype=np.float64)
-        return V_pq, F
