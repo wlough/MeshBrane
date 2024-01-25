@@ -1,8 +1,10 @@
+from numba import njit
 import numpy as np
 from src.model import Brane
 from src.utils import load_mesh_from_ply
 import os
 from src.pretty_pictures import mayavi_plots as mp
+from src.numdiff import jitnorm
 import dill
 from copy import deepcopy
 from matplotlib import colormaps as plt_cmap
@@ -49,6 +51,13 @@ def get_cmap(cmin=0.0, cmax=1.0, name="hsv"):
     return my_cmap
 
 
+def scalars_to_rgbs(samples, cmin=0.0, cmax=1.0, name="coolwarm"):
+    # Nsamps = len(samples)
+    cmap = get_cmap(cmin=cmin, cmax=cmax, name=name)
+    rgbs = np.array([cmap(_)[:-1] for _ in samples])
+    return rgbs
+
+
 def initialize_sim(
     vertices,
     faces,
@@ -56,6 +65,7 @@ def initialize_sim(
     Tsave,
     length_reg_stiffness,
     area_reg_stiffness,
+    volume_reg_stiffness,
     bending_modulus,
     splay_modulus,
     linear_drag_coeff,
@@ -89,6 +99,7 @@ def initialize_sim(
         "faces": faces,
         "length_reg_stiffness": length_reg_stiffness,
         "area_reg_stiffness": area_reg_stiffness,
+        "volume_reg_stiffness": volume_reg_stiffness,
         "bending_modulus": bending_modulus,
         "splay_modulus": splay_modulus,
         "linear_drag_coeff": linear_drag_coeff,
@@ -458,8 +469,72 @@ def reg_sim_run(sim_state, make_plots=True, iters=20, weight=0.1):
     return sim_state
 
 
+def sphere_reg_sim_run(sim_state, make_plots=True, iters=20, weight=0.1):
+    b = sim_state["b"]
+    image_count = sim_state["image_count"]
+    vertices = b.V_pq[:, :3]
+    Nverts = len(b.V_pq)
+    r_com = np.einsum("si->i", vertices) / Nverts
+    rad = np.sqrt(np.einsum("si,si->", vertices, vertices) / Nverts)
+    T = 5e-2
+    dt = 1e-3
+    Nt = int(T / dt)
+    Kl, Ka, Kv = b.Klength, b.Karea, b.Kvolume
+    vals = np.array([b.valence(v) for v in b.V_label])
+    val_min = min(vals)
+    val_max = max(vals)
+    print(
+        f"iter={-1} of {iters}, Nflips={0}, val_min={val_min}, val_max={val_max}            ",
+        end="\n",
+    )
+
+    if make_plots:
+        fig_kwargs = save_fig_data(sim_state)
+        mp.plot_from_data(**fig_kwargs)
+        image_count += 1
+    for iter in range(iters):
+        # Nflips = b.regularize_by_flips()
+        Nflips = b.regularize_by_flips_min()
+        vals = np.array([b.valence(v) for v in b.V_label])
+        val_min = min(vals)
+        val_max = max(vals)
+        # b.regularize_by_shifts(weight)
+        # for _ in range(Nt):
+        #     b.forward_euler_reg_step(dt)
+        # b.V_pq[:, :3] = get_new_xyz(b.V_pq[:, :3], r_com, rad)
+        print(
+            f"iter={iter} of {iters}, Nflips={Nflips}, val_min={val_min}, val_max={val_max}            ",
+            end="\n",
+        )
+        # print(
+        #     f"iter={iter} of {iters}, V={b.volume}, V0={b.volume0}          ",
+        #     end="\n",
+        # )
+        # print(f"iter={iter} of {iters}, Nflips={0}            ", end="\n")
+
+        if make_plots:
+            sim_state["image_count"] = image_count
+            fig_kwargs = save_fig_data(sim_state)
+            mp.plot_from_data(**fig_kwargs)
+            image_count += 1
+
+    return sim_state
+
+
+@njit
+def get_new_xyz(vertices, r_com, rad):
+    Nv = len(vertices)
+    r_new = np.zeros_like(vertices)
+    for i in range(Nv):
+        r = vertices[i]
+        r_rel = r - r_com
+        r_unit = r_rel / jitnorm(r_rel)
+        r_new[i] = r_com + rad * r_unit
+    return r_new
+
+
 # %%
-ply_path = "./data/ply_files/sphere.ply"
+ply_path = "./data/ply_files/sphere_coarse_backup.ply"
 vertices, faces = load_mesh_from_ply(ply_path)
 
 init_data = {
@@ -469,37 +544,77 @@ init_data = {
     "Tsave": 5e-1,
     "length_reg_stiffness": 1e-1,
     "area_reg_stiffness": 1e-2,
+    "volume_reg_stiffness": 1e4,
     "bending_modulus": 1.0,
     "splay_modulus": 1.0,
     "linear_drag_coeff": 1.0,
     "dt": 1e-3,
-    "output_directory": "./output/reg_sim",
+    "output_directory": "./output/sphere_reg_sim2",
 }
 Trun = 15
 sim_state = initialize_sim(**init_data)
-sim_state = run(sim_state, Trun)
-# sim_state = reg_sim_run(sim_state, make_plots=True, iters=40, weight=0.1)
+# sim_state = run(sim_state, Trun)
+# sim_state = reg_sim_run(sim_state, make_plots=True, iters=100, weight=0.1)
+sim_state = sphere_reg_sim_run(sim_state, make_plots=True, iters=10, weight=0.5)
 movie_dir = sim_state["output_directory"] + "/temp_images"
-mp.movie(movie_dir)
+# mp.movie(movie_dir)
+b = sim_state["b"]
+arr = b.V_pq
 
 # %%
-# brane_init_data = {
-#     "vertices": vertices,
-#     "faces": faces,
-#     "length_reg_stiffness": 1e-1,
-#     "area_reg_stiffness": 1e-2,
-#     "bending_modulus": 1.0,
-#     "splay_modulus": 1.0,
-#     "linear_drag_coeff": 1.0,
-# }
-#
-# b = Brane(**brane_init_data)
-# K = b.get_Gaussian_curvature()
-# K = sum(K)/len(K)
-# Vpq = np.sqrt(np.einsum("si,si->", b.V_pq[:, :3], b.V_pq[:, :3])/len(b.V_pq))
-# k = 1/Vpq**2
-# k
-# K
+# vertices,
+# faces,
+# length_reg_stiffness,
+# area_reg_stiffness,
+# volume_reg_stiffness,
+# bending_modulus,
+# splay_modulus,
+# linear_drag_coeff,
+# zeta_linear,
+# preferred_curvature
+ply_path = "./data/ply_files/sphere.ply"
+vertices, faces = load_mesh_from_ply(ply_path)
+brane_init_data = {
+    "vertices": vertices,
+    "faces": faces,
+    "length_reg_stiffness": 1e-1,
+    "area_reg_stiffness": 1e-2,
+    "volume_reg_stiffness": 1.0,
+    "bending_modulus": 1.0,
+    "splay_modulus": 1.0,
+    "linear_drag_coeff": 1.0,
+    "zeta_linear": 1.0,
+    "preferred_curvature": 0.0,
+}
+
+b = Brane(**brane_init_data)
+b.forward_euler_reg_step(1e-3)
+output_directory = "./output/sphere_reg_sim2"
+b.save_mesh_data(output_directory)
+b.length_reg_force(13)
+b.area_reg_force(13)
+b.volume_reg_force(13)
+Vol = b.volume_of_mesh()
+rad = np.sqrt(np.einsum("si,si->", b.V_pq[:, :3], b.V_pq[:, :3]) / len(b.V_pq))
+Krad = 1 / rad**2
+Volrad = 4 * np.pi * rad**3 / 3
+K = b.get_Gaussian_curvature()
+Kp = np.array([_ for _ in K if _ >= 0])
+Km = np.array([_ for _ in K if _ < 0])
+Kave = sum(K) / len(K)
+Kvar = sum((K - Kave) ** 2) / len(K)
+Kstd = np.sqrt(Kvar)
+
+cmin = Kave - 2 * Kstd
+cmax = Kave + 2 * Kstd
+Kclose = np.array([_ for _ in K if _ >= cmin and _ <= cmax])
+
+Krgb = scalars_to_rgbs(K, cmin=cmin, cmax=cmax)
+b.V_rgb = Krgb
+
+mp.brane_plot(b, color_by_verts=True, show_halfedges=True)
+
+
 # %%
 # b = sim_state["b"]
 # b.forward_euler_reg_step(1e-3)

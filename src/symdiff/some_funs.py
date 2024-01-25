@@ -13,7 +13,7 @@ dot = lambda V, W: tc(tp(V, W), (0, 1))
 norm = lambda u: sp.sqrt(dot(u, u))
 
 
-def seinsum(tstr, tensor_list):
+def einsum(tstr, tensor_list):
     """
     symbolic einsum
 

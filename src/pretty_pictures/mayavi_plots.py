@@ -391,27 +391,28 @@ def mayavi_mesh_minimesh_plot(
     mlab.close(all=True)
 
 
-def curve_plot():
-    # Generate data for a 3D curve
-    t = np.linspace(0, 4 * np.pi, 100)
-    ex, ey, ez = np.eye(3)
-    a = 0.1 * np.pi
-    u1 = (ex * np.cos(a) + ez * np.sin(a)) / np.sqrt(2)
-    u2 = 0.5 * (ex * np.cos(a) + ez * np.sin(a)) / np.sqrt(2)
-    w = ez
-    psi1 = np.array([*u1, *w])
-    psi2 = np.array([*u2, *w])
-    pq1 = np.array([exp_se3_quaternion(_ * psi1) for _ in t])
-    pq2 = np.array([exp_se3_quaternion(_ * psi2) for _ in t])
-    x1, y1, z1 = pq1[:, 0], pq1[:, 1], pq1[:, 2]
-    x2, y2, z2 = pq2[:, 0], pq2[:, 1], pq2[:, 2]
-
-    # Plot the curve
-    mlab.plot3d(x1, y1, z1, color=(1, 0, 0), tube_radius=None)
-    mlab.plot3d(x2, y2, z2, color=(0, 0, 1), tube_radius=None)
-
-    # Show the plot
-    mlab.show()
+#
+# def curve_plot():
+#     # Generate data for a 3D curve
+#     t = np.linspace(0, 4 * np.pi, 100)
+#     ex, ey, ez = np.eye(3)
+#     a = 0.1 * np.pi
+#     u1 = (ex * np.cos(a) + ez * np.sin(a)) / np.sqrt(2)
+#     u2 = 0.5 * (ex * np.cos(a) + ez * np.sin(a)) / np.sqrt(2)
+#     w = ez
+#     psi1 = np.array([*u1, *w])
+#     psi2 = np.array([*u2, *w])
+#     pq1 = np.array([exp_se3_quaternion(_ * psi1) for _ in t])
+#     pq2 = np.array([exp_se3_quaternion(_ * psi2) for _ in t])
+#     x1, y1, z1 = pq1[:, 0], pq1[:, 1], pq1[:, 2]
+#     x2, y2, z2 = pq2[:, 0], pq2[:, 1], pq2[:, 2]
+#
+#     # Plot the curve
+#     mlab.plot3d(x1, y1, z1, color=(1, 0, 0), tube_radius=None)
+#     mlab.plot3d(x2, y2, z2, color=(0, 0, 1), tube_radius=None)
+#
+#     # Show the plot
+#     mlab.show()
 
 
 def set_rgba_colors(rgb, a):

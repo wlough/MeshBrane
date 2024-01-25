@@ -1,11 +1,12 @@
 import numpy as np
 import sympy as sp
 from skimage.measure import marching_cubes
-from src.numdiff import jitcross, jitdot, index_of_nested, transpose_csr
+from src.numdiff import jitcross, jitdot, jitnorm, index_of_nested, transpose_csr
 from plyfile import PlyData, PlyElement
 from numba import njit
 from src.model import Brane
 import os
+import multiprocessing as mu
 
 
 def regularize_and_resave_ply(surface_name, backup=True):
@@ -31,6 +32,52 @@ def regularize_and_resave_ply(surface_name, backup=True):
     for iter in range(iters):
         Nflips = b.regularize_by_flips()
         b.regularize_by_shifts(weight)
+        # print(f"iter={iter+1} of {iters}, Nflips={Nflips}            ", end="\r")
+    vertices = b.V_pq[:, :3]
+    faces = b.faces
+    save_mesh_to_ply(vertices, faces, file_path)
+
+
+@njit
+def re_sphere_vertices(vertices, r_com, rad):
+    Nv = len(vertices)
+    r_new = np.zeros_like(vertices)
+    for i in range(Nv):
+        r = vertices[i]
+        r_rel = r - r_com
+        r_unit = r_rel / jitnorm(r_rel)
+        r_new[i] = r_com + rad * r_unit
+    return r_new
+
+
+def regularize_sphere_ply():
+    surface_name = "sphere"
+    iters = 40
+    weight = 0.1
+    file_path = f"./data/ply_files/{surface_name}.ply"
+    backup_file_path = f"./data/ply_files/{surface_name}_backup.ply"
+    os.system(f"cp {file_path} {backup_file_path}")
+
+    vertices0, faces0 = load_mesh_from_ply(file_path)
+    brane_init_data = {
+        "vertices": vertices0,
+        "faces": faces0,
+        "length_reg_stiffness": 1.0,
+        "area_reg_stiffness": 1.0,
+        "bending_modulus": 1.0,
+        "splay_modulus": 1.0,
+        "linear_drag_coeff": 1.0,
+    }
+
+    b = Brane(**brane_init_data)
+    vertices = b.V_pq[:, :3]
+    Nverts = len(b.V_pq)
+    r_com = np.einsum("si->i", vertices) / Nverts
+    rad = np.sqrt(np.einsum("si,si->", vertices, vertices) / Nverts)
+    for iter in range(iters):
+        Nflips = b.regularize_by_flips()
+        b.regularize_by_shifts(weight)
+        b.V_pq[:, :3] = re_sphere_vertices(b.V_pq[:, :3], r_com, rad)
         # print(f"iter={iter+1} of {iters}, Nflips={Nflips}            ", end="\r")
     vertices = b.V_pq[:, :3]
     faces = b.faces
@@ -983,3 +1030,64 @@ def _f_adjacent_to_v(v, V_hedge, H_face, H_prev, H_twin):
             break
 
     return neighbors
+
+
+# @njit
+def get_halfedges_from_face(face):
+    Nhedges_per_face = len(face)
+    halfedge = np.zeros((Nhedges_per_face, 2), dtype=np.int32)
+    for i in range(Nhedges_per_face):
+        halfedge[i, 0] = face[i]
+        halfedge[i, 1] = face[(i + 1) % Nhedges_per_face]
+    return halfedge
+
+
+# @njit
+def get_halfedges_from_triangle(face):
+    return np.array(
+        [[face[0], face[1]], [face[1], face[2]], [face[2], face[0]]], dtype=np.int32
+    )
+
+
+def get_halfedges_from_faces(F):
+    """gets halfedges from faces with Nhedges_per_face"""
+    Nfaces, Nhedges_per_face = F.shape
+    Nhedges = Nfaces * Nhedges_per_face
+    label_type = np.int32
+    H = np.zeros((Nhedges, 2), dtype=label_type)
+    H_label = np.zeros(Nhedges, dtype=label_type)
+    for f in range(Nfaces):
+        face = F[f]
+        for i in range(Nhedges_per_face):
+            h = Nhedges_per_face * f + i
+            H_label[h] = Nhedges_per_face * f + i
+            H[h, 0] = face[i]
+            H[h, 1] = face[(i + 1) % Nhedges_per_face]
+
+    # H_label = np.array([h for h in range(Nhedges)])
+    return H, H_label
+
+
+def get_halfedges_from_triangles(F):
+    H = np.concatenate([[face[:2], face[1:], [face[2], face[0]]] for face in F])
+    H_label = np.array([h for h, _ in enumerate(H)], dtype=np.int32)
+    return H, H_label
+
+
+def get_halfedges_from_faces_parallel(F):
+    N_cpu = mu.cpu_count()
+    with mu.Pool(processes=N_cpu) as p:
+        H = np.concatenate(p.map(get_halfedges_from_face, F))
+    H_label = np.array([h for h, _ in enumerate(H)], dtype=np.int32)
+    return H, H_label
+
+
+def get_halfedges_from_triangles_parallel(F):
+    N_cpu = mu.cpu_count()
+    with mu.Pool(processes=N_cpu) as p:
+        H = np.concatenate(p.map(get_halfedges_from_triangle, F))
+    H_label = np.array([h for h, _ in enumerate(H)], dtype=np.int32)
+    return H, H_label
+
+
+# %%

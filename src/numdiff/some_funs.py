@@ -283,6 +283,19 @@ def jitnorm(u):
     return normu
 
 
+@njit("f8(f8[:],f8[:], f8[:])")
+def triprod(u, v, w):
+    uvw = (
+        u[1] * v[2] * w[0]
+        - u[2] * v[1] * w[0]
+        + u[2] * v[0] * w[1]
+        - u[0] * v[2] * w[1]
+        + u[0] * v[1] * w[2]
+        - u[1] * v[0] * w[2]
+    )
+    return uvw
+
+
 #######################################
 # actual quaternion operations
 @njit("f8[:](f8[:], f8[:])")
