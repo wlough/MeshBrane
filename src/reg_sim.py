@@ -4,7 +4,7 @@ from src.model import Brane
 from src.utils import load_mesh_from_ply
 import os
 from src.pretty_pictures import mayavi_plots as mp
-from src.numdiff import jitnorm
+from src.numdiff import jitnorm, quaternion_to_matrix_vectorized
 import dill
 from copy import deepcopy
 from matplotlib import colormaps as plt_cmap
@@ -58,7 +58,442 @@ def scalars_to_rgbs(samples, cmin=0.0, cmax=1.0, name="coolwarm"):
     return rgbs
 
 
+def save_fig_data(sim_state):
+    b = sim_state["b"]
+    mesh_data = b.pack_mesh_data()
+    vis_data = b.pack_visual_data()
+    output_directory = sim_state["output_directory"]
+    image_count = sim_state["image_count"]
+    mesh_data_file = f"{output_directory}/temp_images/mesh_data_{image_count:0>4}.npy"
+    vis_data_file = f"{output_directory}/temp_images/vis_data_{image_count:0>4}.npy"
+    np.save(mesh_data_file, mesh_data)
+    np.save(vis_data_file, vis_data)
+    fig_path = f"{output_directory}/temp_images/fig_{image_count:0>4}.png"
+    fig_kwargs = {
+        "V_pq": b.V_pq,
+        "faces": b.faces,
+        "V_rgb": b.V_rgb,
+        "V_radius": b.V_radius,
+        "H_rgb": b.H_rgb,
+        "F_rgb": b.F_rgb,
+        "F_opacity": b.F_opacity,
+        "H_opacity": b.H_opacity,
+        "V_opacity": b.V_opacity,
+        "V_normal_rgb": b.V_normal_rgb,
+        "show": False,
+        "save": True,
+        "show_surface": True,
+        "show_edges": True,
+        "show_vertices": False,
+        "show_normals": False,
+        "show_tangent1": False,
+        "show_tangent2": False,
+        "fig_path": fig_path,
+    }
+    return fig_kwargs
+
+
 def initialize_sim(
+    Tplot,
+    Tsave,
+    dt,
+    vertices,
+    faces,
+    length_reg_stiffness,
+    area_reg_stiffness,
+    volume_reg_stiffness,
+    bending_modulus,
+    splay_modulus,
+    spontaneous_curvature,
+    linear_drag_coeff,
+    output_directory,
+):
+    init_data = {
+        "Tplot": Tplot,
+        "Tsave": Tsave,
+        "dt": dt,
+        "vertices": vertices,
+        "faces": faces,
+        "length_reg_stiffness": length_reg_stiffness,
+        "area_reg_stiffness": area_reg_stiffness,
+        "volume_reg_stiffness": volume_reg_stiffness,
+        "bending_modulus": bending_modulus,
+        "splay_modulus": splay_modulus,
+        "spontaneous_curvature": spontaneous_curvature,
+        "linear_drag_coeff": linear_drag_coeff,
+        "output_directory": output_directory,
+    }
+    os.system(f"rm -r {output_directory}")
+    os.system(f"mkdir {output_directory}")
+    os.system(f"mkdir {output_directory}/temp_images")
+    os.system(f"mkdir {output_directory}/states")
+    os.system(f"mkdir {output_directory}/init_data")
+    np.save(f"{output_directory}/init_data/vertices.npy", vertices)
+    np.save(f"{output_directory}/init_data/faces.npy", faces)
+    with open(f"{output_directory}/init_data/init_data.txt", "w") as _f:
+        init_str = ""
+        for key, val in init_data.items():
+            if not key in ["vertices", "faces"]:
+                init_str += f"{key} = {val}\n"
+        _f.write(init_str)
+    # with open(f"{output_directory}/init_data.pickle", "wb") as _f:
+    #     dill.dump(init_data, _f)
+
+    brane_init_data = {
+        "vertices": vertices,
+        "faces": faces,
+        "length_reg_stiffness": length_reg_stiffness,
+        "area_reg_stiffness": area_reg_stiffness,
+        "volume_reg_stiffness": volume_reg_stiffness,
+        "bending_modulus": bending_modulus,
+        "splay_modulus": splay_modulus,
+        "linear_drag_coeff": linear_drag_coeff,
+        "spontaneous_curvature": spontaneous_curvature,
+    }
+
+    b = Brane(**brane_init_data)
+
+    sim_state = {
+        "b": b,
+        "success": True,
+        "t": 0.0,
+        "dt": dt,
+        "t2plot": Tplot,
+        "t2save": Tsave,
+        "tstop": Tplot,
+        "image_count": 0,
+        "Tplot": Tplot,
+        "Tsave": Tsave,
+        "output_directory": output_directory,
+    }
+
+    return sim_state
+
+
+def regularize_run(sim_state, make_plots=True, iters=20, weight=0.1):
+    b = sim_state["b"]
+    image_count = sim_state["image_count"]
+    vertices = b.V_pq[:, :3]
+    Nvertices = len(b.V_pq)
+    T = 5e-2
+    dt = 1e-3
+    Nt = int(T / dt)
+    vals = np.array([b.valence(v) for v in range(Nvertices)])
+    val_min = min(vals)
+    val_max = max(vals)
+    print(
+        f"iter={-1} of {iters}, Nflips={0}, val_min={val_min}, val_max={val_max}            ",
+        end="\n",
+    )
+
+    if make_plots:
+        fig_kwargs = save_fig_data(sim_state)
+        mp.plot_from_data(**fig_kwargs)
+        image_count += 1
+    for iter in range(iters):
+        Nflips = b.regularize_by_flips()
+        vals = np.array([b.valence(v) for v in range(Nvertices)])
+        val_min = min(vals)
+        val_max = max(vals)
+        b.regularize_by_shifts(weight)
+        for _ in range(Nt):
+            b.forward_euler_reg_step(dt)
+        # b.V_pq[:, :3] = get_new_xyz(b.V_pq[:, :3], r_com, rad)
+        print(
+            f"iter={iter} of {iters}, Nflips={Nflips}, val_min={val_min}, val_max={val_max}            ",
+            end="\n",
+        )
+        # print(
+        #     f"iter={iter} of {iters}, V={b.volume}, V0={b.volume0}          ",
+        #     end="\n",
+        # )
+        # print(f"iter={iter} of {iters}, Nflips={0}            ", end="\n")
+
+        if make_plots:
+            sim_state["image_count"] = image_count
+            fig_kwargs = save_fig_data(sim_state)
+            mp.plot_from_data(**fig_kwargs)
+            image_count += 1
+
+    return sim_state
+
+
+# %%
+
+ply_path = "./data/ply_files/sphere.ply"
+vertices, faces = load_mesh_from_ply(ply_path)
+
+init_data = {
+    "Tplot": 5e-2,
+    "Tsave": 5e-1,
+    "dt": 1e-2,
+    "vertices": vertices,
+    "faces": faces,
+    "length_reg_stiffness": 1e-1,
+    "area_reg_stiffness": 1e-2,
+    "volume_reg_stiffness": 1.0,
+    "bending_modulus": 1.0,
+    "splay_modulus": 1.0,
+    "spontaneous_curvature": 0.0,
+    "linear_drag_coeff": 1.0,
+    "output_directory": "./output/sim0",
+}
+
+# something breaks in b.valence after you flip an edge...
+sim_state = initialize_sim(**init_data)
+# %%
+iters = 10
+iter = 1
+b = sim_state["b"]
+self = b
+mp.brane_plot(b, color_by_verts=True, show_halfedges=True, show_normals=True)
+for h in range(len(b.halfedges)):
+    flipit = b.flip_helps_valence(h)
+    if flipit:
+        print(h)
+        ht = self.H_twin[h]
+        h1 = self.H_next[h]
+        h2 = self.H_prev[h]
+        h3 = self.H_next[ht]
+        h4 = self.H_prev[ht]
+        f1 = self.H_face[h]
+        f2 = self.H_face[ht]
+        v1 = self.H_vertex[h4]
+        v2 = self.H_vertex[h1]
+        v3 = self.H_vertex[h2]
+        v4 = self.H_vertex[h3]
+
+        self.faces[f1] = np.array([v2, v3, v4])
+        self.faces[f2] = np.array([v4, v1, v2])
+        # and halfedge referenced by new faces
+        self.F_hedge[f1] = h2
+        self.F_hedge[f2] = h4
+
+        self.halfedges[h] = np.array([v4, v2])
+        self.halfedges[ht] = np.array([v2, v4])
+        # update next/prev halfedge
+        self.H_next[h] = h2
+        self.H_prev[h2] = h
+        # self.update_next_prev(h2, h3)
+        self.H_next[h2] = h3
+        self.H_prev[h3] = h2
+        # self.update_next_prev(h3, h)
+        self.H_next[h3] = h
+        self.H_prev[h] = h3
+        # self.update_next_prev(ht, h4)
+        self.H_next[ht] = h4
+        self.H_prev[h4] = ht
+        # self.update_next_prev(h4, h1)
+        self.H_next[h4] = h1
+        self.H_prev[h1] = h4
+        # self.update_next_prev(h1, ht)
+        self.H_next[h1] = ht
+        self.H_prev[ht] = h1
+        # update face referenced by halfedges
+        # self.update_f_of_h(h3, f1)
+        self.H_face[h3] = f1
+
+        # self.update_f_of_h(h1, f2)
+        self.H_face[h1] = f2
+
+        # update vert referenced by new halfedges
+        # and halfedge referenced by verts
+        # self.update_v_of_h(h, v2)
+        self.H_vertex[h] = v2
+        # self.update_v_of_h(ht, v4)
+        self.H_vertex[ht] = v4
+
+        # self.update_h_of_v(v3, h3)
+        self.V_hedge[v3] = h3
+        # self.update_h_of_v(v1, h1)
+        self.V_hedge[v1] = h1
+        # self.update_h_of_v(v2, h2)
+        self.V_hedge[v2] = h2
+        # self.update_h_of_v(v4, h4)
+        self.V_hedge[v4] = h4
+        # b.edge_flip(h)
+# %%
+self = b
+h = 32
+b.next(b.next(b.next(h)))
+ht = self.H_twin[h]
+h1 = self.H_next[h]
+h2 = self.H_prev[h]
+h3 = self.H_next[ht]
+h4 = self.H_prev[ht]
+f1 = self.H_face[h]
+f2 = self.H_face[ht]
+v1 = self.H_vertex[h4]
+v2 = self.H_vertex[h1]
+v3 = self.H_vertex[h2]
+v4 = self.H_vertex[h3]
+
+self.faces[f1] = np.array([v2, v3, v4])
+self.faces[f2] = np.array([v4, v1, v2])
+# and halfedge referenced by new faces
+self.F_hedge[f1] = h2
+self.F_hedge[f2] = h4
+
+self.halfedges[h] = np.array([v4, v2])
+self.halfedges[ht] = np.array([v2, v4])
+# update next/prev halfedge
+self.H_next[h] = h2
+self.H_prev[h2] = h
+# self.update_next_prev(h2, h3)
+self.H_next[h2] = h3
+self.H_prev[h3] = h2
+# self.update_next_prev(h3, h)
+self.H_next[h3] = h
+self.H_prev[h] = h3
+# self.update_next_prev(ht, h4)
+self.H_next[ht] = h4
+self.H_prev[h4] = ht
+# self.update_next_prev(h4, h1)
+self.H_next[h4] = h1
+self.H_prev[h1] = h4
+# self.update_next_prev(h1, ht)
+self.H_next[h1] = ht
+self.H_prev[ht] = h1
+# update face referenced by halfedges
+# self.update_f_of_h(h3, f1)
+self.H_face[h3] = f1
+
+# self.update_f_of_h(h1, f2)
+self.H_face[h1] = f2
+
+# update vert referenced by new halfedges
+# and halfedge referenced by verts
+# self.update_v_of_h(h, v2)
+self.H_vertex[h] = v2
+# self.update_v_of_h(ht, v4)
+self.H_vertex[ht] = v4
+
+# self.update_h_of_v(v3, h3)
+self.V_hedge[v3] = h3
+# self.update_h_of_v(v1, h1)
+self.V_hedge[v1] = h1
+# self.update_h_of_v(v2, h2)
+self.V_hedge[v2] = h2
+# self.update_h_of_v(v4, h4)
+self.V_hedge[v4] = h4
+
+# %%
+h = 3
+b.regularize_by_flips()
+image_count = sim_state["image_count"]
+vertices = b.V_pq[:, :3]
+Nvertices = len(b.V_pq)
+T = 5e-2
+dt = 1e-3
+Nt = int(T / dt)
+vals = np.array([b.valence(v) for v in range(Nvertices)])
+val_min = min(vals)
+val_max = max(vals)
+print(
+    f"iter={-1} of {iters}, Nflips={0}, val_min={val_min}, val_max={val_max}            ",
+    end="\n",
+)
+
+if True:
+    sim_state["image_count"] = image_count
+    fig_kwargs = save_fig_data(sim_state)
+    mp.plot_from_data(**fig_kwargs)
+    image_count += 1
+for iter in range(iters):
+    Nflips = b.regularize_by_flips()
+    vals = np.array([b.valence(v) for v in range(Nvertices)])
+    val_min = min(vals)
+    val_max = max(vals)
+    b.regularize_by_shifts(0.1)
+    for _ in range(Nt):
+        b.forward_euler_reg_step(dt)
+    # b.V_pq[:, :3] = get_new_xyz(b.V_pq[:, :3], r_com, rad)
+    print(
+        f"iter={iter} of {iters}, Nflips={Nflips}, val_min={val_min}, val_max={val_max}            ",
+        end="\n",
+    )
+# %%
+sim_state = regularize_run(sim_state, make_plots=True, iters=50, weight=0.1)
+out_dir = sim_state["output_directory"] + "/temp_images"
+mp.movie(out_dir)
+# %%
+b = sim_state["b"]
+VHF = b.pack_visual_data()
+(
+    V_rgb,
+    V_normal_rgb,
+    V_tangent1_rgb,
+    V_tangent2_rgb,
+    V_radius,
+    H_rgb,
+    F_rgb,
+    F_opacity,
+    H_opacity,
+    V_opacity,
+) = b.unpack_visual_data(VHF)
+V_rgb - b.V_rgb
+V_normal_rgb - b.V_normal_rgb
+V_tangent1_rgb - b.V_tangent1_rgb
+V_tangent2_rgb - b.V_tangent2_rgb
+V_radius - b.V_radius
+H_rgb - b.H_rgb
+F_rgb - b.F_rgb
+F_opacity - b.F_opacity
+H_opacity - b.H_opacity
+V_opacity - b.V_opacity
+# np.ravel()
+# %%
+self = b
+V_pq = self.V_pq
+V_hedge = self.V_hedge
+
+halfedges = self.halfedges
+H_vertex = self.H_vertex
+H_face = self.H_face
+H_next = self.H_next
+H_prev = self.H_prev
+H_twin = self.H_twin
+
+faces = self.faces
+F_hedge = self.F_hedge
+
+Nvertices = len(V_pq)
+Nhalfedges = len(halfedges)
+Nfaces = len(faces)
+nv = 8
+nh = 7
+nf = 4
+Nvdat = nv * Nvertices
+Nhdat = nh * Nhalfedges
+Nfdat = nf * Nfaces
+Ndata = Nvdat + Nhdat + Nfdat
+
+V = np.zeros(Nvdat)
+H = np.zeros(Nhdat)
+F = np.zeros(Nfdat)
+VHF = np.zeros(Ndata + 6)
+
+V[: 7 * Nvertices] = V_pq.ravel()
+V[7 * Nvertices :] = V_hedge
+VHF[:Nvdat] = V
+
+H[: 2 * Nhalfedges] = halfedges.ravel()
+H[2 * Nhalfedges : 3 * Nhalfedges] = H_vertex
+H[3 * Nhalfedges : 4 * Nhalfedges] = H_face
+H[4 * Nhalfedges : 5 * Nhalfedges] = H_next
+H[5 * Nhalfedges : 6 * Nhalfedges] = H_prev
+H[6 * Nhalfedges : 7 * Nhalfedges] = H_twin
+VHF[Nvdat : Nvdat + Nhdat] = H
+
+F[: 3 * Nfaces] = faces.ravel()
+F[3 * Nfaces :] = F_hedge
+VHF[Nvdat + Nhdat : Nvdat + Nhdat + Nfdat] = F
+VHF[-6:] = np.array([Nvertices, nv, Nhalfedges, nh, Nfaces, nf])
+
+
+# %%
+##############################
+def _initialize_sim(
     vertices,
     faces,
     Tplot,
@@ -533,6 +968,48 @@ def get_new_xyz(vertices, r_com, rad):
     return r_new
 
 
+#
+ply_path = "./data/ply_files/sphere.ply"
+vertices, faces = load_mesh_from_ply(ply_path)
+brane_init_data = {
+    "vertices": vertices,
+    "faces": faces,
+    "length_reg_stiffness": 1e-1,
+    "area_reg_stiffness": 1e-2,
+    "volume_reg_stiffness": 1.0,
+    "bending_modulus": 1.0,
+    "splay_modulus": 1.0,
+    "linear_drag_coeff": 1.0,
+    "spontaneous_curvature": 0.0,
+}
+
+b = Brane(**brane_init_data)
+b.forward_euler_reg_step(1e-3)
+output_directory = "./output/sphere_reg_sim2"
+
+b.length_reg_force(13)
+b.area_reg_force(13)
+b.volume_reg_force(13)
+Vol = b.volume_of_mesh()
+rad = np.sqrt(np.einsum("si,si->", b.V_pq[:, :3], b.V_pq[:, :3]) / len(b.V_pq))
+Krad = 1 / rad**2
+Volrad = 4 * np.pi * rad**3 / 3
+K = b.get_Gaussian_curvature()
+Kp = np.array([_ for _ in K if _ >= 0])
+Km = np.array([_ for _ in K if _ < 0])
+Kave = sum(K) / len(K)
+Kvar = sum((K - Kave) ** 2) / len(K)
+Kstd = np.sqrt(Kvar)
+
+cmin = Kave - 2 * Kstd
+cmax = Kave + 2 * Kstd
+Kclose = np.array([_ for _ in K if _ >= cmin and _ <= cmax])
+
+Krgb = scalars_to_rgbs(K, cmin=cmin, cmax=cmax)
+b.V_rgb = Krgb
+
+mp.brane_plot(b, color_by_verts=True, show_halfedges=True, show_normals=True)
+
 # %%
 ply_path = "./data/ply_files/sphere_coarse_backup.ply"
 vertices, faces = load_mesh_from_ply(ply_path)
@@ -562,57 +1039,6 @@ b = sim_state["b"]
 arr = b.V_pq
 
 # %%
-# vertices,
-# faces,
-# length_reg_stiffness,
-# area_reg_stiffness,
-# volume_reg_stiffness,
-# bending_modulus,
-# splay_modulus,
-# linear_drag_coeff,
-# zeta_linear,
-# preferred_curvature
-ply_path = "./data/ply_files/sphere.ply"
-vertices, faces = load_mesh_from_ply(ply_path)
-brane_init_data = {
-    "vertices": vertices,
-    "faces": faces,
-    "length_reg_stiffness": 1e-1,
-    "area_reg_stiffness": 1e-2,
-    "volume_reg_stiffness": 1.0,
-    "bending_modulus": 1.0,
-    "splay_modulus": 1.0,
-    "linear_drag_coeff": 1.0,
-    "zeta_linear": 1.0,
-    "preferred_curvature": 0.0,
-}
-
-b = Brane(**brane_init_data)
-b.forward_euler_reg_step(1e-3)
-output_directory = "./output/sphere_reg_sim2"
-b.save_mesh_data(output_directory)
-b.length_reg_force(13)
-b.area_reg_force(13)
-b.volume_reg_force(13)
-Vol = b.volume_of_mesh()
-rad = np.sqrt(np.einsum("si,si->", b.V_pq[:, :3], b.V_pq[:, :3]) / len(b.V_pq))
-Krad = 1 / rad**2
-Volrad = 4 * np.pi * rad**3 / 3
-K = b.get_Gaussian_curvature()
-Kp = np.array([_ for _ in K if _ >= 0])
-Km = np.array([_ for _ in K if _ < 0])
-Kave = sum(K) / len(K)
-Kvar = sum((K - Kave) ** 2) / len(K)
-Kstd = np.sqrt(Kvar)
-
-cmin = Kave - 2 * Kstd
-cmax = Kave + 2 * Kstd
-Kclose = np.array([_ for _ in K if _ >= cmin and _ <= cmax])
-
-Krgb = scalars_to_rgbs(K, cmin=cmin, cmax=cmax)
-b.V_rgb = Krgb
-
-mp.brane_plot(b, color_by_verts=True, show_halfedges=True)
 
 
 # %%

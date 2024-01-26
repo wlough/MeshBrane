@@ -2,7 +2,9 @@ from mayavi import mlab
 import numpy as np
 from matplotlib import colormaps as plt_cmap
 import os
-import tvtk
+
+# import tvtk
+from src.numdiff import quaternion_to_matrix_vectorized
 
 # red = plt_cmap["Set1"](0)
 # blue = plt_cmap["Set1"](1)
@@ -696,7 +698,6 @@ def plot_from_data(
     H_opacity,
     V_opacity,
     V_normal_rgb,
-    V_frames,
     show=True,
     save=False,
     fig_path=None,
@@ -796,6 +797,7 @@ def plot_from_data(
 
     ###############################
     if show_normals:
+        V_frames = quaternion_to_matrix_vectorized(b.V_pq[:, 3:])
         V_normal = V_frames[:, :, 2]
 
         V_normal_kwargs = {
@@ -970,74 +972,3 @@ def simple_plot(
         mlab.savefig(fig_path, figure=fig, size=figsize)
 
     mlab.close(all=True)
-
-
-# %%
-# # create direct grid as 256**3 x 4 array
-# def create_8bit_rgb_lut():
-#     xl = np.mgrid[0:256, 0:256, 0:256]
-#     lut = np.vstack(
-#         (
-#             xl[0].reshape(1, 256**3),
-#             xl[1].reshape(1, 256**3),
-#             xl[2].reshape(1, 256**3),
-#             255 * np.ones((1, 256**3)),
-#         )
-#     ).T
-#     return lut.astype("int32")
-#
-#
-# # indexing function to above grid
-# def rgb_2_scalar_idx(r, g, b):
-#     return 256**2 * r + 256 * g + b
-#
-#
-# points = np.random.rand(333).reshape((111, 3))
-# # N x 3 colors. <This is where you are storing your custom colors in RGB>
-# colors = np.array([_.color for _ in points])
-#
-# # N scalars
-# scalars = np.zeros((colors.shape[0],))
-#
-# for kp_idx, kp_c in enumerate(colors):
-#     scalars[kp_idx] = rgb_2_scalar_idx(kp_c[0], kp_c[1], kp_c[2])
-#
-# rgb_lut = create_8bit_rgb_lut()
-#
-# points_mlab = mlab.points3d(*points.T, scalars, mode="point")
-#
-# # magic to modify lookup table
-# points_mlab.module_manager.scalar_lut_manager.lut._vtk_obj.SetTableRange(
-#     0, rgb_lut.shape[0]
-# )
-# points_mlab.module_manager.scalar_lut_manager.lut.number_of_colors = rgb_lut.shape[0]
-# points_mlab.module_manager.scalar_lut_manager.lut.table = rgb_lut
-# # %%
-# N = 111
-# xyz = np.random.rand(3 * N).reshape((N, 3))
-# xyz = np.random.rand(3 * N).reshape((N, 3))
-# # xyz= N*3  points
-# # tex = N*3  color_per_point,0~255
-# # tl = triangle_list of pints,  M*3
-#
-# # N*4 0~255 RGBA color
-# color = np.hstack((tex, 255.0 * np.ones((xyz.shape[0], 1))))
-#
-# s = np.arange(xyz.shape[0])
-# fig2 = mlab.figure(figure="test2", fgcolor=(0.0, 0.0, 0.0), bgcolor=(0, 0, 0))
-# mlab.figure(fig2)
-# mesh = mlab.triangular_mesh(
-#     xyz[:, 0],
-#     xyz[:, 1],
-#     xyz[:, 2],
-#     tl,
-#     scalars=s,
-#     representation="wireframe",
-#     opacity=1,
-# )
-#
-# mesh.module_manager.scalar_lut_manager.lut.number_of_colors = len(s)
-# mesh.module_manager.scalar_lut_manager.lut.table = color
-#
-# mlab.draw()
-# mlab.show()
