@@ -25,20 +25,18 @@ from src.numdiff import (
 Brane_spec = [
     ###########################
     # mesh data
-    ("faces", int32[:, :]),
-    ("halfedges", int32[:, :]),
-    ("V_label", int32[:]),
+    ("vertices", float64[:, :]),
+    ("V_pq", float64[:, :]),
     ("V_hedge", int32[:]),
-    ("H_label", int32[:]),
+    ("halfedges", int32[:, :]),
     ("H_vertex", int32[:]),
     ("H_face", int32[:]),
     ("H_next", int32[:]),
     ("H_prev", int32[:]),
     ("H_twin", int32[:]),
     ("H_isboundary", boolean[:]),
-    ("F_label", int32[:]),
+    ("faces", int32[:, :]),
     ("F_hedge", int32[:]),
-    ("V_pq", float64[:, :]),
     ###########################
     # physical parameters
     ("Kbend", float64),
@@ -46,8 +44,8 @@ Brane_spec = [
     ("Kvolume", float64),
     ("Karea", float64),
     ("Klength", float64),
-    ("zeta_linear", float64),
-    ("preferred_curvature", float64),
+    ("linear_drag_coeff", float64),
+    ("spontaneous_curvature", float64),
     ###########################
     # geometric stuff
     ("total_volume", float64),
@@ -66,18 +64,12 @@ Brane_spec = [
     ("V_tangent1_rgb", float64[:, :]),
     ("V_tangent2_rgb", float64[:, :]),
     ("V_radius", float64[:]),
-    ("H_radius", float64[:]),
     ("V_scalar", float64[:]),
     ("H_scalar", float64[:]),
     ("F_scalar", float64[:]),
     ("F_opacity", float64),
     ("H_opacity", float64),
     ("V_opacity", float64),
-    ###########################
-    # simulation data
-    ("params", float64[:]),
-    ("sample_times", float64[:]),
-    ("V_pq_samples", float64[:, :, :]),
     ###########################
 ]
 
@@ -93,9 +85,8 @@ class Brane:
         volume_reg_stiffness,
         bending_modulus,
         splay_modulus,
+        spontaneous_curvature,
         linear_drag_coeff,
-        zeta_linear,
-        preferred_curvature
         # reinit,
     ):
         """to do: make fun to check counterclockwise faces
@@ -122,140 +113,76 @@ class Brane:
 
         """
         ###########################
-        # mesh data
         (
-            V_label,
-            F_label,
-        ) = self._label_vertices_and_faces(vertices, faces)
-        (
-            halfedges,
-            H_label,
-            H_isboundary,
-        ) = self._label_halfedges(vertices, faces)
-        (
-            V_hedge,
-            H_vertex,
-            H_face,
-            H_next,
-            H_prev,
-            H_twin,
-            F_hedge,
-        ) = self._get_combinatorial_mesh_data(
-            V_label, H_label, F_label, halfedges, H_isboundary, faces
+            self.vertices,
+            self.V_hedge,
+            self.halfedges,
+            self.H_vertex,
+            self.H_face,
+            self.H_next,
+            self.H_prev,
+            self.H_twin,
+            self.faces,
+            self.F_hedge,
+        ) = self._get_combinatorial_mesh_data(vertices, faces)
+
+        self.V_pq = self._frame_the_mesh(
+            self.vertices,
+            self.faces,
+            self.halfedges,
+            self.V_hedge,
+            self.H_vertex,
+            self.H_face,
+            self.H_next,
+            self.H_prev,
+            self.H_twin,
+            self.H_isboundary,
+            self.F_hedge,
         )
-        V_pq = self._frame_the_mesh(
-            vertices,
-            faces,
-            halfedges,
-            V_label,
-            V_hedge,
-            H_label,
-            H_vertex,
-            H_face,
-            H_next,
-            H_prev,
-            H_twin,
-            H_isboundary,
-            F_label,
-            F_hedge,
-        )
-        self.V_pq = V_pq
-        self.V_label = V_label
-        self.V_hedge = V_hedge
-        self.halfedges = halfedges
-        self.H_label = H_label
-        self.H_vertex = H_vertex
-        self.H_face = H_face
-        self.H_next = H_next
-        self.H_prev = H_prev
-        self.H_twin = H_twin
-        self.H_isboundary = H_isboundary
-        self.faces = faces
-        self.F_label = F_label
-        self.F_hedge = F_hedge
         ###########################
         # physical parameters
-        params = np.array(
-            [
-                bending_modulus,
-                splay_modulus,
-                volume_reg_stiffness,
-                area_reg_stiffness,
-                length_reg_stiffness,
-                zeta_linear,
-                preferred_curvature,
-            ]
-        )
         self.Kbend = bending_modulus
         self.Ksplay = splay_modulus
         self.Kvolume = volume_reg_stiffness
         self.Karea = area_reg_stiffness
         self.Klength = length_reg_stiffness
-        self.zeta_linear = zeta_linear
-        self.preferred_curvature = preferred_curvature
-        self.params = params
+        self.linear_drag_coeff = linear_drag_coeff
+        self.spontaneous_curvature = spontaneous_curvature
+        # self.params = params
         ###########################
         # geometric stuff
-        preferred_edge_length = self._average_hedge_length(
-            vertices, H_label, H_twin, H_vertex
-        )
-        preferred_cell_area = self._average_cell_area(
+        (
+            self.preferred_edge_length,
+            self.preferred_cell_area,
+            self.preferred_total_volume,
+            self.preferred_total_area,
+        ) = self._preferred_geometric_defaults(
             vertices,
-            V_label,
-            V_hedge,
-            H_vertex,
-            H_next,
-            H_prev,
-            H_twin,
-            F_label,
-            F_hedge,
+            self.V_hedge,
+            self.H_vertex,
+            self.H_next,
+            self.H_prev,
+            self.H_twin,
+            self.faces,
+            self.F_hedge,
         )
-        preferred_total_volume = self._total_volume(vertices, faces)
-        total_volume = preferred_total_volume
-        preferred_total_area = self._total_area(
-            vertices,
-            V_label,
-            V_hedge,
-            H_vertex,
-            H_next,
-            H_prev,
-            H_twin,
-            F_label,
-            F_hedge,
-        )
-        total_area = preferred_total_area
-        self.preferred_edge_length = preferred_edge_length
-        self.preferred_cell_area = preferred_cell_area
-        self.preferred_total_volume = preferred_total_volume
-        self.total_volume = total_volume
-        self.preferred_total_area = preferred_total_area
-        self.total_area = total_area
+        self.total_volume = self.preferred_total_volume
+        self.total_area = self.preferred_total_area
         ###########################
         # visualization stuff
         (
-            V_rgb,
-            V_normal_rgb,
-            V_tangent1_rgb,
-            V_tangent2_rgb,
-            V_radius,
-            H_rgb,
-            H_radius,
-            F_rgb,
-            F_opacity,
-            H_opacity,
-            V_opacity,
-        ) = self._visual_defaults(V_label, H_label, F_label)
-        self.V_rgb = V_rgb
-        self.V_normal_rgb = V_normal_rgb
-        self.V_tangent1_rgb = V_tangent1_rgb
-        self.V_tangent2_rgb = V_tangent2_rgb
-        self.V_radius = V_radius
-        self.H_rgb = H_rgb
-        self.H_radius = H_radius
-        self.F_rgb = F_rgb
-        self.F_opacity = F_opacity
-        self.H_opacity = H_opacity
-        self.V_opacity = V_opacity
+            self.V_rgb,
+            self.V_normal_rgb,
+            self.V_tangent1_rgb,
+            self.V_tangent2_rgb,
+            self.V_radius,
+            self.H_rgb,
+            self.F_rgb,
+            self.F_opacity,
+            self.H_opacity,
+            self.V_opacity,
+        ) = self._visual_defaults(self.vertices, self.halfedges, self.faces)
+
         #############################################################
 
     ###########################################################################
@@ -265,22 +192,14 @@ class Brane:
     # these don't call any other class functions and are safe to use before any
     # class attributes have been assigned
     ###########################################################################
-    def _label_vertices_and_faces(self, vertices, faces):
-        """assigns integers to vertices and faces"""
-        Nvertices = len(vertices)
-        Nfaces = len(faces)
-        V_label = np.array([_ for _ in range(Nvertices)], dtype=np.int32)
-        F_label = np.array([_ for _ in range(Nfaces)], dtype=np.int32)
 
-        return V_label, F_label
-
-    def _label_halfedges(self, vertices, faces):
+    def _get_halfedges(self, vertices, faces):
         """Builds halfedges from vertices and faces, assigns an integer-valued
         label/index to each halfedge, and determines whether the halfedge is
         contained in the boundary of the mesh."""
         halfedges = []
         H_isboundary = []
-        H_label = []
+        # H_lab = []
         ####################
         # save and label halfedges
         h = 0
@@ -295,7 +214,7 @@ class Brane:
                 hedge = [v0, v1]
                 halfedges.append(hedge)
                 H_isboundary.append(False)
-                H_label.append(h)
+                # H_lab.append(h)
                 h += 1
 
         for hedge in halfedges:
@@ -306,47 +225,46 @@ class Brane:
             except Exception:
                 halfedges.append(hedge_twin)
                 H_isboundary.append(True)
-                H_label.append(h)
+                # H_lab.append(h)
                 h += 1
 
         return (
             np.array(halfedges, dtype=np.int32),
-            np.array(H_label, dtype=np.int32),
+            # np.array(H_lab, dtype=np.int32),
             np.array(H_isboundary),
         )
 
-    def _get_combinatorial_mesh_data(
-        self, V_label, H_label, F_label, halfedges, H_isboundary, faces
-    ):
+    def _get_combinatorial_mesh_data(self, vertices, faces):
         """."""
-        # V_label = self.V_label
-        # H_label = self.H_label
-        # F_label = self.F_label
-        # halfedges = self.halfedges
+        Nvertices = len(vertices)
+        Nfaces = len(faces)
+        halfedges, H_isboundary = self._get_halfedges(vertices, faces)
+        Nhalfedges = len(halfedges)
+
         #
         # H_isboundary = self.H_isboundary
         # faces = self.faces.copy()
         ####################
         # vertices
-        V_hedge = -np.ones_like(V_label)  # outgoing halfedge
+        V_hedge = -np.ones(Nvertices, dtype=np.int32)  # outgoing halfedge
         ####################
         # faces
-        F_hedge = -np.ones_like(F_label)  # one of the halfedges bounding it
+        F_hedge = -np.ones(Nfaces, dtype=np.int32)  # one of the halfedges bounding it
         ####################
         # halfedges
-        H_vertex = -np.ones_like(H_label)  # vertex it points to
-        H_face = -np.ones_like(H_label)  # face it belongs to
+        H_vertex = -np.ones(Nhalfedges, dtype=np.int32)  # vertex it points to
+        H_face = -np.ones_like(H_vertex)  # face it belongs to
         # next/previous halfedge inside the face (ordered counter-clockwise)
-        H_next = -np.ones_like(H_label)
-        H_prev = -np.ones_like(H_label)
-        H_twin = -np.ones_like(H_label)  # opposite halfedge
+        H_next = -np.ones_like(H_vertex)
+        H_prev = -np.ones_like(H_vertex)
+        H_twin = -np.ones_like(H_vertex)  # opposite halfedge
         ####################
 
         # assign each face a halfedge
         # assign each interior halfedge previous/next halfedge
         # assign each interior halfedge a face
         # assign each halfedge a twin halfedge
-        for f in F_label:
+        for f in range(Nfaces):
             face = faces[f]
             N_v_of_f = len(face)
             hedge0 = np.array([face[0], face[1]])
@@ -380,7 +298,7 @@ class Brane:
         # assign each halfedge a vertex
         # assign each vertex a halfedge
         # assign each boundary halfedge previous/next halfedge
-        for h in H_label:
+        for h in range(Nhalfedges):
             v0, v1 = halfedges[h]
             H_vertex[h] = v1
             if V_hedge[v0] == -1:
@@ -395,165 +313,36 @@ class Brane:
                 H_prev[h_next] = h
 
         return (
+            vertices,
             V_hedge,
+            halfedges,
             H_vertex,
             H_face,
             H_next,
             H_prev,
             H_twin,
+            faces,
             F_hedge,
         )
-
-    def _f_adjacent_to_v(self, v, V_hedge, H_face, H_prev, H_twin):
-        """
-        gets faces adjacent to v in counterclockwise order
-        """
-        h_start = V_hedge[v]
-        neighbors = []
-
-        h = h_start
-        while True:
-            neighbors.append(H_face[h])
-            h = H_prev[h]
-            h = H_twin[h]
-            if h == h_start:
-                break
-
-        return neighbors
-
-    def _average_cell_area(
-        self,
-        vertices,
-        V_label,
-        V_hedge,
-        H_vertex,
-        H_next,
-        H_prev,
-        H_twin,
-        F_label,
-        F_hedge,
-    ):
-        A = 0.0
-        N = len(V_label)
-        for v in V_label:
-            # Avec = self._face_area_vector(f)
-            r = vertices[v]
-            Av = 0.0
-            h = V_hedge[v]
-            h_start = h
-            while True:
-                v1 = H_vertex[h]
-                r1 = vertices[v1]
-                h = H_prev[h]
-                h = H_twin[h]
-                v2 = H_vertex[h]
-                r2 = vertices[v2]
-                a = jitcross(r, r1) / 2 + jitcross(r1, r2) / 2 + jitcross(r2, r) / 2
-                Av += np.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2) / 3
-
-                if h == h_start:
-                    break
-
-            A += Av / N
-        return A
-
-    def _total_area(
-        self,
-        vertices,
-        V_label,
-        V_hedge,
-        H_vertex,
-        H_next,
-        H_prev,
-        H_twin,
-        F_label,
-        F_hedge,
-    ):
-        A = 0.0
-        for v in V_label:
-            # Avec = self._face_area_vector(f)
-            r = vertices[v]
-            Av = 0.0
-            h = V_hedge[v]
-            h_start = h
-            while True:
-                v1 = H_vertex[h]
-                r1 = vertices[v1]
-                h = H_prev[h]
-                h = H_twin[h]
-                v2 = H_vertex[h]
-                r2 = vertices[v2]
-                a = jitcross(r, r1) / 2 + jitcross(r1, r2) / 2 + jitcross(r2, r) / 2
-                Av += np.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2) / 3
-
-                if h == h_start:
-                    break
-
-            A += Av
-        return A
-
-    def _average_hedge_length(self, vertices, H_label, H_twin, H_vertex):
-        L = 0.0
-        N = len(H_label)
-        for h in H_label:
-            ht = H_twin[h]
-            v1 = H_vertex[ht]
-            v2 = H_vertex[h]
-            xyz1 = vertices[v1]
-            xyz2 = vertices[v2]
-            u = xyz2 - xyz1
-            L += np.sqrt(u[0] ** 2 + u[1] ** 2 + u[2] ** 2) / N
-        return L
-
-    def _average_signed_volume_of_faces(self, vertices, faces):
-        vol = 0.0
-        Nfaces = len(faces)
-        for face in faces:
-            v0, v1, v2 = face
-            p0 = vertices[v0]
-            p1 = vertices[v1]
-            p2 = vertices[v2]
-            vol_f = triprod(p0, p1, p2) / 6
-            vol += vol_f / Nfaces
-        return vol
-
-    def _total_volume(self, vertices, faces):
-        vol = 0.0
-        for face in faces:
-            v0, v1, v2 = face
-            p0 = vertices[v0]
-            p1 = vertices[v1]
-            p2 = vertices[v2]
-            vol_f = triprod(p0, p1, p2) / 6
-            vol += vol_f
-        return abs(vol)
 
     def _frame_the_mesh(
         self,
         vertices,
         faces,
         halfedges,
-        V_label,
         V_hedge,
-        H_label,
         H_vertex,
         H_face,
         H_next,
         H_prev,
         H_twin,
         H_isboundary,
-        F_label,
         F_hedge,
     ):
-        # vertices, faces, halfedges, V_label, V_hedge, H_label, H_vertex, H_face, H_next, H_prev, H_twin, H_isboundary, F_label, F_hedge
-        # V_pq
-        F_label = F_label
-        Nfaces = len(F_label)
+        Nfaces = len(faces)
         F_area_vectors = np.zeros((Nfaces, 3))
-        # vertices = self.V_pq[:, :3]
 
-        for _f in range(Nfaces):
-            f = F_label[_f]
+        for f in range(Nfaces):
             h = F_hedge[f]
             hn = H_next[h]
             hp = H_prev[h]
@@ -565,11 +354,10 @@ class Brane:
             u1 = vertices[v1] - vertices[v0]
             u2 = vertices[v2] - vertices[v1]
 
-            F_area_vectors[_f] = jitcross(u1, u2)
+            F_area_vectors[f] = jitcross(u1, u2)
 
         ex = np.array([1.0, 0.0, 0.0])
         ey = np.array([0.0, 1.0, 0.0])
-        # ez = np.array([0.0, 0.0, 1.0])
         Nverts = len(vertices)
         V_pq = np.zeros((Nverts, 7))
         for i in range(Nverts):
@@ -596,13 +384,162 @@ class Brane:
             V_pq[i, :3] = vertices[i, :]
         return V_pq
 
-    def _visual_defaults(self, V_label, H_label, F_label):
+    def _f_adjacent_to_v(self, v, V_hedge, H_face, H_prev, H_twin):
+        """
+        gets faces adjacent to v in counterclockwise order
+        """
+        h_start = V_hedge[v]
+        neighbors = []
+
+        h = h_start
+        while True:
+            neighbors.append(H_face[h])
+            h = H_prev[h]
+            h = H_twin[h]
+            if h == h_start:
+                break
+
+        return neighbors
+
+    def _average_cell_area(
+        self,
+        vertices,
+        V_hedge,
+        H_vertex,
+        H_prev,
+        H_twin,
+    ):
+        A = 0.0
+        Nvertices = len(vertices)
+        for v in range(Nvertices):
+            r = vertices[v]
+            Av = 0.0
+            h = V_hedge[v]
+            h_start = h
+            while True:
+                v1 = H_vertex[h]
+                r1 = vertices[v1]
+                h = H_prev[h]
+                h = H_twin[h]
+                v2 = H_vertex[h]
+                r2 = vertices[v2]
+                a = jitcross(r, r1) / 2 + jitcross(r1, r2) / 2 + jitcross(r2, r) / 2
+                Av += np.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2) / 3
+
+                if h == h_start:
+                    break
+
+            A += Av / Nvertices
+        return A
+
+    def _total_area(
+        self,
+        vertices,
+        V_hedge,
+        H_vertex,
+        H_prev,
+        H_twin,
+    ):
+        A = 0.0
+        Nvertices = len(vertices)
+        for v in range(Nvertices):
+            r = vertices[v]
+            Av = 0.0
+            h = V_hedge[v]
+            h_start = h
+            while True:
+                v1 = H_vertex[h]
+                r1 = vertices[v1]
+                h = H_prev[h]
+                h = H_twin[h]
+                v2 = H_vertex[h]
+                r2 = vertices[v2]
+                a = jitcross(r, r1) / 2 + jitcross(r1, r2) / 2 + jitcross(r2, r) / 2
+                Av += np.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2) / 3
+
+                if h == h_start:
+                    break
+
+            A += Av
+        return A
+
+    def _average_hedge_length(self, vertices, H_twin, H_vertex):
+        L = 0.0
+        Nh = len(H_twin)
+        for h in range(Nh):
+            ht = H_twin[h]
+            v1 = H_vertex[ht]
+            v2 = H_vertex[h]
+            xyz1 = vertices[v1]
+            xyz2 = vertices[v2]
+            u = xyz2 - xyz1
+            L += np.sqrt(u[0] ** 2 + u[1] ** 2 + u[2] ** 2) / Nh
+        return L
+
+    def _average_signed_volume_of_faces(self, vertices, faces):
+        vol = 0.0
+        Nfaces = len(faces)
+        for face in faces:
+            v0, v1, v2 = face
+            p0 = vertices[v0]
+            p1 = vertices[v1]
+            p2 = vertices[v2]
+            vol_f = triprod(p0, p1, p2) / 6
+            vol += vol_f / Nfaces
+        return vol
+
+    def _total_volume(self, vertices, faces):
+        vol = 0.0
+        for face in faces:
+            v0, v1, v2 = face
+            p0 = vertices[v0]
+            p1 = vertices[v1]
+            p2 = vertices[v2]
+            vol_f = triprod(p0, p1, p2) / 6
+            vol += vol_f
+        return abs(vol)
+
+    def _preferred_geometric_defaults(
+        self,
+        vertices,
+        V_hedge,
+        H_vertex,
+        H_next,
+        H_prev,
+        H_twin,
+        faces,
+        F_hedge,
+    ):
+        preferred_edge_length = self._average_hedge_length(vertices, H_twin, H_vertex)
+        preferred_cell_area = self._average_cell_area(
+            vertices,
+            V_hedge,
+            H_vertex,
+            H_prev,
+            H_twin,
+        )
+        preferred_total_volume = self._total_volume(vertices, faces)
+        preferred_total_area = self._total_area(
+            vertices,
+            V_hedge,
+            H_vertex,
+            H_prev,
+            H_twin,
+        )
+        return (
+            preferred_edge_length,
+            preferred_cell_area,
+            preferred_total_volume,
+            preferred_total_area,
+        )
+
+    def _visual_defaults(self, V, H, F):
         face_color = np.array([0.0, 0.63335, 0.05295])
         F_opacity = 0.8
 
         hedge_color = np.array([1.0, 0.498, 0.0])
         H_opacity = 1.0
-        hedge_radius = 0.0025
+        # hedge_radius = 0.0025
 
         vertex_color = np.array([1.0, 0.498, 0.0])  # np.array([0.7057, 0.0156, 0.1502])
         V_opacity = 1.0
@@ -612,9 +549,9 @@ class Brane:
         tangent_color1 = np.array([0.7057, 0.0156, 0.1502])  # (1.0, 0.0, 0.0)
         tangent_color2 = np.array([0.2298, 0.2987, 0.7537])
 
-        Nverts = len(V_label)
-        Nhedges = len(H_label)
-        Nfaces = len(F_label)
+        Nverts = len(V)
+        Nhedges = len(H)
+        Nfaces = len(F)
 
         V_rgb = np.zeros((Nverts, 3))
         V_normal_rgb = np.zeros((Nverts, 3))
@@ -628,10 +565,10 @@ class Brane:
             V_tangent2_rgb[_] = tangent_color2
             V_radius[_] = vertex_radius
         H_rgb = np.zeros((Nhedges, 3))
-        H_radius = np.zeros(Nhedges)
+        # H_radius = np.zeros(Nhedges)
         for _ in range(Nhedges):
             H_rgb[_] = hedge_color
-            H_radius[_] = hedge_radius
+            # H_radius[_] = hedge_radius
         F_rgb = np.zeros((Nfaces, 3))
         for _ in range(Nfaces):
             F_rgb[_] = face_color
@@ -646,7 +583,7 @@ class Brane:
             V_tangent2_rgb,
             V_radius,
             H_rgb,
-            H_radius,
+            # H_radius,
             F_rgb,
             F_opacity,
             H_opacity,
@@ -658,18 +595,6 @@ class Brane:
     # require self.(***)
     # *** =
     ############################
-    def face1(self, f):
-        """"""
-        face = []
-        h = self.F_hedge[f]
-        h_start = h
-        while True:
-            face.append(self.H_vertex[h])
-            h = self.H_next[h]
-            if h == h_start:
-                break
-        return np.array(face, dtype=np.int32)
-
     def face(self, f):
         """consistent with initial face assignment"""
         face = []
@@ -746,7 +671,7 @@ class Brane:
         x, y, z = xyz
         self.V_pq[v, :3] = np.array([x, y, z])
 
-    def edge_flip(self, h):
+    def _edge_flip(self, h):
         r"""
         h/ht can not be on boundary!
                v2                           v2
@@ -795,22 +720,99 @@ class Brane:
         self.update_next_prev(h1, ht)
         # update face referenced by halfedges
         self.update_f_of_h(h3, f1)
-        # if self.h_of_f(f1) == h1:
+
         self.update_f_of_h(h1, f2)
-        # if self.h_of_f(f2) == h3:
 
         # update vert referenced by new halfedges
         # and halfedge referenced by verts
         self.update_v_of_h(h, v2)
         self.update_v_of_h(ht, v4)
-        # if self.h_of_v(v3) == h:
-        # self.update_h_of_v(v3, h3)
-        # # if self.h_of_v(v1) == ht:
-        # self.update_h_of_v(v1, h1)
+
         self.update_h_of_v(v3, h3)
         self.update_h_of_v(v1, h1)
         self.update_h_of_v(v2, h2)
         self.update_h_of_v(v4, h4)
+
+    def edge_flip(self, h):
+        r"""
+        h/ht can not be on boundary!
+               v2                           v2
+             /    \                       /  |  \
+            /      \                     /   |   \
+           /h2    h1\                   /h2  |  h1\
+          /    f1    \                 /     |     \
+         /            \               /  f1  |  f2  \
+        /      h       \             /       |       \
+       v3--------------v1  |----->  v3      h|ht     v1
+        \      ht      /             \       |       /
+         \            /               \      |      /
+          \    f2    /                 \     |     /
+           \h3    h4/                   \h3  |  h4/
+            \      /                     \   |   /
+             \    /                       \  |  /
+               v4                           v4
+        """
+
+        ht = self.H_twin[h]
+        h1 = self.H_next[h]
+        h2 = self.H_prev[h]
+        h3 = self.H_next[ht]
+        h4 = self.H_prev[ht]
+        f1 = self.H_face[h]
+        f2 = self.H_face[ht]
+        v1 = self.H_vertex[h4]
+        v2 = self.H_vertex[h1]
+        v3 = self.H_vertex[h2]
+        v4 = self.H_vertex[h3]
+
+        self.faces[f1] = np.array([v2, v3, v4])
+        self.faces[f2] = np.array([v4, v1, v2])
+        # and halfedge referenced by new faces
+        self.F_hedge[f1] = h2
+        self.F_hedge[f2] = h4
+
+        self.halfedges[h] = np.array([v4, v2])
+        self.halfedges[ht] = np.array([v2, v4])
+        # update next/prev halfedge
+        self.H_next[h] = h2
+        self.H_prev[h2] = h
+        # self.update_next_prev(h2, h3)
+        self.H_next[h2] = h3
+        self.H_prev[h3] = h2
+        # self.update_next_prev(h3, h)
+        self.H_next[h3] = h
+        self.H_prev[h] = h3
+        # self.update_next_prev(ht, h4)
+        self.H_next[ht] = h4
+        self.H_prev[h4] = ht
+        # self.update_next_prev(h4, h1)
+        self.H_next[h4] = h1
+        self.H_prev[h1] = h4
+        # self.update_next_prev(h1, ht)
+        self.H_next[h1] = ht
+        self.H_prev[ht] = h1
+        # update face referenced by halfedges
+        # self.update_f_of_h(h3, f1)
+        self.H_face[h3] = f1
+
+        # self.update_f_of_h(h1, f2)
+        self.H_face[h1] = f2
+
+        # update vert referenced by new halfedges
+        # and halfedge referenced by verts
+        # self.update_v_of_h(h, v2)
+        self.H_vertex[h] = v2
+        # self.update_v_of_h(ht, v4)
+        self.H_vertex[ht] = v4
+
+        # self.update_h_of_v(v3, h3)
+        self.V_hedge[v3] = h3
+        # self.update_h_of_v(v1, h1)
+        self.V_hedge[v1] = h1
+        # self.update_h_of_v(v2, h2)
+        self.V_hedge[v2] = h2
+        # self.update_h_of_v(v4, h4)
+        self.V_hedge[v4] = h4
 
     def flip_helps_valence(self, h):
         r"""
@@ -865,8 +867,9 @@ class Brane:
         self.update_vertex_position(v, r)
 
     def regularize_by_flips(self):
+        Nh = len(self.halfedges)
         Nflips = 0
-        for h in self.H_label:
+        for h in range(Nh):
             flip_it = self.flip_helps_valence(h)
             if flip_it:
                 self.edge_flip(h)
@@ -874,7 +877,8 @@ class Brane:
         return Nflips
 
     def regularize_by_shifts(self, weight):
-        for v in self.V_label:
+        Nv = len(self.vertices)
+        for v in range(Nv):
             self.shift_vertex_towards_barycenter(v, weight)
 
     ###########################################################################
@@ -883,102 +887,148 @@ class Brane:
     def mesh_data_min(self):
         """minimum data required to reconstruct mesh"""
         V_pq = self.V_pq
-        V_label = self.V_label
-        V_hedge = self.V_hedge
-        H_label = self.H_label
         H_vertex = self.H_vertex
         H_face = self.H_face
         H_next = self.H_next
         H_prev = self.H_prev
         H_twin = self.H_twin
-        F_label = self.F_label
         F_hedge = self.F_hedge
         return (
             V_pq,
-            V_label,
-            V_hedge,
-            H_label,
             H_vertex,
             H_face,
             H_next,
             H_prev,
             H_twin,
-            F_label,
             F_hedge,
         )
 
-    # def mesh_data_pack(self):
-    #     """minimum data required to reconstruct mesh"""
-    #     V_pq = self.V_pq
-    #     V_label = self.V_label
-    #     V_hedge = self.V_hedge
-    #
-    #     H_label = self.H_label
-    #     H_vertex = self.H_vertex
-    #     H_face = self.H_face
-    #     H_next = self.H_next
-    #     H_prev = self.H_prev
-    #     H_twin = self.H_twin
-    #
-    #     F_label = self.F_label
-    #     F_hedge = self.F_hedge
-    #
-    #     Nvertices = len(V_label)
-    #     Nhalfedges = len(H_label)
-    #     Nfaces = len(F_label)
-    #
-    #     Vfloats = V_pq
-    #     Vints = np.zeros((Nvertices, 2), dtype=np.int32)
-    #     Hints = np.zeros((Nvertices, 6), dtype=np.int32)
-    #     Fints = np.zeros((Nvertices, 2), dtype=np.int32)
-    #
-    #
-    #     Vints[:,0] = V_label
-    #     Vints[:,1] = V_hedge
-    #
-    #     Hints[:,0] = H_label
-    #     Hints[:,1] = H_vertex
-    #     Hints[:,2] = H_face
-    #     Hints[:,3] = H_next
-    #     Hints[:,4] = H_prev
-    #     Hints[:,5] = H_twin
-    #
-    #     Vints[:,0] = V_label
-    #     Vints[:,1] = V_hedge
-    #
-    #     return (
-    #         Vfloats,
-    #         VHFints
-    #     )
-
     def mesh_data(self):
-        """to reconstruct mesh"""
+        """(V_pq, V_hedge, halfedges, H_vertex, H_face, H_next, H_prev, H_twin, faces, F_hedge)"""
         V_pq = self.V_pq
-        V_label = self.V_label
         V_hedge = self.V_hedge
-        H_label = self.H_label
+        halfedges = self.halfedges
         H_vertex = self.H_vertex
-        H = self.halfedges
         H_face = self.H_face
         H_next = self.H_next
         H_prev = self.H_prev
         H_twin = self.H_twin
-        F = self.faces
-        F_label = self.F_label
+        faces = self.faces
         F_hedge = self.F_hedge
         return (
             V_pq,
-            V_label,
             V_hedge,
-            H,
-            H_label,
+            halfedges,
             H_vertex,
             H_face,
             H_next,
             H_prev,
             H_twin,
-            F,
-            F_label,
+            faces,
+            F_hedge,
+        )
+
+    def pack_mesh_data(self):
+        """V.astype(int)"""
+        V_pq = self.V_pq
+        V_hedge = self.V_hedge
+
+        halfedges = self.halfedges
+        H_vertex = self.H_vertex
+        H_face = self.H_face
+        H_next = self.H_next
+        H_prev = self.H_prev
+        H_twin = self.H_twin
+
+        faces = self.faces
+        F_hedge = self.F_hedge
+
+        Nvertices = len(V_pq)
+        Nhalfedges = len(halfedges)
+        Nfaces = len(faces)
+        nv = 8
+        nh = 7
+        nf = 4
+        Nvdat = nv * Nvertices
+        Nhdat = nh * Nhalfedges
+        Nfdat = nf * Nfaces
+        Ndata = Nvdat + Nhdat + Nfdat
+
+        V = np.zeros(Nvdat)
+        H = np.zeros(Nhdat)
+        F = np.zeros(Nfdat)
+        VHF = np.zeros(Ndata + 6)
+
+        V[: 7 * Nvertices] = V_pq.T.ravel()
+        V[7 * Nvertices :] = V_hedge
+        VHF[:Nvdat] = V
+
+        H[: 2 * Nhalfedges] = halfedges.T.ravel()
+        H[2 * Nhalfedges : 3 * Nhalfedges] = H_vertex
+        H[3 * Nhalfedges : 4 * Nhalfedges] = H_face
+        H[4 * Nhalfedges : 5 * Nhalfedges] = H_next
+        H[5 * Nhalfedges : 6 * Nhalfedges] = H_prev
+        H[6 * Nhalfedges : 7 * Nhalfedges] = H_twin
+        VHF[Nvdat : Nvdat + Nhdat] = H
+
+        F[: 3 * Nfaces] = faces.T.ravel()
+        F[3 * Nfaces :] = F_hedge
+        VHF[Nvdat + Nhdat : Nvdat + Nhdat + Nfdat] = F
+        VHF[-6:] = np.array([Nvertices, nv, Nhalfedges, nh, Nfaces, nf])
+
+        return VHF
+
+    def unpack_mesh_data(self, VHF):
+        """V.astype(int)"""
+
+        Nvertices, nv, Nhalfedges, nh, Nfaces, nf = VHF[-6:].astype(np.int32)
+        Nvdat = nv * Nvertices
+        Nhdat = nh * Nhalfedges
+        Nfdat = nf * Nfaces
+        V = VHF[:Nvdat]
+        H = VHF[Nvdat : Nvdat + Nhdat].astype(np.int32)
+        F = VHF[Nvdat + Nhdat : Nvdat + Nhdat + Nfdat].astype(np.int32)
+
+        V_pq = np.zeros((Nvertices, 7))
+        # V_pq = np.array([V[_ * Nvertices : (_ + 1) * Nvertices] for _ in range(7)])
+        V_pq[:, 0] = V[0 * Nvertices : (0 + 1) * Nvertices]
+        V_pq[:, 1] = V[1 * Nvertices : (1 + 1) * Nvertices]
+        V_pq[:, 2] = V[2 * Nvertices : (2 + 1) * Nvertices]
+        V_pq[:, 3] = V[3 * Nvertices : (3 + 1) * Nvertices]
+        V_pq[:, 4] = V[4 * Nvertices : (4 + 1) * Nvertices]
+        V_pq[:, 5] = V[5 * Nvertices : (5 + 1) * Nvertices]
+        V_pq[:, 6] = V[6 * Nvertices : (6 + 1) * Nvertices]
+
+        # V_pq = V[: 7 * Nvertices].reshape((Nvertices, 7)).astype(np.float64)
+        V_hedge = V[7 * Nvertices :].astype(np.int32)
+
+        # halfedges = H[: 2 * Nhalfedges].reshape((Nhalfedges, 2))
+        halfedges = np.zeros((Nhalfedges, 2), dtype=np.int32)
+        halfedges[:, 0] = H[0 * Nhalfedges : (0 + 1) * Nhalfedges]
+        halfedges[:, 1] = H[1 * Nhalfedges : (1 + 1) * Nhalfedges]
+        H_vertex = H[2 * Nhalfedges : 3 * Nhalfedges]
+        H_face = H[3 * Nhalfedges : 4 * Nhalfedges]
+        H_next = H[4 * Nhalfedges : 5 * Nhalfedges]
+        H_prev = H[5 * Nhalfedges : 6 * Nhalfedges]
+        H_twin = H[6 * Nhalfedges : 7 * Nhalfedges]
+
+        # faces = F[: 3 * Nfaces].reshape((Nfaces, 3))
+        faces = np.zeros((Nfaces, 3), dtype=np.int32)
+        faces[:, 0] = F[0 * Nfaces : (0 + 1) * Nfaces]
+        faces[:, 1] = F[1 * Nfaces : (1 + 1) * Nfaces]
+        faces[:, 2] = F[2 * Nfaces : (2 + 1) * Nfaces]
+        F_hedge = F[3 * Nfaces :]
+
+        return (
+            V_pq,
+            V_hedge,
+            halfedges,
+            H_vertex,
+            H_face,
+            H_next,
+            H_prev,
+            H_twin,
+            faces,
             F_hedge,
         )
 
@@ -989,30 +1039,136 @@ class Brane:
         volume_reg_stiffness = self.Kvolume
         area_reg_stiffness = self.Karea
         length_reg_stiffness = self.Klength
-        zeta_linear = self.zeta_linear
-        preferred_curvature = self.preferred_curvature
-        params = self.params
+        linear_drag_coeff = self.linear_drag_coeff
+        spontaneous_curvature = self.spontaneous_curvature
         preferred_edge_length = self.preferred_edge_length
         preferred_cell_area = self.preferred_cell_area
         preferred_total_volume = self.preferred_total_volume
         total_volume = self.total_volume
         preferred_total_area = self.preferred_total_area
-        total_area = self.total_area
+        return np.array(
+            [
+                bending_modulus,
+                splay_modulus,
+                volume_reg_stiffness,
+                area_reg_stiffness,
+                length_reg_stiffness,
+                linear_drag_coeff,
+                spontaneous_curvature,
+                preferred_edge_length,
+                preferred_cell_area,
+                preferred_total_volume,
+                preferred_total_area,
+            ]
+        )
+
+    def pack_visual_data(self):
+        """V.astype(int)"""
+        V_rgb = self.V_rgb
+        V_normal_rgb = self.V_normal_rgb
+        V_tangent1_rgb = self.V_tangent1_rgb
+        V_tangent2_rgb = self.V_tangent2_rgb
+        V_radius = self.V_radius
+
+        H_rgb = self.H_rgb
+
+        F_rgb = self.F_rgb
+
+        F_opacity = self.F_opacity
+        H_opacity = self.H_opacity
+        V_opacity = self.V_opacity
+
+        Nvertices = len(V_rgb)
+        Nhalfedges = len(H_rgb)
+        Nfaces = len(F_rgb)
+        nv = 13
+        nh = 3
+        nf = 3
+        Nvdat = nv * Nvertices
+        Nhdat = nh * Nhalfedges
+        Nfdat = nf * Nfaces
+        Ndata = Nvdat + Nhdat + Nfdat
+
+        V = np.zeros(Nvdat)
+        H = np.zeros(Nhdat)
+        F = np.zeros(Nfdat)
+        VHF = np.zeros(Ndata + 9)
+
+        V[0 * 3 * Nvertices : (0 + 1) * 3 * Nvertices] = V_rgb.T.ravel()
+        V[1 * 3 * Nvertices : (1 + 1) * 3 * Nvertices] = V_normal_rgb.T.ravel()
+        V[2 * 3 * Nvertices : (2 + 1) * 3 * Nvertices] = V_tangent1_rgb.T.ravel()
+        V[3 * 3 * Nvertices : (3 + 1) * 3 * Nvertices] = V_tangent2_rgb.T.ravel()
+        V[4 * 3 * Nvertices :] = V_radius
+        VHF[:Nvdat] = V
+
+        H[0 * 3 * Nhalfedges : (0 + 1) * 3 * Nhalfedges] = H_rgb.T.ravel()
+        VHF[Nvdat : Nvdat + Nhdat] = H
+
+        F[0 * 3 * Nfaces : (0 + 1) * 3 * Nfaces] = F_rgb.T.ravel()
+
+        VHF[Nvdat + Nhdat : Nvdat + Nhdat + Nfdat] = F
+        VHF[-9:] = np.array(
+            [F_opacity, H_opacity, V_opacity, Nvertices, nv, Nhalfedges, nh, Nfaces, nf]
+        )
+
+        return VHF
+
+    def unpack_visual_data(self, VHF):
+        """V.astype(int)"""
+        F_opacity, H_opacity, V_opacity = VHF[-9:-6]
+        Nvertices, nv, Nhalfedges, nh, Nfaces, nf = VHF[-6:].astype(np.int32)
+        Nvdat = nv * Nvertices
+        Nhdat = nh * Nhalfedges
+        Nfdat = nf * Nfaces
+        V = VHF[:Nvdat]
+        H = VHF[Nvdat : Nvdat + Nhdat]
+        F = VHF[Nvdat + Nhdat : Nvdat + Nhdat + Nfdat]
+
+        V_rgb = np.zeros((Nvertices, 3))
+        V_normal_rgb = np.zeros((Nvertices, 3))
+        V_tangent1_rgb = np.zeros((Nvertices, 3))
+        V_tangent2_rgb = np.zeros((Nvertices, 3))
+        # V_radius = np.zeros(Nvertices)
+
+        V_rgb[:, 0] = V[0 * Nvertices : (0 + 1) * Nvertices]
+        V_rgb[:, 1] = V[1 * Nvertices : (1 + 1) * Nvertices]
+        V_rgb[:, 2] = V[2 * Nvertices : (2 + 1) * Nvertices]
+
+        V_normal_rgb[:, 0] = V[3 * Nvertices : (3 + 1) * Nvertices]
+        V_normal_rgb[:, 1] = V[4 * Nvertices : (4 + 1) * Nvertices]
+        V_normal_rgb[:, 2] = V[5 * Nvertices : (5 + 1) * Nvertices]
+
+        V_tangent1_rgb[:, 0] = V[6 * Nvertices : (6 + 1) * Nvertices]
+        V_tangent1_rgb[:, 1] = V[7 * Nvertices : (7 + 1) * Nvertices]
+        V_tangent1_rgb[:, 2] = V[8 * Nvertices : (8 + 1) * Nvertices]
+
+        V_tangent2_rgb[:, 0] = V[9 * Nvertices : (9 + 1) * Nvertices]
+        V_tangent2_rgb[:, 1] = V[10 * Nvertices : (10 + 1) * Nvertices]
+        V_tangent2_rgb[:, 2] = V[11 * Nvertices : (11 + 1) * Nvertices]
+
+        V_radius = V[(11 + 1) * Nvertices :]
+
+        H_rgb = np.zeros((Nhalfedges, 3))
+        H_rgb[:, 0] = H[0 * Nhalfedges : (0 + 1) * Nhalfedges]
+        H_rgb[:, 1] = H[1 * Nhalfedges : (1 + 1) * Nhalfedges]
+        H_rgb[:, 2] = H[2 * Nhalfedges : (2 + 1) * Nhalfedges]
+
+        F_rgb = np.zeros((Nfaces, 3))
+        F_rgb[:, 0] = F[0 * Nfaces : (0 + 1) * Nfaces]
+        F_rgb[:, 1] = F[1 * Nfaces : (1 + 1) * Nfaces]
+        F_rgb[:, 2] = F[2 * Nfaces : (2 + 1) * Nfaces]
+
         return (
-            bending_modulus,
-            splay_modulus,
-            volume_reg_stiffness,
-            area_reg_stiffness,
-            length_reg_stiffness,
-            zeta_linear,
-            preferred_curvature,
-            params,
-            preferred_edge_length,
-            preferred_cell_area,
-            preferred_total_volume,
-            total_volume,
-            preferred_total_area,
-            total_area,
+            V_rgb,
+            V_normal_rgb,
+            V_tangent1_rgb,
+            V_tangent2_rgb,
+            V_radius,
+            H_rgb,
+            F_rgb,
+            F_opacity,
+            H_opacity,
+            V_opacity,
         )
 
     def visual_data(self):
@@ -1021,8 +1177,9 @@ class Brane:
         V_tangent1_rgb = self.V_tangent1_rgb
         V_tangent2_rgb = self.V_tangent2_rgb
         V_radius = self.V_radius
+
         H_rgb = self.H_rgb
-        H_radius = self.H_radius
+        # H_radius = self.H_radius
         F_rgb = self.F_rgb
         F_opacity = self.F_opacity
         H_opacity = self.H_opacity
@@ -1034,7 +1191,7 @@ class Brane:
             V_tangent2_rgb,
             V_radius,
             H_rgb,
-            H_radius,
+            # H_radius,
             F_rgb,
             F_opacity,
             H_opacity,
@@ -1048,16 +1205,13 @@ class Brane:
         # topological/combinatorial
         faces = self.faces
         halfedges = self.halfedges
-        V_label = self.V_label
         V_hedge = self.V_hedge
-        H_label = self.H_label
         H_vertex = self.H_vertex
         H_face = self.H_face
         H_next = self.H_next
         H_prev = self.H_prev
         H_twin = self.H_twin
         H_isboundary = self.H_isboundary
-        F_label = self.F_label
         F_hedge = self.F_hedge
         # V_pq = self.V_pq
         return (
@@ -1065,16 +1219,13 @@ class Brane:
             V_pq_samples,
             faces,
             halfedges,
-            V_label,
             V_hedge,
-            H_label,
             H_vertex,
             H_face,
             H_next,
             H_prev,
             H_twin,
             H_isboundary,
-            F_label,
             F_hedge,
         )
 
@@ -1106,58 +1257,18 @@ class Brane:
         )
         # return plot_data
 
-    def reinit_from_state_data(
-        self,
-        sample_times,
-        V_pq_samples,
-        faces,
-        halfedges,
-        V_label,
-        V_hedge,
-        H_label,
-        H_vertex,
-        H_face,
-        H_next,
-        H_prev,
-        H_twin,
-        H_isboundary,
-        F_label,
-        F_hedge,
-    ):
-        self.sample_times = sample_times
-        self.V_pq_samples = V_pq_samples
-        self.faces = faces
-        self.halfedges = halfedges
-        self.V_label = V_label
-        self.V_hedge = V_hedge
-        self.H_label = H_label
-        self.H_vertex = H_vertex
-        self.H_face = H_face
-        self.H_next = H_next
-        self.H_prev = H_prev
-        self.H_twin = H_twin
-        self.H_isboundary = H_isboundary
-        self.F_label = F_label
-        self.F_hedge = F_hedge
-
-        self.V_pq = V_pq_samples[0]
-
     ###########################################################################
     # forces and time evolution #
     #############################
     def get_total_area(self):
         vertices = self.V_pq[:, :3]
-        V_label = self.V_label
+        Nv = len(self.vertices)
         V_hedge = self.V_hedge
         H_vertex = self.H_vertex
-        H_next = self.H_next
         H_prev = self.H_prev
         H_twin = self.H_twin
-        F_label = self.F_label
-        F_hedge = self.F_hedge
         A = 0.0
-        for v in V_label:
-            # Avec = self._face_area_vector(f)
+        for v in range(Nv):
             r = vertices[v]
             Av = 0.0
             h = V_hedge[v]
@@ -1267,8 +1378,9 @@ class Brane:
         return vol
 
     def volume_of_mesh(self):
+        Nf = len(self.faces)
         vol = 0.0
-        for f in self.F_label:
+        for f in range(Nf):
             vol += self.signed_volume_of_face(f)
         return vol
 
@@ -1299,38 +1411,24 @@ class Brane:
         return F
 
     def forward_euler_reg_step(self, dt):
-        # Nverts = len(self.V_pq)
-        # pq = np.zeros_like(self.V_pq)
-        # Ke, Kf, Kb, Ks, zeta, L0, A0 = self.params
-        zeta_linear = self.zeta_linear
+        Nv = len(self.V_pq)
+        linear_drag_coeff = self.linear_drag_coeff
         self.total_volume = self.volume_of_mesh()
         self.total_area = self.get_total_area()
 
-        # self.V_pq[:, :3] = self.V_pq[:, :3] + dt * F / zeta
-        for v in self.V_label:
+        for v in range(Nv):
             F = np.zeros(3)
             F += self.length_reg_force(v)
             F += self.area_reg_force(v)
             F += self.volume_reg_force(v)
-            self.V_pq[v, :3] = self.V_pq[v, :3] + dt * F / zeta_linear
+            self.V_pq[v, :3] = self.V_pq[v, :3] + dt * F / linear_drag_coeff
 
-        # for v in self.V_label:
+        # for v in range(Nv):
         #     self.V_pq[v, 3:] = self.get_new_quat_dumb(v)
 
     def get_new_quat_dumb(self, v):
         qw, qx, qy, qz = self.V_pq[v, 3:]
         Q = np.zeros((3, 3))
-        # n = self.area_weighted_vertex_normal(v)
-        # e1 = np.zeros(3)
-        # e1[0] = qw**2 + qx**2 - qy**2 - qz**2
-        # e1[1] = 2 * qw * qz + 2 * qx * qy
-        # e1[2] = 2 * qx * qz - 2 * qw * qy
-        # e1 -= jitdot(n, e1) * n
-        # e1 /= jitnorm(e1)
-        # e2 = jitcross(n, e1)
-        # Q[:,0] = e1
-        # Q[:,1] = e2
-        # Q[:,2] = n
         Q[:, 2] = self.area_weighted_vertex_normal(v)
 
         Q[0, 0] = qw**2 + qx**2 - qy**2 - qz**2
@@ -1342,10 +1440,6 @@ class Brane:
 
         q = matrix_to_quaternion(Q)
         return q
-
-    def reframe_the_mesh(self):
-        for v in self.V_label:
-            self.V_pq[v, 3:] = self.get_new_quat_dumb(v)
 
     ###########################################################################
     # visualization functions #
@@ -1393,16 +1487,15 @@ class Brane:
         Nverts = len(self.V_pq)
         for i in range(Nverts):
             self.V_pq[i] = mul_se3_quaternion(PQ, self.V_pq[i])
-        # self.vertices = self.V_pq[:, :3]
+        self.vertices = self.V_pq[:, :3]
 
     def shifted_hedge_vectors(self):
         """halfedge vector shifted toward face centroid for visualization"""
-        Nhedges = len(self.H_label)
-        vecs = np.zeros((Nhedges, 3))
-        points = np.zeros((Nhedges, 3))
-        for h in self.H_label:
+        Nh = len(self.halfedges)
+        vecs = np.zeros((Nh, 3))
+        points = np.zeros((Nh, 3))
+        for h in range(Nh):
             points[h, :], vecs[h, :] = self.shifted_hedge_vector(h)
-
         return points, vecs
 
     def shifted_hedge_vector(self, h):
@@ -1468,18 +1561,15 @@ class Brane:
         return np.array(neighbors, dtype=np.int32)
 
     def valence(self, v):
-        h_start = self.h_of_v(v)
+        h_start = self.H_vertex[v]
         val = 0
-
         h = h_start
         while True:
-            # neighbors.append(self.H_vertex[h])
             val += 1
             h = self.H_prev[h]
             h = self.H_twin[h]
             if h == h_start:
                 break
-
         return val
 
     def vertex_position(self, v):
@@ -1603,9 +1693,9 @@ class Brane:
 
     def average_hedge_length(self):
         L = 0.0
-        N = len(self.H_label)
-        for h in self.H_label:
-            L += self.hedge_length(h) / N
+        Nh = len(self.halfedges)
+        for h in range(Nh):
+            L += self.hedge_length(h) / Nh
         return L
 
     def area_weighted_vertex_normal(self, v):
@@ -1664,9 +1754,7 @@ class Brane:
         """
         Nverts = len(self.V_pq)
         defects = np.zeros(Nverts)
-        # V = self.V_label
         for v0 in range(Nverts):
-            # p0 = self.V_pq[v, :3]
             h_start = self.V_hedge[v0]
             defects[v0] = 2 * np.pi
 
@@ -1697,11 +1785,11 @@ class Brane:
         """
         2*pi - sum_f (angle_f)
         """
-        Nverts = len(self.V_pq)
+        Nv = len(self.V_pq)
         # defects = np.zeros(Nverts)
-        K = np.zeros(Nverts)
-        # V = self.V_label
-        # for v0 in range(Nverts):
+        K = np.zeros(Nv)
+        # Nv = len(self.V_pq)
+        # for v0 in range(Nv):
         # v0 = 0
         # K = np.random.rand(Nverts)
         # while True:
@@ -1739,7 +1827,7 @@ class Brane:
         #         if h == h_start:
         #             break
         #     K[v0] = defect / area
-        for v in self.V_label:
+        for v in range(Nv):
             K[v] = self.gaussian_curvature(v)
 
         return K
@@ -1750,12 +1838,11 @@ class Brane:
         return K
 
     def get_initial_edge_tangents(self):
-        # H_label = self.H_label
-        Nhedges = len(self.H_label)
-        H_tangent_components = np.zeros((Nhedges, 2))
-        H_psi = np.zeros((Nhedges, 6))
+        Nh = len(self.halfedges)
+        H_tangent_components = np.zeros((Nh, 2))
+        H_psi = np.zeros((Nh, 6))
 
-        for h in range(Nhedges):
+        for h in range(Nh):
             hp = self.H_prev[h]
             v0 = self.H_vertex[hp]
             v1 = self.H_vertex[h]

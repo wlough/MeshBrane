@@ -80,6 +80,35 @@ def quaternion_to_matrix(q):
     return Q
 
 
+@njit("f8[:,:,:](f8[:,:])")
+def quaternion_to_matrix_vectorized(q_samps):
+    Nsamps = len(q_samps)
+    Q_samps = np.zeros((Nsamps, 3, 3))
+    for i in range(Nsamps):
+        qw, qx, qy, qz = q_samps[i]
+
+        Q_samps[i] = np.array(
+            [
+                [
+                    qw**2 + qx**2 - qy**2 - qz**2,
+                    2 * qx * qy - 2 * qw * qz,
+                    2 * qw * qy + 2 * qx * qz,
+                ],
+                [
+                    2 * qw * qz + 2 * qx * qy,
+                    qw**2 - qx**2 + qy**2 - qz**2,
+                    2 * qy * qz - 2 * qw * qx,
+                ],
+                [
+                    2 * qx * qz - 2 * qw * qy,
+                    2 * qw * qx + 2 * qy * qz,
+                    qw**2 - qx**2 - qy**2 + qz**2,
+                ],
+            ]
+        )
+    return Q_samps
+
+
 #######################################
 # special functions #
 factorial_table = np.array(
