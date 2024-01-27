@@ -1,7 +1,6 @@
 from numba import njit
 import numpy as np
-import src.model as m
-import src.model2 as m2
+from src.model import Brane
 from src.utils import load_mesh_from_ply
 import os
 from src.pretty_pictures import mayavi_plots as mp
@@ -59,291 +58,7 @@ def scalars_to_rgbs(samples, cmin=0.0, cmax=1.0, name="coolwarm"):
     return rgbs
 
 
-def save_fig_data(sim_state):
-    b = sim_state["b"]
-    mesh_data = b.pack_mesh_data()
-    vis_data = b.pack_visual_data()
-    output_directory = sim_state["output_directory"]
-    image_count = sim_state["image_count"]
-    mesh_data_file = f"{output_directory}/temp_images/mesh_data_{image_count:0>4}.npy"
-    vis_data_file = f"{output_directory}/temp_images/vis_data_{image_count:0>4}.npy"
-    np.save(mesh_data_file, mesh_data)
-    np.save(vis_data_file, vis_data)
-    fig_path = f"{output_directory}/temp_images/fig_{image_count:0>4}.png"
-    fig_kwargs = {
-        "V_pq": b.V_pq,
-        "faces": b.faces,
-        "V_rgb": b.V_rgb,
-        "V_radius": b.V_radius,
-        "H_rgb": b.H_rgb,
-        "F_rgb": b.F_rgb,
-        "F_opacity": b.F_opacity,
-        "H_opacity": b.H_opacity,
-        "V_opacity": b.V_opacity,
-        "V_normal_rgb": b.V_normal_rgb,
-        "show": False,
-        "save": True,
-        "show_surface": True,
-        "show_edges": True,
-        "show_vertices": False,
-        "show_normals": False,
-        "show_tangent1": False,
-        "show_tangent2": False,
-        "fig_path": fig_path,
-    }
-    return fig_kwargs
-
-
-def initialize_sim2(
-    Tplot,
-    Tsave,
-    dt,
-    vertices,
-    faces,
-    length_reg_stiffness,
-    area_reg_stiffness,
-    volume_reg_stiffness,
-    bending_modulus,
-    splay_modulus,
-    spontaneous_curvature,
-    linear_drag_coeff,
-    output_directory,
-):
-    init_data = {
-        "Tplot": Tplot,
-        "Tsave": Tsave,
-        "dt": dt,
-        "vertices": vertices,
-        "faces": faces,
-        "length_reg_stiffness": length_reg_stiffness,
-        "area_reg_stiffness": area_reg_stiffness,
-        "volume_reg_stiffness": volume_reg_stiffness,
-        "bending_modulus": bending_modulus,
-        "splay_modulus": splay_modulus,
-        "spontaneous_curvature": spontaneous_curvature,
-        "linear_drag_coeff": linear_drag_coeff,
-        "output_directory": output_directory,
-    }
-    os.system(f"rm -r {output_directory}")
-    os.system(f"mkdir {output_directory}")
-    os.system(f"mkdir {output_directory}/temp_images")
-    os.system(f"mkdir {output_directory}/states")
-    os.system(f"mkdir {output_directory}/init_data")
-    np.save(f"{output_directory}/init_data/vertices.npy", vertices)
-    np.save(f"{output_directory}/init_data/faces.npy", faces)
-    with open(f"{output_directory}/init_data/init_data.txt", "w") as _f:
-        init_str = ""
-        for key, val in init_data.items():
-            if not key in ["vertices", "faces"]:
-                init_str += f"{key} = {val}\n"
-        _f.write(init_str)
-    # with open(f"{output_directory}/init_data.pickle", "wb") as _f:
-    #     dill.dump(init_data, _f)
-
-    brane_init_data = {
-        "vertices": vertices,
-        "faces": faces,
-        "length_reg_stiffness": length_reg_stiffness,
-        "area_reg_stiffness": area_reg_stiffness,
-        "volume_reg_stiffness": volume_reg_stiffness,
-        "bending_modulus": bending_modulus,
-        "splay_modulus": splay_modulus,
-        "linear_drag_coeff": linear_drag_coeff,
-        "spontaneous_curvature": spontaneous_curvature,
-    }
-
-    b = m2.Brane(**brane_init_data)
-
-    sim_state = {
-        "b": b,
-        "success": True,
-        "t": 0.0,
-        "dt": dt,
-        "t2plot": Tplot,
-        "t2save": Tsave,
-        "tstop": Tplot,
-        "image_count": 0,
-        "Tplot": Tplot,
-        "Tsave": Tsave,
-        "output_directory": output_directory,
-    }
-
-    return sim_state
-
-
 def initialize_sim(
-    Tplot,
-    Tsave,
-    dt,
-    vertices,
-    faces,
-    length_reg_stiffness,
-    area_reg_stiffness,
-    volume_reg_stiffness,
-    bending_modulus,
-    splay_modulus,
-    spontaneous_curvature,
-    linear_drag_coeff,
-    output_directory,
-):
-    init_data = {
-        "Tplot": Tplot,
-        "Tsave": Tsave,
-        "dt": dt,
-        "vertices": vertices,
-        "faces": faces,
-        "length_reg_stiffness": length_reg_stiffness,
-        "area_reg_stiffness": area_reg_stiffness,
-        "volume_reg_stiffness": volume_reg_stiffness,
-        "bending_modulus": bending_modulus,
-        "splay_modulus": splay_modulus,
-        "spontaneous_curvature": spontaneous_curvature,
-        "linear_drag_coeff": linear_drag_coeff,
-        "output_directory": output_directory,
-    }
-    os.system(f"rm -r {output_directory}")
-    os.system(f"mkdir {output_directory}")
-    os.system(f"mkdir {output_directory}/temp_images")
-    os.system(f"mkdir {output_directory}/states")
-    os.system(f"mkdir {output_directory}/init_data")
-    np.save(f"{output_directory}/init_data/vertices.npy", vertices)
-    np.save(f"{output_directory}/init_data/faces.npy", faces)
-    with open(f"{output_directory}/init_data/init_data.txt", "w") as _f:
-        init_str = ""
-        for key, val in init_data.items():
-            if not key in ["vertices", "faces"]:
-                init_str += f"{key} = {val}\n"
-        _f.write(init_str)
-    # with open(f"{output_directory}/init_data.pickle", "wb") as _f:
-    #     dill.dump(init_data, _f)
-
-    brane_init_data = {
-        "vertices": vertices,
-        "faces": faces,
-        "length_reg_stiffness": length_reg_stiffness,
-        "area_reg_stiffness": area_reg_stiffness,
-        "volume_reg_stiffness": volume_reg_stiffness,
-        "bending_modulus": bending_modulus,
-        "splay_modulus": splay_modulus,
-        "linear_drag_coeff": linear_drag_coeff,
-        "spontaneous_curvature": spontaneous_curvature,
-    }
-
-    b = m.Brane(**brane_init_data)
-
-    sim_state = {
-        "b": b,
-        "success": True,
-        "t": 0.0,
-        "dt": dt,
-        "t2plot": Tplot,
-        "t2save": Tsave,
-        "tstop": Tplot,
-        "image_count": 0,
-        "Tplot": Tplot,
-        "Tsave": Tsave,
-        "output_directory": output_directory,
-    }
-
-    return sim_state
-
-
-def regularize_run(sim_state, make_plots=True, iters=20, weight=0.2):
-    b = sim_state["b"]
-    image_count = sim_state["image_count"]
-    vertices = b.V_pq[:, :3]
-    Nvertices = len(b.V_pq)
-    T = 5e-2
-    dt = 1e-3
-    Nt = int(T / dt)
-    vals = np.array([b.valence(v) for v in range(Nvertices)])
-    val_min = min(vals)
-    val_max = max(vals)
-    iter = -1
-    Nflips = -1
-    print(
-        f"iter={iter} of {iters}, Nflips={Nflips}, val_min={val_min}, val_max={val_max}            ",
-        end="\n",
-    )
-
-    if make_plots:
-        fig_kwargs = save_fig_data(sim_state)
-        mp.plot_from_data(**fig_kwargs)
-        image_count += 1
-    for iter in range(iters):
-        Nflips = b.regularize_by_flips()
-        vals = np.array([b.valence(v) for v in range(Nvertices)])
-        val_min = min(vals)
-        val_max = max(vals)
-        b.regularize_by_shifts(weight)
-        for _ in range(Nt):
-            b.forward_euler_reg_step(dt)
-        # b.V_pq[:, :3] = get_new_xyz(b.V_pq[:, :3], r_com, rad)
-        print(
-            f"iter={iter} of {iters}, Nflips={Nflips}, val_min={val_min}, val_max={val_max}, L/L0={b.average_hedge_length()/b.preferred_edge_length}            ",
-            end="\n",
-        )
-        # print(
-        #     f"iter={iter} of {iters}, V={b.volume}, V0={b.volume0}          ",
-        #     end="\n",
-        # )
-        # print(f"iter={iter} of {iters}, Nflips={0}            ", end="\n")
-
-        if make_plots:
-            sim_state["image_count"] = image_count
-            fig_kwargs = save_fig_data(sim_state)
-            mp.plot_from_data(**fig_kwargs)
-            image_count += 1
-
-    return sim_state
-
-
-# %%
-
-ply_path = "./data/ply_files/sphere.ply"
-vertices, faces = load_mesh_from_ply(ply_path)
-
-init_data = {
-    "Tplot": 5e-2,
-    "Tsave": 5e-1,
-    "dt": 1e-2,
-    "vertices": vertices,
-    "faces": faces,
-    "length_reg_stiffness": 1e-16,
-    "area_reg_stiffness": 1e-2,
-    "volume_reg_stiffness": 1.0,
-    "bending_modulus": 1.0,
-    "splay_modulus": 1.0,
-    "spontaneous_curvature": 0.0,
-    "linear_drag_coeff": 1.0,
-    "output_directory": "./output/sim0",
-}
-
-# something breaks in b.valence after you flip an edge...
-sim_state = initialize_sim(**init_data)
-
-regularize_run(sim_state, make_plots=True, iters=5, weight=0.15)
-# %%
-b = sim_state["b"]
-# r0 = 1*b.vertices[0]
-# r0*=b.preferred_edge_length/jitnorm(r0)
-# b.Flj(1)
-#
-# for v in b.v_adjacent_to_v(0):
-#     b.V_pq[v,:3] = b.vertices[0,:3]+r0
-#
-# eps = 1e-12
-b.average_hedge_length() / b.preferred_edge_length
-b.Klength = 1e-6
-F = np.array([b.Flj(v) for v, _ in enumerate(b.vertices)])
-normF = np.linalg.norm(F, axis=1)
-np.mean(normF)
-# %%
-
-
-# %%
-##############################
-def _initialize_sim(
     vertices,
     faces,
     Tplot,
@@ -818,48 +533,6 @@ def get_new_xyz(vertices, r_com, rad):
     return r_new
 
 
-#
-ply_path = "./data/ply_files/sphere.ply"
-vertices, faces = load_mesh_from_ply(ply_path)
-brane_init_data = {
-    "vertices": vertices,
-    "faces": faces,
-    "length_reg_stiffness": 1e-1,
-    "area_reg_stiffness": 1e-2,
-    "volume_reg_stiffness": 1.0,
-    "bending_modulus": 1.0,
-    "splay_modulus": 1.0,
-    "linear_drag_coeff": 1.0,
-    "spontaneous_curvature": 0.0,
-}
-
-b = Brane(**brane_init_data)
-b.forward_euler_reg_step(1e-3)
-output_directory = "./output/sphere_reg_sim2"
-
-b.length_reg_force(13)
-b.area_reg_force(13)
-b.volume_reg_force(13)
-Vol = b.volume_of_mesh()
-rad = np.sqrt(np.einsum("si,si->", b.V_pq[:, :3], b.V_pq[:, :3]) / len(b.V_pq))
-Krad = 1 / rad**2
-Volrad = 4 * np.pi * rad**3 / 3
-K = b.get_Gaussian_curvature()
-Kp = np.array([_ for _ in K if _ >= 0])
-Km = np.array([_ for _ in K if _ < 0])
-Kave = sum(K) / len(K)
-Kvar = sum((K - Kave) ** 2) / len(K)
-Kstd = np.sqrt(Kvar)
-
-cmin = Kave - 2 * Kstd
-cmax = Kave + 2 * Kstd
-Kclose = np.array([_ for _ in K if _ >= cmin and _ <= cmax])
-
-Krgb = scalars_to_rgbs(K, cmin=cmin, cmax=cmax)
-b.V_rgb = Krgb
-
-mp.brane_plot(b, color_by_verts=True, show_halfedges=True, show_normals=True)
-
 # %%
 ply_path = "./data/ply_files/sphere_coarse_backup.ply"
 vertices, faces = load_mesh_from_ply(ply_path)
@@ -889,6 +562,57 @@ b = sim_state["b"]
 arr = b.V_pq
 
 # %%
+# vertices,
+# faces,
+# length_reg_stiffness,
+# area_reg_stiffness,
+# volume_reg_stiffness,
+# bending_modulus,
+# splay_modulus,
+# linear_drag_coeff,
+# zeta_linear,
+# preferred_curvature
+ply_path = "./data/ply_files/sphere.ply"
+vertices, faces = load_mesh_from_ply(ply_path)
+brane_init_data = {
+    "vertices": vertices,
+    "faces": faces,
+    "length_reg_stiffness": 1e-1,
+    "area_reg_stiffness": 1e-2,
+    "volume_reg_stiffness": 1.0,
+    "bending_modulus": 1.0,
+    "splay_modulus": 1.0,
+    "linear_drag_coeff": 1.0,
+    "zeta_linear": 1.0,
+    "preferred_curvature": 0.0,
+}
+
+b = Brane(**brane_init_data)
+b.forward_euler_reg_step(1e-3)
+output_directory = "./output/sphere_reg_sim2"
+b.save_mesh_data(output_directory)
+b.length_reg_force(13)
+b.area_reg_force(13)
+b.volume_reg_force(13)
+Vol = b.volume_of_mesh()
+rad = np.sqrt(np.einsum("si,si->", b.V_pq[:, :3], b.V_pq[:, :3]) / len(b.V_pq))
+Krad = 1 / rad**2
+Volrad = 4 * np.pi * rad**3 / 3
+K = b.get_Gaussian_curvature()
+Kp = np.array([_ for _ in K if _ >= 0])
+Km = np.array([_ for _ in K if _ < 0])
+Kave = sum(K) / len(K)
+Kvar = sum((K - Kave) ** 2) / len(K)
+Kstd = np.sqrt(Kvar)
+
+cmin = Kave - 2 * Kstd
+cmax = Kave + 2 * Kstd
+Kclose = np.array([_ for _ in K if _ >= cmin and _ <= cmax])
+
+Krgb = scalars_to_rgbs(K, cmin=cmin, cmax=cmax)
+b.V_rgb = Krgb
+
+mp.brane_plot(b, color_by_verts=True, show_halfedges=True)
 
 
 # %%

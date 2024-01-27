@@ -4,7 +4,7 @@ from matplotlib import colormaps as plt_cmap
 import os
 
 # import tvtk
-from src.numdiff import quaternion_to_matrix_vectorized
+from src.numdiff import quaternion_to_matrix_vectorized, jitdot, jitnorm, jitcross
 
 # red = plt_cmap["Set1"](0)
 # blue = plt_cmap["Set1"](1)
@@ -394,20 +394,27 @@ def mayavi_mesh_minimesh_plot(
 
 
 #
+#
 # def curve_plot():
 #     # Generate data for a 3D curve
-#     t = np.linspace(0, 4 * np.pi, 100)
-#     ex, ey, ez = np.eye(3)
-#     a = 0.1 * np.pi
-#     u1 = (ex * np.cos(a) + ez * np.sin(a)) / np.sqrt(2)
-#     u2 = 0.5 * (ex * np.cos(a) + ez * np.sin(a)) / np.sqrt(2)
-#     w = ez
-#     psi1 = np.array([*u1, *w])
-#     psi2 = np.array([*u2, *w])
-#     pq1 = np.array([exp_se3_quaternion(_ * psi1) for _ in t])
-#     pq2 = np.array([exp_se3_quaternion(_ * psi2) for _ in t])
-#     x1, y1, z1 = pq1[:, 0], pq1[:, 1], pq1[:, 2]
-#     x2, y2, z2 = pq2[:, 0], pq2[:, 1], pq2[:, 2]
+#     s = np.linspace(-1 / 2, 1 / 2, 100)
+#
+#     p0 = np.zeros(3)
+#     p1 = 4 * np.random.rand(3)
+#     n0 = np.random.rand(3)
+#     n0 /= jitnorm(n0)
+#     n1 = np.random.rand(3)
+#     n1 /= jitnorm(n1)
+#
+#     points = np.array([p0, p1])
+#     vects = np.array([n0, n1])
+#     r = np.array([interp(p0, n0, p1, n1, si) for si in s])
+#
+#     quiver_kwargs = {
+#         "name": "normals",
+#         "mode": "arrow",
+#     }
+#     normals = mlab.quiver3d(*H_points.T, *H_vecs.T, **hedge_vec_kwargs)
 #
 #     # Plot the curve
 #     mlab.plot3d(x1, y1, z1, color=(1, 0, 0), tube_radius=None)
