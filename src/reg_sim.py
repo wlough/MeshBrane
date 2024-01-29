@@ -5,7 +5,7 @@ import src.model2 as m2
 from src.utils import load_mesh_from_ply
 import os
 from src.pretty_pictures import mayavi_plots as mp
-from src.numdiff import jitnorm
+from src.numdiff import jitnorm, jitcross, jitdot
 import dill
 from copy import deepcopy
 from matplotlib import colormaps as plt_cmap
@@ -52,7 +52,11 @@ def get_cmap(cmin=0.0, cmax=1.0, name="hsv"):
     return my_cmap
 
 
-def scalars_to_rgbs(samples, cmin=0.0, cmax=1.0, name="coolwarm"):
+def scalars_to_rgbs(samples, cmin=None, cmax=None, name="coolwarm"):
+    if cmin is None:
+        cmin = np.min(samples)
+    if cmax is None:
+        cmax = np.max(samples)
     # Nsamps = len(samples)
     cmap = get_cmap(cmin=cmin, cmax=cmax, name=name)
     rgbs = np.array([cmap(_)[:-1] for _ in samples])
@@ -300,7 +304,7 @@ def regularize_run(sim_state, make_plots=True, iters=20, weight=0.2):
 
 # %%
 
-ply_path = "./data/ply_files/sphere.ply"
+ply_path = "./data/ply_files/torus.ply"
 vertices, faces = load_mesh_from_ply(ply_path)
 
 init_data = {
@@ -319,12 +323,88 @@ init_data = {
     "output_directory": "./output/sim0",
 }
 
-# something breaks in b.valence after you flip an edge...
 sim_state = initialize_sim(**init_data)
 
-regularize_run(sim_state, make_plots=True, iters=5, weight=0.15)
+# regularize_run(sim_state, make_plots=True, iters=5, weight=0.15)
 # %%
+print("----------------------------------------")
 b = sim_state["b"]
+rcom = np.einsum("vi->i", b.V_pq[:, :3]) / len(b.V_pq)
+R = np.linalg.norm(b.V_pq[:, :3] - rcom, axis=1)
+H = b.get_mean_curvature()
+Hcot = b.get_mean_curvature_cot()
+K = b.get_gaussian_curvature()
+Rbig = 0.7  # big radius
+Rsmall = 0.7 / 3.0  # small radius
+Rinside = Rbig - Rsmall
+Routside = Rbig + Rsmall
+Rinside * Rsmall
+1 / (Routside * Rsmall)
+kappa_big = 1 / Rbig
+kappa_small = 1 / Rsmall
+kappa_inside = 1 / Rinside
+kappa_outside = 1 / Routside
+
+
+Hmin = (kappa_inside - kappa_small) / 2
+Hmax = (kappa_outside + kappa_small) / 2
+Hcot = b.get_mean_curvature_cot()
+Kmin = -kappa_inside * kappa_small
+Kmax = kappa_outside * kappa_small
+# b.V_rgb = scalars_to_rgbs(np.clip(Hcot, Hmin, Hmax))
+b.V_rgb = scalars_to_rgbs(R, 0, 1)  # np.clip(K, Kmin, Kmax))
+# b.V_rgb = scalars_to_rgbs(np.clip(Hcot, 1, 4), name="coolwarm")
+plt.plot(R)
+for f in range(len(b.faces)):
+    h = b.F_hedge[f]
+    v = b.H_vertex[h]
+    b.F_rgb[f] = b.V_rgb[v]
+
+mp.brane_plot(b, color_by_verts=True, show_halfedges=True, show_normals=False)
+# %%
+Nv = len(b.vertices)
+iters = 20
+# for iter in range(iters):
+H = b.get_mean_curvature()
+Hcot = b.get_mean_curvature_cot()
+K = b.get_gaussian_curvature()
+Have = np.mean(H)
+Hcotave = np.mean(Hcot)
+Kave = np.mean(K)
+rcom = np.einsum("vi->i", b.V_pq[:, :3]) / len(b.V_pq)
+R = np.linalg.norm(b.V_pq[:, :3] - rcom, axis=1)
+Rave = np.mean(R)
+kappa_R = 1 / Rave
+kappa_K = np.sqrt(abs(Kave))
+kappa_Hcot = np.sqrt(abs(Hcotave))
+kappa_H = abs(Have)
+print(f"k_K={kappa_K/kappa_R}, k_Hcot={kappa_Hcot/kappa_R}")
+b.regularize_by_flips()
+
+import matplotlib.pyplot as plt
+
+for iter in range(iters):
+    H = b.get_mean_curvature()
+    Hcot = b.get_mean_curvature_cot()
+    K = b.get_gaussian_curvature()
+    Have = np.mean(H)
+    Hcotave = np.mean(Hcot)
+    Kave = np.mean(K)
+    rcom = np.einsum("vi->i", b.V_pq[:, :3]) / len(b.V_pq)
+    R = np.linalg.norm(b.V_pq[:, :3] - rcom, axis=1)
+    Rave = np.mean(R)
+    kappa_R = 1 / Rave
+    kappa_K = np.sqrt(abs(Kave))
+    kappa_Hcot = np.sqrt(abs(Hcotave))
+    kappa_H = abs(Have)
+    # b.regularize_by_shifts(0.5)
+    # plt.plot(H, label="H")
+    plt.plot(np.clip(K, -20, 20), label="Hcot")
+    plt.legend()
+    plt.show()
+    plt.close()
+
+# %%
 # r0 = 1*b.vertices[0]
 # r0*=b.preferred_edge_length/jitnorm(r0)
 # b.Flj(1)
@@ -338,6 +418,8 @@ b.Klength = 1e-6
 F = np.array([b.Flj(v) for v, _ in enumerate(b.vertices)])
 normF = np.linalg.norm(F, axis=1)
 np.mean(normF)
+
+b.mean_curvature_vector(3)
 # %%
 
 
