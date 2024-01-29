@@ -914,7 +914,7 @@ class Brane:
 
         return defects
 
-    def get_Gaussian_curvature(self):
+    def get_gaussian_curvature(self):
         """
         2*pi - sum_f (angle_f)
         """
@@ -969,6 +969,186 @@ class Brane:
         K = self.angle_defect(v)
         K /= self.cell_area(v)
         return K
+
+    def mean_curvature_vector(self, v):
+        Atot = 0.0
+        r = self.vertex_position(v)
+        Hvec = np.zeros(3)
+
+        h_start = self.h_of_v(v)
+        h = h_start
+        while True:
+            v1 = self.v_of_h(h)
+            r1 = self.vertex_position(v1)
+            h = self.prev(h)
+            h = self.twin(h)
+            v2 = self.v_of_h(h)
+            r2 = self.vertex_position(v2)
+
+            Avec = (jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)) / 2
+            A = np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / 3
+            gradA = jitcross(Avec, r2 - r1) / (2 * A)
+            Hvec += gradA / 2
+            Atot += A
+
+            if h == h_start:
+                break
+        return Hvec / Atot
+
+    def mean_curvature_vector_cot(self, v):
+        Atot = 0.0
+        r = self.vertex_position(v)
+        Hvec = np.zeros(3)
+
+        h_start = self.h_of_v(v)
+        h = h_start
+        while True:
+            v0 = self.H_vertex[h]
+            r0 = self.V_pq[v0, :3]
+            vm1 = self.H_vertex[self.H_next[self.H_twin[h]]]
+            rm1 = self.V_pq[vm1, :3]
+            h = self.H_twin[self.H_prev[h]]
+            vp1 = self.H_vertex[h]
+            rp1 = self.V_pq[vp1, :3]
+
+            ua1 = r0 - rm1
+            ua2 = r - rm1
+            alpha = np.arccos(jitdot(ua1, ua2) / (jitnorm(ua1) * jitnorm(ua2)))
+
+            ub1 = r - rp1
+            ub2 = r0 - rp1
+            beta = np.arccos(jitdot(ub1, ub2) / (jitnorm(ub1) * jitnorm(ub2)))
+
+            Hvec += (1 / np.tan(alpha) + 1 / np.tan(beta)) * (r - r0) / 2
+            Atot += (1 / np.tan(alpha) + 1 / np.tan(beta)) * jitdot(r - r0, r - r0) / 8
+
+            if h == h_start:
+                break
+        return Hvec / (2 * Atot)
+
+    def mean_curvature_cot2(self, v):
+        Atot = 0.0
+        r = self.vertex_position(v)
+        Hvec = np.zeros(3)
+
+        h_start = self.h_of_v(v)
+        h = h_start
+        while True:
+            v0 = self.H_vertex[h]
+            r0 = self.V_pq[v0, :3]
+            vm1 = self.H_vertex[self.H_next[self.H_twin[h]]]
+            rm1 = self.V_pq[vm1, :3]
+            h = self.H_twin[self.H_prev[h]]
+            vp1 = self.H_vertex[h]
+            rp1 = self.V_pq[vp1, :3]
+
+            ua1 = r0 - rm1
+            ua2 = r - rm1
+            alpha = np.arccos(jitdot(ua1, ua2) / (jitnorm(ua1) * jitnorm(ua2)))
+
+            ub1 = r - rp1
+            ub2 = r0 - rp1
+            beta = np.arccos(jitdot(ub1, ub2) / (jitnorm(ub1) * jitnorm(ub2)))
+
+            Hvec += (1 / np.tan(alpha) + 1 / np.tan(beta)) * (r - r0) / 2
+            Atot += (1 / np.tan(alpha) + 1 / np.tan(beta)) * jitdot(r - r0, r - r0) / 8
+
+            if h == h_start:
+                break
+
+        Hvec /= 2 * Atot
+        n = self.area_weighted_vertex_normal(v)
+        H = jitdot(n, Hvec)
+        return H
+
+    def mean_curvature_cot(self, v):
+        Atot = 0.0
+        r = self.vertex_position(v)
+        Hvec = np.zeros(3)
+        n = np.zeros(3)
+        h_start = self.h_of_v(v)
+        h = h_start
+        while True:
+            v1 = self.H_vertex[h]
+            r1 = self.V_pq[v1, :3]
+            h = self.H_twin[self.H_prev[h]]
+            v2 = self.H_vertex[h]
+            r2 = self.V_pq[v2, :3]
+
+            u1 = r1 - r
+            u2 = r2 - r1
+            u3 = r - r2
+            normu1 = jitnorm(u1)
+            normu2 = jitnorm(u2)
+            normu3 = jitnorm(u3)
+            alpha = np.arccos(jitdot(u2, u1) / (normu2 * normu1))
+            beta = np.arccos(jitdot(u3, u2) / (normu3 * normu2))
+
+            Hvec += u3 / (2 * np.tan(alpha)) - u1 / (2 * np.tan(beta))
+            Atot += normu3**2 / (8 * np.tan(alpha)) + normu1**2 / (8 * np.tan(beta))
+            n += jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)
+            # Atot += (1 / np.tan(alpha) + 1 / np.tan(beta)) * jitdot(r - r0, r - r0) / 8
+
+            if h == h_start:
+                break
+
+        Hvec /= 2 * Atot
+        n /= jitnorm(n)
+        # n = self.area_weighted_vertex_normal(v)
+        H = jitdot(n, Hvec)
+        return H
+
+    def mean_curvature(self, v):
+        Atot = 0.0
+        r = self.vertex_position(v)
+        Hvec = np.zeros(3)
+        n = np.zeros(3)
+
+        h_start = self.h_of_v(v)
+        h = h_start
+        while True:
+            v1 = self.v_of_h(h)
+            r1 = self.vertex_position(v1)
+            h = self.prev(h)
+            h = self.twin(h)
+            v2 = self.v_of_h(h)
+            r2 = self.vertex_position(v2)
+
+            Avec = (jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)) / 2
+            A = np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / 3
+            gradA = jitcross(Avec, r2 - r1) / (2 * A)
+            Hvec += gradA / 2
+            Atot += A
+            n += Avec
+
+            if h == h_start:
+                break
+        Hvec /= Atot
+        n /= jitnorm(n)
+        H = Hvec[0] * n[0] + Hvec[1] * n[1] + Hvec[2] * n[2]
+        return H
+
+    def get_mean_curvature(self):
+        """ """
+        Nv = len(self.V_pq)
+        # defects = np.zeros(Nverts)
+        H = np.zeros(Nv)
+
+        for v in range(Nv):
+            H[v] = self.mean_curvature(v)
+
+        return H
+
+    def get_mean_curvature_cot(self):
+        """ """
+        Nv = len(self.V_pq)
+        # defects = np.zeros(Nverts)
+        H = np.zeros(Nv)
+
+        for v in range(Nv):
+            H[v] = self.mean_curvature_cot(v)
+
+        return H
 
     ###########################################################################
     # mesh mutation/regularization functions #
@@ -1034,6 +1214,7 @@ class Brane:
     def update_vertex_position(self, v, xyz):
         x, y, z = xyz
         self.V_pq[v, :3] = np.array([x, y, z])
+        self.vertices[v] = np.array([x, y, z])
 
     def _edge_flip(self, h):
         r"""

@@ -10,7 +10,7 @@ import multiprocessing as mu
 
 
 def regularize_and_resave_ply(surface_name, backup=True):
-    iters = 40
+    iters = 20
     weight = 0.1
     file_path = f"./data/ply_files/{surface_name}.ply"
     if backup:
@@ -18,14 +18,25 @@ def regularize_and_resave_ply(surface_name, backup=True):
         os.system(f"cp {file_path} {backup_file_path}")
 
     vertices0, faces0 = load_mesh_from_ply(file_path)
+    # brane_init_data = {
+    #     "vertices": vertices0,
+    #     "faces": faces0,
+    #     "length_reg_stiffness": 1.0,
+    #     "area_reg_stiffness": 1.0,
+    #     "bending_modulus": 1.0,
+    #     "splay_modulus": 1.0,
+    #     "linear_drag_coeff": 1.0,
+    # }
     brane_init_data = {
         "vertices": vertices0,
         "faces": faces0,
         "length_reg_stiffness": 1.0,
         "area_reg_stiffness": 1.0,
+        "volume_reg_stiffness": 1.0,
         "bending_modulus": 1.0,
         "splay_modulus": 1.0,
         "linear_drag_coeff": 1.0,
+        "spontaneous_curvature": 0.0,
     }
 
     b = Brane(**brane_init_data)
