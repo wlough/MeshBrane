@@ -57,6 +57,7 @@ Brane_spec = [
     ("preferred_edge_length", float64),
     ###########################
     # visualization stuff
+    ("V_vector_data", float64[:, :]),
     ("V_rgb", float64[:, :]),
     ("H_rgb", float64[:, :]),
     ("F_rgb", float64[:, :]),
@@ -170,6 +171,7 @@ class Brane:
         ###########################
         # visualization stuff
         (
+            self.V_vector_data,
             self.V_rgb,
             self.V_normal_rgb,
             self.V_tangent1_rgb,
@@ -180,6 +182,9 @@ class Brane:
             self.F_opacity,
             self.H_opacity,
             self.V_opacity,
+            self.F_scalar,
+            self.H_scalar,
+            self.V_scalar,
         ) = self._visual_defaults(self.vertices, self.halfedges, self.faces)
 
         #############################################################
@@ -572,11 +577,13 @@ class Brane:
         F_rgb = np.zeros((Nfaces, 3))
         for _ in range(Nfaces):
             F_rgb[_] = face_color
-        # V_scalar = np.array([])
-        # H_scalar = np.array([])
-        # F_scalar = np.array([])
+        V_scalar = np.zeros(Nverts)
+        H_scalar = np.zeros(Nhedges)
+        F_scalar = np.zeros(Nfaces)
+        V_vector_data = np.zeros((Nverts, 3))
         ##########################
         return (
+            V_vector_data,
             V_rgb,
             V_normal_rgb,
             V_tangent1_rgb,
@@ -588,6 +595,9 @@ class Brane:
             F_opacity,
             H_opacity,
             V_opacity,
+            F_scalar,
+            H_scalar,
+            V_scalar,
         )
 
     ###########################################################################
@@ -634,8 +644,118 @@ class Brane:
         return self.F_hedge[f]
 
     ###########################################################################
+    # new geometric computations #
+    ##########################
+    # def dihedral_angle(self, h):
+    #     v0 = self.H_vertex[h]
+    #     v1 = self.H_vertex[self.H_next[h]]
+    #     v2 = self.H_vertex[self.H_twin[h]]
+    #     v3 = self.H_vertex[self.H_next[self.H_twin[h]]]
+    #
+    #     r0 = self.V_pq[v0, :3]
+    #     r1 = self.V_pq[v1, :3]
+    #     r2 = self.V_pq[v2, :3]
+    #     r3 = self.V_pq[v3, :3]
+    #
+    #     Aleft = jitcross(r0, r1) + jitcross(r1, r2) + jitcross(r2, r0)
+    #     Aright = jitcross(r0, r2) + jitcross(r2, r3) + jitcross(r3, r0)
+    #     normAleft = np.sqrt(Aleft[0] ** 2 + Aleft[1] ** 2 + Aleft[2] ** 2)
+    #     normAright = np.sqrt(Aright[0] ** 2 + Aright[1] ** 2 + Aright[2] ** 2)
+    #     Aleft_Aright = (
+    #         Aleft[0] * Aright[0] + Aleft[1] * Aright[1] + Aleft[2] * Aright[2]
+    #     )
+    #     cos_phi = Aleft_Aright / (normAleft * normAright)
+    #     phi = np.arccos(cos_phi)
+    #     return phi
+    def dihedral_angle(self, h):
+        v2 = self.H_vertex[h]
+        v3 = self.H_vertex[self.H_next[h]]
+        v0 = self.H_vertex[self.H_twin[h]]
+        v1 = self.H_vertex[self.H_next[self.H_twin[h]]]
+
+        r0 = self.V_pq[v0, :3]
+        r1 = self.V_pq[v1, :3]
+        r2 = self.V_pq[v2, :3]
+        r3 = self.V_pq[v3, :3]
+
+        Aleft = jitcross(r0, r2) + jitcross(r2, r3) + jitcross(r3, r0)
+        Aright = jitcross(r0, r1) + jitcross(r1, r2) + jitcross(r2, r0)
+
+        normAleft = np.sqrt(Aleft[0] ** 2 + Aleft[1] ** 2 + Aleft[2] ** 2)
+        normAright = np.sqrt(Aright[0] ** 2 + Aright[1] ** 2 + Aright[2] ** 2)
+        Aleft_Aright = (
+            Aleft[0] * Aright[0] + Aleft[1] * Aright[1] + Aleft[2] * Aright[2]
+        )
+        cos_phi = Aleft_Aright / (normAleft * normAright)
+        phi = np.arccos(cos_phi)
+        return phi
+
+    def mean_curvature_over_edge_DG(self, h):
+        v2 = self.H_vertex[h]
+        v3 = self.H_vertex[self.H_next[h]]
+        v0 = self.H_vertex[self.H_twin[h]]
+        v1 = self.H_vertex[self.H_next[self.H_twin[h]]]
+
+        r0 = self.V_pq[v0, :3]
+        r1 = self.V_pq[v1, :3]
+        r2 = self.V_pq[v2, :3]
+        r3 = self.V_pq[v3, :3]
+
+        Aleft = jitcross(r0, r2) + jitcross(r2, r3) + jitcross(r3, r0)
+        Aright = jitcross(r0, r1) + jitcross(r1, r2) + jitcross(r2, r0)
+        normAleft = np.sqrt(Aleft[0] ** 2 + Aleft[1] ** 2 + Aleft[2] ** 2)
+        normAright = np.sqrt(Aright[0] ** 2 + Aright[1] ** 2 + Aright[2] ** 2)
+        Aleft_Aright = (
+            Aleft[0] * Aright[0] + Aleft[1] * Aright[1] + Aleft[2] * Aright[2]
+        )
+        cos_phi = Aleft_Aright / (normAleft * normAright)
+        phi = np.arccos(cos_phi)
+        Eh = r0 - r2
+        Lh = np.sqrt(Eh[0] ** 2 + Eh[1] ** 2 + Eh[2] ** 2)
+        intH = Lh * phi / 2
+        return intH
+
+    def pointwise_mean_curvature_DG(self, v):
+        """uses barycell area"""
+        v0 = v
+        r0 = self.V_pq[v0, :3]
+        intH = 0.0
+        # A = self.barcell_area(v)
+        A = 0
+        h_start = self.V_hedge[v]
+        h = h_start
+        while True:
+            v2 = self.H_vertex[h]
+            v3 = self.H_vertex[self.H_next[h]]
+            v1 = self.H_vertex[self.H_next[self.H_twin[h]]]
+            r1 = self.V_pq[v1, :3]
+            r2 = self.V_pq[v2, :3]
+            r3 = self.V_pq[v3, :3]
+
+            Aleft = jitcross(r0, r2) + jitcross(r2, r3) + jitcross(r3, r0)
+            Aright = jitcross(r0, r1) + jitcross(r1, r2) + jitcross(r2, r0)
+            normAleft = np.sqrt(Aleft[0] ** 2 + Aleft[1] ** 2 + Aleft[2] ** 2)
+            A += normAleft / 6
+            normAright = np.sqrt(Aright[0] ** 2 + Aright[1] ** 2 + Aright[2] ** 2)
+            Aleft_Aright = (
+                Aleft[0] * Aright[0] + Aleft[1] * Aright[1] + Aleft[2] * Aright[2]
+            )
+            cos_phi = Aleft_Aright / (normAleft * normAright)
+            phi = np.arccos(cos_phi)
+            Eh = r0 - r2
+            Lh = np.sqrt(Eh[0] ** 2 + Eh[1] ** 2 + Eh[2] ** 2)
+            intH = Lh * phi / 4
+
+            h = self.H_twin[self.H_prev[h]]
+            if h == h_start:
+                break
+        H = intH / A
+        return H
+
+    ###########################################################################
     # geometric computations #
     ##########################
+
     def areal_coords(self, p, r0, r1, r2):
         """areal coordinates of p wrt triangle r0-r1-r2"""
         s = np.zeros(3)
@@ -735,6 +855,66 @@ class Brane:
                 break
         return np.array(V)
 
+    def vorcell_area(self, v):
+        """area of cell dual to vertex v"""
+        Atot = 0.0
+        r = self.V_pq[v, :3]
+        r_r = r[0] ** 2 + r[1] ** 2 + r[2] ** 2
+        h_start = self.V_hedge[v]
+        h = h_start
+        while True:
+            v1 = self.H_vertex[h]
+            r1 = self.V_pq[v1, :3]
+            h = self.H_twin[self.H_prev[h]]
+            v2 = self.H_vertex[h]
+            r2 = self.V_pq[v2, :3]
+
+            r1_r1 = r1[0] ** 2 + r1[1] ** 2 + r1[2] ** 2
+            r2_r2 = r2[0] ** 2 + r2[1] ** 2 + r2[2] ** 2
+            r_r1 = r[0] * r1[0] + r[1] * r1[1] + r[2] * r1[2]
+            r1_r2 = r1[0] * r2[0] + r1[1] * r2[1] + r1[2] * r2[2]
+            r2_r = r2[0] * r[0] + r2[1] * r[1] + r2[2] * r[2]
+
+            normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
+            normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
+            normu3 = np.sqrt(r_r - 2 * r2_r + r2_r2)  # jitnorm(u3)
+            cos_alpha = (r1_r1 + r2_r - r_r1 - r1_r2) / (normu1 * normu2)
+            cos_beta = (r2_r2 + r_r1 - r1_r2 - r2_r) / (normu2 * normu3)
+
+            cot_alpha = cos_alpha / np.sqrt(1 - cos_alpha**2)
+            cot_beta = cos_beta / np.sqrt(1 - cos_beta**2)
+            Atot += normu3**2 * cot_alpha / 8 + normu1**2 * cot_beta / 8
+
+            if h == h_start:
+                break
+
+        return Atot
+
+    def barcell_area(self, v):
+        """area of cell dual to vertex v"""
+        r = self.vertex_position(v)
+        A = 0.0
+        h = self.h_of_v(v)
+        h_start = h
+        while True:
+            v1 = self.v_of_h(h)
+            r1 = self.vertex_position(v1)
+            h = self.prev(h)
+            h = self.twin(h)
+            v2 = self.v_of_h(h)
+            r2 = self.vertex_position(v2)
+            A_face_vec = (
+                jitcross(r, r1) / 2 + jitcross(r1, r2) / 2 + jitcross(r2, r) / 2
+            )
+            A_face = np.sqrt(
+                A_face_vec[0] ** 2 + A_face_vec[1] ** 2 + A_face_vec[2] ** 2
+            )
+            A += A_face / 3
+
+            if h == h_start:
+                break
+        return A
+
     def get_total_area(self):
         vertices = self.V_pq[:, :3]
         Nv = len(self.vertices)
@@ -794,31 +974,6 @@ class Brane:
             if h == h_start:
                 break
 
-        return A
-
-    def cell_area(self, v):
-        """area of cell dual to vertex v"""
-        r = self.vertex_position(v)
-        A = 0.0
-        h = self.h_of_v(v)
-        h_start = h
-        while True:
-            v1 = self.v_of_h(h)
-            r1 = self.vertex_position(v1)
-            h = self.prev(h)
-            h = self.twin(h)
-            v2 = self.v_of_h(h)
-            r2 = self.vertex_position(v2)
-            A_face_vec = (
-                jitcross(r, r1) / 2 + jitcross(r1, r2) / 2 + jitcross(r2, r) / 2
-            )
-            A_face = np.sqrt(
-                A_face_vec[0] ** 2 + A_face_vec[1] ** 2 + A_face_vec[2] ** 2
-            )
-            A += A_face / 3
-
-            if h == h_start:
-                break
         return A
 
     def angle_defect(self, v):
@@ -914,7 +1069,7 @@ class Brane:
 
         return defects
 
-    def get_gaussian_curvature(self):
+    def get_gaussian_curvature2(self):
         """
         2*pi - sum_f (angle_f)
         """
@@ -967,33 +1122,8 @@ class Brane:
 
     def gaussian_curvature(self, v):
         K = self.angle_defect(v)
-        K /= self.cell_area(v)
+        K /= self.barcell_area(v)
         return K
-
-    def mean_curvature_vector(self, v):
-        Atot = 0.0
-        r = self.vertex_position(v)
-        Hvec = np.zeros(3)
-
-        h_start = self.h_of_v(v)
-        h = h_start
-        while True:
-            v1 = self.v_of_h(h)
-            r1 = self.vertex_position(v1)
-            h = self.prev(h)
-            h = self.twin(h)
-            v2 = self.v_of_h(h)
-            r2 = self.vertex_position(v2)
-
-            Avec = (jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)) / 2
-            A = np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / 3
-            gradA = jitcross(Avec, r2 - r1) / (2 * A)
-            Hvec += gradA / 2
-            Atot += A
-
-            if h == h_start:
-                break
-        return Hvec / Atot
 
     def mean_curvature_vector_cot(self, v):
         Atot = 0.0
@@ -1019,14 +1149,14 @@ class Brane:
             ub2 = r0 - rp1
             beta = np.arccos(jitdot(ub1, ub2) / (jitnorm(ub1) * jitnorm(ub2)))
 
-            Hvec += (1 / np.tan(alpha) + 1 / np.tan(beta)) * (r - r0) / 2
-            Atot += (1 / np.tan(alpha) + 1 / np.tan(beta)) * jitdot(r - r0, r - r0) / 8
+            Hvec += (1 / np.tan(alpha) + 1 / np.tan(beta)) * (r0 - r) / 2
+            Atot += (1 / np.tan(alpha) + 1 / np.tan(beta)) * jitdot(r0 - r, r0 - r) / 8
 
             if h == h_start:
                 break
         return Hvec / (2 * Atot)
 
-    def mean_curvature_cot2(self, v):
+    def mean_curvature_cot(self, v):
         Atot = 0.0
         r = self.vertex_position(v)
         Hvec = np.zeros(3)
@@ -1050,8 +1180,8 @@ class Brane:
             ub2 = r0 - rp1
             beta = np.arccos(jitdot(ub1, ub2) / (jitnorm(ub1) * jitnorm(ub2)))
 
-            Hvec += (1 / np.tan(alpha) + 1 / np.tan(beta)) * (r - r0) / 2
-            Atot += (1 / np.tan(alpha) + 1 / np.tan(beta)) * jitdot(r - r0, r - r0) / 8
+            Hvec += (1 / np.tan(alpha) + 1 / np.tan(beta)) * (r0 - r) / 2
+            Atot += (1 / np.tan(alpha) + 1 / np.tan(beta)) * jitdot(r0 - r, r0 - r) / 8
 
             if h == h_start:
                 break
@@ -1061,12 +1191,13 @@ class Brane:
         H = jitdot(n, Hvec)
         return H
 
-    def mean_curvature_cot(self, v):
+    def mean_curvature(self, v):
         Atot = 0.0
-        r = self.vertex_position(v)
+        r = self.V_pq[v, :3]
+        r_r = r[0] ** 2 + r[1] ** 2 + r[2] ** 2
         Hvec = np.zeros(3)
         n = np.zeros(3)
-        h_start = self.h_of_v(v)
+        h_start = self.V_hedge[v]
         h = h_start
         while True:
             v1 = self.H_vertex[h]
@@ -1075,17 +1206,33 @@ class Brane:
             v2 = self.H_vertex[h]
             r2 = self.V_pq[v2, :3]
 
-            u1 = r1 - r
-            u2 = r2 - r1
-            u3 = r - r2
-            normu1 = jitnorm(u1)
-            normu2 = jitnorm(u2)
-            normu3 = jitnorm(u3)
-            alpha = np.arccos(jitdot(u2, u1) / (normu2 * normu1))
-            beta = np.arccos(jitdot(u3, u2) / (normu3 * normu2))
+            r1_r1 = r1[0] ** 2 + r1[1] ** 2 + r1[2] ** 2
+            r2_r2 = r2[0] ** 2 + r2[1] ** 2 + r2[2] ** 2
+            r_r1 = r[0] * r1[0] + r[1] * r1[1] + r[2] * r1[2]
+            r1_r2 = r1[0] * r2[0] + r1[1] * r2[1] + r1[2] * r2[2]
+            r2_r = r2[0] * r[0] + r2[1] * r[1] + r2[2] * r[2]
+            # u1_u1 = r1_r1 - 2 * r_r1 + r_r
+            # u2_u2 = r2_r2 - 2 * r1_r2 + r1_r1
+            # u3_u3 = r_r - 2 * r2_r + r2_r2
 
-            Hvec += u3 / (2 * np.tan(alpha)) - u1 / (2 * np.tan(beta))
-            Atot += normu3**2 / (8 * np.tan(alpha)) + normu1**2 / (8 * np.tan(beta))
+            # u1 = r1 - r
+            # u2 = r2 - r1
+            # u3 = r - r2
+
+            normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
+            normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
+            normu3 = np.sqrt(r_r - 2 * r2_r + r2_r2)  # jitnorm(u3)
+            cos_alpha = (r1_r1 + r2_r - r_r1 - r1_r2) / (normu1 * normu2)
+            cos_beta = (r2_r2 + r_r1 - r1_r2 - r2_r) / (normu2 * normu3)
+            # sin_alpha = np.sqrt(1-cos_alpha**2)
+            # sin_beta = np.sqrt(1-cos_beta**2)
+            cot_alpha = cos_alpha / np.sqrt(1 - cos_alpha**2)
+            cot_beta = cos_beta / np.sqrt(1 - cos_beta**2)
+            # alpha = np.arccos(jitdot(u2, u1) / (normu2 * normu1))
+            # beta = np.arccos(jitdot(u3, u2) / (normu3 * normu2))
+
+            Hvec += cot_alpha * (r2 - r) / 2 + cot_beta * (r1 - r) / 2
+            Atot += normu3**2 * cot_alpha / 8 + normu1**2 * cot_beta / 8
             n += jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)
             # Atot += (1 / np.tan(alpha) + 1 / np.tan(beta)) * jitdot(r - r0, r - r0) / 8
 
@@ -1093,62 +1240,239 @@ class Brane:
                 break
 
         Hvec /= 2 * Atot
-        n /= jitnorm(n)
+        n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
         # n = self.area_weighted_vertex_normal(v)
-        H = jitdot(n, Hvec)
-        return H
-
-    def mean_curvature(self, v):
-        Atot = 0.0
-        r = self.vertex_position(v)
-        Hvec = np.zeros(3)
-        n = np.zeros(3)
-
-        h_start = self.h_of_v(v)
-        h = h_start
-        while True:
-            v1 = self.v_of_h(h)
-            r1 = self.vertex_position(v1)
-            h = self.prev(h)
-            h = self.twin(h)
-            v2 = self.v_of_h(h)
-            r2 = self.vertex_position(v2)
-
-            Avec = (jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)) / 2
-            A = np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / 3
-            gradA = jitcross(Avec, r2 - r1) / (2 * A)
-            Hvec += gradA / 2
-            Atot += A
-            n += Avec
-
-            if h == h_start:
-                break
-        Hvec /= Atot
-        n /= jitnorm(n)
-        H = Hvec[0] * n[0] + Hvec[1] * n[1] + Hvec[2] * n[2]
+        H = n[0] * Hvec[0] + n[1] * Hvec[1] + n[2] * Hvec[2]
         return H
 
     def get_mean_curvature(self):
         """ """
-        Nv = len(self.V_pq)
-        # defects = np.zeros(Nverts)
+        Nv = self.V_pq.shape[0]
         H = np.zeros(Nv)
 
         for v in range(Nv):
-            H[v] = self.mean_curvature(v)
+            Atot = 0.0
+            r = self.V_pq[v, :3]
+            r_r = r[0] ** 2 + r[1] ** 2 + r[2] ** 2
+            Hvec = np.zeros(3)
+            n = np.zeros(3)
+            h_start = self.V_hedge[v]
+            h = h_start
+            while True:
+                v1 = self.H_vertex[h]
+                r1 = self.V_pq[v1, :3]
+                h = self.H_twin[self.H_prev[h]]
+                v2 = self.H_vertex[h]
+                r2 = self.V_pq[v2, :3]
 
+                r1_r1 = r1[0] ** 2 + r1[1] ** 2 + r1[2] ** 2
+                r2_r2 = r2[0] ** 2 + r2[1] ** 2 + r2[2] ** 2
+                r_r1 = r[0] * r1[0] + r[1] * r1[1] + r[2] * r1[2]
+                r1_r2 = r1[0] * r2[0] + r1[1] * r2[1] + r1[2] * r2[2]
+                r2_r = r2[0] * r[0] + r2[1] * r[1] + r2[2] * r[2]
+
+                normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
+                normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
+                normu3 = np.sqrt(r_r - 2 * r2_r + r2_r2)  # jitnorm(u3)
+                cos_alpha = (r1_r1 + r2_r - r_r1 - r1_r2) / (normu1 * normu2)
+                cos_beta = (r2_r2 + r_r1 - r1_r2 - r2_r) / (normu2 * normu3)
+                cot_alpha = cos_alpha / np.sqrt(1 - cos_alpha**2)
+                cot_beta = cos_beta / np.sqrt(1 - cos_beta**2)
+
+                Hvec += cot_alpha * (r2 - r) / 2 + cot_beta * (r1 - r) / 2
+                Atot += normu3**2 * cot_alpha / 8 + normu1**2 * cot_beta / 8
+                n += jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)
+
+                if h == h_start:
+                    break
+
+            Hvec /= 2 * Atot
+            n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
+            H[v] = n[0] * Hvec[0] + n[1] * Hvec[1] + n[2] * Hvec[2]
         return H
 
-    def get_mean_curvature_cot(self):
+    def get_mean_curvature_vector(self):
         """ """
-        Nv = len(self.V_pq)
-        # defects = np.zeros(Nverts)
-        H = np.zeros(Nv)
+        Nv = self.V_pq.shape[0]
+        Hvec = np.zeros((Nv, 3))
 
         for v in range(Nv):
-            H[v] = self.mean_curvature_cot(v)
+            Atot = 0.0
+            r = self.V_pq[v, :3]
+            r_r = r[0] ** 2 + r[1] ** 2 + r[2] ** 2
+            # Hvec = np.zeros(3)
+            # n = np.zeros(3)
+            h_start = self.V_hedge[v]
+            h = h_start
+            while True:
+                v1 = self.H_vertex[h]
+                r1 = self.V_pq[v1, :3]
+                h = self.H_twin[self.H_prev[h]]
+                v2 = self.H_vertex[h]
+                r2 = self.V_pq[v2, :3]
 
-        return H
+                r1_r1 = r1[0] ** 2 + r1[1] ** 2 + r1[2] ** 2
+                r2_r2 = r2[0] ** 2 + r2[1] ** 2 + r2[2] ** 2
+                r_r1 = r[0] * r1[0] + r[1] * r1[1] + r[2] * r1[2]
+                r1_r2 = r1[0] * r2[0] + r1[1] * r2[1] + r1[2] * r2[2]
+                r2_r = r2[0] * r[0] + r2[1] * r[1] + r2[2] * r[2]
+
+                normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
+                normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
+                normu3 = np.sqrt(r_r - 2 * r2_r + r2_r2)  # jitnorm(u3)
+                cos_alpha = (r1_r1 + r2_r - r_r1 - r1_r2) / (normu1 * normu2)
+                cos_beta = (r2_r2 + r_r1 - r1_r2 - r2_r) / (normu2 * normu3)
+                cot_alpha = cos_alpha / np.sqrt(1 - cos_alpha**2)
+                cot_beta = cos_beta / np.sqrt(1 - cos_beta**2)
+
+                Hvec[v] += cot_alpha * (r2 - r) / 2 + cot_beta * (r1 - r) / 2
+                Atot += normu3**2 * cot_alpha / 8 + normu1**2 * cot_beta / 8
+                # n += jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)
+
+                if h == h_start:
+                    break
+
+            Hvec[v] /= 2 * Atot
+            # n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
+            # H[v] = n[0] * Hvec[0] + n[1] * Hvec[1] + n[2] * Hvec[2]
+        return Hvec
+
+    def get_gaussian_curvature(self):
+        """gaussian curvature using voroni cell areas"""
+        Nv = self.V_pq.shape[0]
+        K = np.zeros(Nv)
+
+        for v in range(Nv):
+            Atot = 0.0
+            r = self.V_pq[v, :3]
+            r_r = r[0] ** 2 + r[1] ** 2 + r[2] ** 2
+            defect = 2 * np.pi
+            h_start = self.V_hedge[v]
+            h = h_start
+            while True:
+                v1 = self.H_vertex[h]
+                r1 = self.V_pq[v1, :3]
+                h = self.H_twin[self.H_prev[h]]
+                v2 = self.H_vertex[h]
+                r2 = self.V_pq[v2, :3]
+
+                r1_r1 = r1[0] ** 2 + r1[1] ** 2 + r1[2] ** 2
+                r2_r2 = r2[0] ** 2 + r2[1] ** 2 + r2[2] ** 2
+                r_r1 = r[0] * r1[0] + r[1] * r1[1] + r[2] * r1[2]
+                r1_r2 = r1[0] * r2[0] + r1[1] * r2[1] + r1[2] * r2[2]
+                r2_r = r2[0] * r[0] + r2[1] * r[1] + r2[2] * r[2]
+
+                normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
+                normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
+                normu3 = np.sqrt(r_r - 2 * r2_r + r2_r2)  # jitnorm(u3)
+                cos_alpha = (r1_r1 + r2_r - r_r1 - r1_r2) / (normu1 * normu2)
+                cos_beta = (r2_r2 + r_r1 - r1_r2 - r2_r) / (normu2 * normu3)
+                cos_gamma = (r_r + r1_r2 - r_r1 - r2_r) / (normu1 * normu3)
+                cot_alpha = cos_alpha / np.sqrt(1 - cos_alpha**2)
+                cot_beta = cos_beta / np.sqrt(1 - cos_beta**2)
+                gamma = np.arccos(cos_gamma)
+                defect -= gamma
+                Atot += normu3**2 * cot_alpha / 8 + normu1**2 * cot_beta / 8
+
+                if h == h_start:
+                    break
+
+            K[v] = defect / Atot
+        return K
+
+    def get_curvatures(self):
+        """ """
+        Nv = self.V_pq.shape[0]
+        H = np.zeros(Nv)
+        K = np.zeros(Nv)
+
+        for v in range(Nv):
+            Atot = 0.0
+            r = self.V_pq[v, :3]
+            r_r = r[0] ** 2 + r[1] ** 2 + r[2] ** 2
+            Hvec = np.zeros(3)
+            n = np.zeros(3)
+            defect = 2 * np.pi
+            h_start = self.V_hedge[v]
+            h = h_start
+            while True:
+                v1 = self.H_vertex[h]
+                r1 = self.V_pq[v1, :3]
+                h = self.H_twin[self.H_prev[h]]
+                v2 = self.H_vertex[h]
+                r2 = self.V_pq[v2, :3]
+
+                r1_r1 = r1[0] ** 2 + r1[1] ** 2 + r1[2] ** 2
+                r2_r2 = r2[0] ** 2 + r2[1] ** 2 + r2[2] ** 2
+                r_r1 = r[0] * r1[0] + r[1] * r1[1] + r[2] * r1[2]
+                r1_r2 = r1[0] * r2[0] + r1[1] * r2[1] + r1[2] * r2[2]
+                r2_r = r2[0] * r[0] + r2[1] * r[1] + r2[2] * r[2]
+
+                normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
+                normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
+                normu3 = np.sqrt(r_r - 2 * r2_r + r2_r2)  # jitnorm(u3)
+                cos_alpha = (r1_r1 + r2_r - r_r1 - r1_r2) / (normu1 * normu2)
+                cos_beta = (r2_r2 + r_r1 - r1_r2 - r2_r) / (normu2 * normu3)
+                cos_gamma = (r_r + r1_r2 - r_r1 - r2_r) / (normu1 * normu3)
+                cot_alpha = cos_alpha / np.sqrt(1 - cos_alpha**2)
+                cot_beta = cos_beta / np.sqrt(1 - cos_beta**2)
+
+                defect -= np.arccos(cos_gamma)
+                Hvec += cot_alpha * (r2 - r) / 2 + cot_beta * (r1 - r) / 2
+                Atot += normu3**2 * cot_alpha / 8 + normu1**2 * cot_beta / 8
+                n += jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)
+
+                if h == h_start:
+                    break
+
+            Hvec /= 2 * Atot
+            n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
+            H[v] = n[0] * Hvec[0] + n[1] * Hvec[1] + n[2] * Hvec[2]
+            K[v] = defect / Atot
+        return H, K
+
+    def cotan_laplacian(self, Y):
+        """computes the laplacian of Y at each vertex"""
+        Nv = self.V_pq.shape[0]
+        lapY = np.zeros_like(Y)
+        for v in range(Nv):
+            Atot = 0.0
+            y = Y[v]
+            r = self.V_pq[v, :3]
+            r_r = r[0] ** 2 + r[1] ** 2 + r[2] ** 2
+            h_start = self.V_hedge[v]
+            h = h_start
+            while True:
+                v1 = self.H_vertex[h]
+                r1 = self.V_pq[v1, :3]
+                y1 = Y[v1]
+                h = self.H_twin[self.H_prev[h]]
+                v2 = self.H_vertex[h]
+                r2 = self.V_pq[v2, :3]
+                y2 = Y[v2]
+
+                r1_r1 = r1[0] ** 2 + r1[1] ** 2 + r1[2] ** 2
+                r2_r2 = r2[0] ** 2 + r2[1] ** 2 + r2[2] ** 2
+                r_r1 = r[0] * r1[0] + r[1] * r1[1] + r[2] * r1[2]
+                r1_r2 = r1[0] * r2[0] + r1[1] * r2[1] + r1[2] * r2[2]
+                r2_r = r2[0] * r[0] + r2[1] * r[1] + r2[2] * r[2]
+
+                normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
+                normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
+                normu3 = np.sqrt(r_r - 2 * r2_r + r2_r2)  # jitnorm(u3)
+                cos_alpha = (r1_r1 + r2_r - r_r1 - r1_r2) / (normu1 * normu2)
+                cos_beta = (r2_r2 + r_r1 - r1_r2 - r2_r) / (normu2 * normu3)
+                cot_alpha = cos_alpha / np.sqrt(1 - cos_alpha**2)
+                cot_beta = cos_beta / np.sqrt(1 - cos_beta**2)
+
+                lapY[v] += -(cot_alpha * (y2 - y) / 2 + cot_beta * (y1 - y) / 2)
+                Atot += normu3**2 * cot_alpha / 8 + normu1**2 * cot_beta / 8
+
+                if h == h_start:
+                    break
+            lapY[v] /= Atot
+
+        return lapY
 
     ###########################################################################
     # mesh mutation/regularization functions #
@@ -1993,6 +2317,7 @@ class Brane:
                 F += self.area_reg_force(v)
                 F += self.volume_reg_force(v)
                 self.V_pq[v, :3] = self.V_pq[v, :3] + dt * F / self.linear_drag_coeff
+            t += dt
 
         # for v in range(Nv):
         #     self.V_pq[v, 3:] = self.get_new_quat_dumb(v)
@@ -2011,6 +2336,135 @@ class Brane:
 
         q = matrix_to_quaternion(Q)
         return q
+
+    def get_new_euler_state(self, dt):
+        Nv = len(self.V_pq)
+        vertices = np.zeros((Nv, 3))
+        linear_drag_coeff = self.linear_drag_coeff
+        self.total_volume = self.volume_of_mesh()
+        self.total_area = self.get_total_area()
+        Fb = self.Fbend()
+        Fl = self.Flength()
+        Fa = self.Farea()
+        Fv = self.Fvolume()
+        F = Fb + Fl + Fa + Fv
+        vertices = self.V_pq[:, :3] + dt * F / linear_drag_coeff
+
+        # for v in range(Nv):
+        #     self.V_pq[v, 3:] = self.get_new_quat_dumb(v)
+        success = True
+        return vertices, success
+
+    def Fbend2(self):
+        """"""
+        Kbend = self.Kbend
+        H, K = self.get_curvatures()
+        Nv = H.shape[0]
+        lapH = self.cotan_laplacian(H)
+        F = np.zeros((Nv, 3))
+        # Fn = np.zeros(Nv)
+        Fn = Kbend * (lapH + 2 * H * (K - H**2))
+        for v in range(Nv):
+            n = self.area_weighted_vertex_normal(v)
+            A = self.vorcell_area(v)
+            Fn[v] *= A
+            F[v] = Fn[v] * n
+        return F
+
+    def Fbend(self):
+        """from Tu"""
+        Kbend = self.Kbend
+        H, K = self.get_curvatures()
+        Nv = H.shape[0]
+        lapH = self.cotan_laplacian(H)
+        F = np.zeros((Nv, 3))
+        # Fn = np.zeros(Nv)
+        # Fn = Kbend * (lapH + 2 * H * (H**2 - K))
+        Fn = -Kbend * (lapH + 2 * H * (H**2 - K))
+        for v in range(Nv):
+            n = self.area_weighted_vertex_normal(v)
+            A = self.vorcell_area(v)
+            Fn[v] *= A
+            F[v] = Fn[v] * n
+        return F
+
+    def Flength(self):
+        Nv = len(self.V_pq)
+        F = np.zeros((Nv, 3))
+        Ke = self.Klength
+        L0 = self.preferred_edge_length
+        for v in range(Nv):
+            r = self.V_pq[v, :3]
+            h_start = self.V_hedge[v]
+            h = h_start
+            while True:
+                v0 = self.H_vertex[h]
+                r0 = self.V_pq[v0, :3]
+                u = r - r0
+                L = np.sqrt(u[0] ** 2 + u[1] ** 2 + u[2] ** 2)
+                gradL = u / L
+                F[v] += -Ke * (L - L0) * gradL / L0
+                h = self.H_twin[self.H_prev[h]]
+                if h == h_start:
+                    break
+        return F
+
+    def Farea(self):
+        """local cell area refulation"""
+        Nv = len(self.V_pq)
+        F = np.zeros((Nv, 3))
+        # area0 = self.preferred_total_area
+        # area = self.total_area
+        A0 = self.preferred_cell_area
+        Ka = self.Karea
+        for v in range(Nv):
+            r = self.V_pq[v, :3]
+            h_start = self.h_of_v(v)
+            h = h_start
+            while True:
+                v1 = self.v_of_h(h)
+                r1 = self.vertex_position(v1)
+                h = self.prev(h)
+                h = self.twin(h)
+                v2 = self.v_of_h(h)
+                r2 = self.vertex_position(v2)
+
+                Avec = (jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)) / 2
+                A = np.sqrt(Avec[0] ** 2 + Avec[1] ** 2 + Avec[2] ** 2) / 3
+
+                gradA = jitcross(Avec, r2 - r1) / (2 * A)
+
+                # F[v] += -Ka * (area - area0) * gradA / area0
+                F[v] += -Ka * (A - A0) * gradA / A0
+
+                if h == h_start:
+                    break
+        return F
+
+    def Fvolume(self):
+        Nv = len(self.V_pq)
+        F = np.zeros((Nv, 3))
+        vol0 = self.preferred_total_volume
+        vol = self.volume_of_mesh()
+        Kv = self.Kvolume
+        for v in range(Nv):
+            h_start = self.h_of_v(v)
+            h = h_start
+            while True:
+                v1 = self.v_of_h(h)
+                r1 = self.vertex_position(v1)
+                h = self.prev(h)
+                h = self.twin(h)
+                v2 = self.v_of_h(h)
+                r2 = self.vertex_position(v2)
+
+                # grad_vol = jitcross(r1, r2) / (2 * A)
+
+                F[v] += -Kv * (vol - vol0) * jitcross(r1, r2) / (18 * vol0)
+
+                if h == h_start:
+                    break
+        return F
 
     ###########################################################################
     # visualization functions #
