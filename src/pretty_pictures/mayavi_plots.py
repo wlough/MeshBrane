@@ -427,7 +427,8 @@ def mayavi_mesh_minimesh_plot(
 def set_rgba_colors(rgb, a):
     rgba = np.array([[_[0], _[1], _[2], a] for _ in rgb])
     rgba = rgb_float_to_int(rgba)
-    scalars = np.arange(rgba.shape[0])
+    # scalars = np.arange(rgba.shape[0])
+    scalars = np.linspace(0, 1, rgba.shape[0])
     return rgba, scalars
 
 
@@ -445,7 +446,11 @@ def brane_plot(
     show_tangent1=False,
     show_tangent2=False,
     show_plot_axes=False,
-    color_by_verts=False,
+    color_by_V_rgb=False,
+    color_by_V_scalar=False,
+    color_by_F_scalar=False,
+    show_V_vector_data=False,
+    frame_scale=0.07,
 ):
     """
     fig_path=f"{output_directory}/temp_images/fig_{image_count:0>4}.png"
@@ -463,7 +468,7 @@ def brane_plot(
     vertices = brane.vertex_positions()
     faces = brane.faces
     # hedges = brane.halfedges
-    frame_scale = 0.15
+    # frame_scale = 0.15
     ################################
     if show:
         mlab.options.offscreen = False
@@ -510,7 +515,7 @@ def brane_plot(
         }
 
         brane_mesh = mlab.triangular_mesh(*vertices.T, faces, **brane_mesh_kwargs)
-        if color_by_verts:
+        if color_by_V_rgb:
             F_rgba, F_scalars = set_rgba_colors(V_rgb, F_opacity)
             brane_mesh.module_manager.scalar_lut_manager.lut.number_of_colors = len(
                 F_scalars
@@ -523,6 +528,42 @@ def brane_plot(
             brane_mesh2 = mlab.pipeline.set_active_attribute(
                 brane_mesh, point_scalars="face colors"
             )
+        elif color_by_V_scalar:
+            F_scalars = brane.V_scalar
+            brane_mesh.module_manager.lut_data_mode = "point data"
+            brane_mesh.mlab_source.dataset.point_data.scalars = F_scalars
+            brane_mesh.mlab_source.dataset.point_data.scalars.name = "face colors"
+            brane_mesh.mlab_source.update()
+            brane_mesh2 = mlab.pipeline.set_active_attribute(
+                brane_mesh, point_scalars="face colors"
+            )
+            surfbar = mlab.colorbar(
+                object=brane_mesh,
+                # title="Gaussian curvature",
+                # orientation="horizontal",
+                nb_labels=5,
+            )
+            # brane_mesh.module_manager.scalar_lut_manager.scalar_bar.position = np.array(
+            #     [0.01, 10.15]
+            # )
+        elif color_by_F_scalar:
+            F_scalars = brane.F_scalar
+            brane_mesh.module_manager.lut_data_mode = "cell data"
+            brane_mesh.mlab_source.dataset.cell_data.scalars = F_scalars
+            brane_mesh.mlab_source.dataset.cell_data.scalars.name = "face colors"
+            brane_mesh.mlab_source.update()
+            brane_mesh2 = mlab.pipeline.set_active_attribute(
+                brane_mesh, cell_scalars="face colors"
+            )
+            surfbar = mlab.colorbar(
+                object=brane_mesh,
+                # title="Gaussian curvature",
+                # orientation="horizontal",
+                nb_labels=5,
+            )
+            # brane_mesh.module_manager.scalar_lut_manager.scalar_bar.position = np.array(
+            #     [0.01, 10.15]
+            # )
         else:
             F_rgba, F_scalars = set_rgba_colors(F_rgb, F_opacity)
             brane_mesh.module_manager.scalar_lut_manager.lut.number_of_colors = len(
@@ -536,7 +577,8 @@ def brane_plot(
             brane_mesh2 = mlab.pipeline.set_active_attribute(
                 brane_mesh, cell_scalars="face colors"
             )
-        # surf = mlab.pipeline.surface(brane_mesh)
+        # # # #  #surf = mlab.pipeline.surface(brane_mesh)
+
     ################################
     # edge_mesh
     if show_edges:
@@ -583,6 +625,36 @@ def brane_plot(
         #     hedge_vfield, point_scalars="halfedge colors", point_vectors="halfedge vectors"
         # )
     ###############################
+    if show_V_vector_data:
+        V_vector_data = brane.V_vector_data
+
+        V_vector_data_kwargs = {
+            "name": "vector_data",
+            "mode": "arrow",
+            "scale_mode": "vector",
+            "scale_factor": 1.0,
+        }
+        V_vector_data_field = mlab.quiver3d(
+            *vertices.T, *V_vector_data.T, **V_vector_data_kwargs
+        )
+        # V_normal_rgba, V_normal_color_scalars = set_rgba_colors(V_normal_rgb, 1.0)
+        V_vector_data_field.glyph.glyph.clamping = False
+        # V_normal_field.glyph.glyph_source.glyph_source.tip_length = 0.25
+        # V_normal_field.glyph.glyph_source.glyph_source.tip_radius = 0.03
+        # V_normal_field.glyph.glyph_source.glyph_source.shaft_radius = 0.01
+        V_vector_data_field.glyph.glyph_source.glyph_source.tip_length = 0.25
+        V_vector_data_field.glyph.glyph_source.glyph_source.tip_radius = 0.03 * 2
+        V_vector_data_field.glyph.glyph_source.glyph_source.shaft_radius = 0.01 * 2
+        # V_vector_data_field.glyph.color_mode = "color_by_scalar"
+
+        # V_vector_data_field.module_manager.scalar_lut_manager.lut.number_of_colors = len(
+        #     V_normal_color_scalars
+        # )
+        # V_vector_data_field.module_manager.scalar_lut_manager.lut.table = V_normal_rgba
+        # V_vector_data_field.mlab_source.dataset.point_data.scalars = V_normal_color_scalars
+        # V_vector_data_field.mlab_source.dataset.point_data.scalars.name = "normal colors"
+        # V_vector_data_field.mlab_source.update()
+
     if show_normals:
         V_normal_rgb = brane.V_normal_rgb
         try:
@@ -600,9 +672,12 @@ def brane_plot(
         V_normal_field = mlab.quiver3d(*vertices.T, *V_normal.T, **V_normal_kwargs)
         V_normal_rgba, V_normal_color_scalars = set_rgba_colors(V_normal_rgb, 1.0)
         V_normal_field.glyph.glyph.clamping = False
+        # V_normal_field.glyph.glyph_source.glyph_source.tip_length = 0.25
+        # V_normal_field.glyph.glyph_source.glyph_source.tip_radius = 0.03
+        # V_normal_field.glyph.glyph_source.glyph_source.shaft_radius = 0.01
         V_normal_field.glyph.glyph_source.glyph_source.tip_length = 0.25
-        V_normal_field.glyph.glyph_source.glyph_source.tip_radius = 0.03
-        V_normal_field.glyph.glyph_source.glyph_source.shaft_radius = 0.01
+        V_normal_field.glyph.glyph_source.glyph_source.tip_radius = 0.03 * 2
+        V_normal_field.glyph.glyph_source.glyph_source.shaft_radius = 0.01 * 2
         V_normal_field.glyph.color_mode = "color_by_scalar"
 
         V_normal_field.module_manager.scalar_lut_manager.lut.number_of_colors = len(
