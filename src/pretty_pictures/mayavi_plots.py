@@ -451,6 +451,7 @@ def brane_plot(
     color_by_F_scalar=False,
     show_V_vector_data=False,
     frame_scale=0.07,
+    view=None,
 ):
     """
     fig_path=f"{output_directory}/temp_images/fig_{image_count:0>4}.png"
@@ -759,6 +760,10 @@ def brane_plot(
     if show_plot_axes:
         mlab.axes()
         mlab.orientation_axes()
+    # mview = mlab.view()
+    # print(mview)
+    if view is not None:
+        mlab.view(**view)
     if show:
         mlab.options.offscreen = False
         mlab.show()
@@ -866,6 +871,7 @@ def plot_from_data(
             brane_mesh, cell_scalars="face colors"
         )
         # surf = mlab.pipeline.surface(brane_mesh)
+
     ################################
     # edge_mesh
     if show_edges:
@@ -879,7 +885,7 @@ def plot_from_data(
 
     ###############################
     if show_normals:
-        V_frames = quaternion_to_matrix_vectorized(b.V_pq[:, 3:])
+        V_frames = quaternion_to_matrix_vectorized(V_pq[:, 3:])
         V_normal = V_frames[:, :, 2]
 
         V_normal_kwargs = {
