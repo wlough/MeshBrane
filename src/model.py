@@ -21,7 +21,44 @@ from src.numdiff import (
 )
 
 # from mayavi import mlab
-
+# vertices
+# V_hedge
+# halfedges
+# H_vertex
+# H_face
+# H_next
+# H_prev
+# H_twin
+# faces
+# F_hedge
+# V_pq
+# Kbend
+# Ksplay
+# Kvolume
+# Karea
+# Klength
+# linear_drag_coeff
+# spontaneous_curvature
+# preferred_edge_length
+# preferred_cell_area
+# preferred_total_volume
+# preferred_total_area
+# total_volume
+# total_area
+# V_vector_data
+# V_rgb
+# V_normal_rgb
+# V_tangent1_rgb
+# V_tangent2_rgb
+# V_radius
+# H_rgb
+# F_rgb
+# F_opacity
+# H_opacity
+# V_opacity
+# F_scalar
+# H_scalar
+# V_scalar
 Brane_spec = [
     ###########################
     # mesh data
@@ -75,6 +112,22 @@ Brane_spec = [
 ]
 
 
+# def fastBrane(
+#     vertices,
+#     V_hedge,
+#     halfedges,
+#     H_vertex,
+#     H_face,
+#     H_next,
+#     H_prev,
+#     H_twin,
+#     faces,
+#     F_hedge,
+# ):
+#     b = Brane()
+#     return
+
+
 @jitclass(Brane_spec)
 class Brane:
     def __init__(
@@ -88,6 +141,14 @@ class Brane:
         splay_modulus,
         spontaneous_curvature,
         linear_drag_coeff,
+        V_hedge=None,
+        halfedges=None,
+        H_vertex=None,
+        H_face=None,
+        H_next=None,
+        H_prev=None,
+        H_twin=None,
+        F_hedge=None,
         # reinit,
     ):
         """to do: make fun to check counterclockwise faces
@@ -114,18 +175,30 @@ class Brane:
 
         """
         ###########################
-        (
-            self.vertices,
-            self.V_hedge,
-            self.halfedges,
-            self.H_vertex,
-            self.H_face,
-            self.H_next,
-            self.H_prev,
-            self.H_twin,
-            self.faces,
-            self.F_hedge,
-        ) = self._get_combinatorial_mesh_data(vertices, faces)
+        if halfedges is None:
+            (
+                self.vertices,
+                self.V_hedge,
+                self.halfedges,
+                self.H_vertex,
+                self.H_face,
+                self.H_next,
+                self.H_prev,
+                self.H_twin,
+                self.faces,
+                self.F_hedge,
+            ) = self._get_combinatorial_mesh_data(vertices, faces)
+        else:
+            self.vertices = vertices.copy()
+            self.V_hedge = V_hedge.copy()
+            self.halfedges = halfedges.copy()
+            self.H_vertex = H_vertex.copy()
+            self.H_face = H_face.copy()
+            self.H_next = H_next.copy()
+            self.H_prev = H_prev.copy()
+            self.H_twin = H_twin.copy()
+            self.faces = faces.copy()
+            self.F_hedge = F_hedge.copy()
 
         self.V_pq = self._frame_the_mesh(
             self.vertices,
@@ -600,6 +673,91 @@ class Brane:
             V_scalar,
         )
 
+    def reinit(
+        self,
+        vertices,
+        faces,
+        length_reg_stiffness,
+        area_reg_stiffness,
+        volume_reg_stiffness,
+        bending_modulus,
+        splay_modulus,
+        spontaneous_curvature,
+        linear_drag_coeff,
+    ):
+        (
+            self.vertices,
+            self.V_hedge,
+            self.halfedges,
+            self.H_vertex,
+            self.H_face,
+            self.H_next,
+            self.H_prev,
+            self.H_twin,
+            self.faces,
+            self.F_hedge,
+        ) = self._get_combinatorial_mesh_data(vertices, faces)
+
+        self.V_pq = self._frame_the_mesh(
+            self.vertices,
+            self.faces,
+            self.halfedges,
+            self.V_hedge,
+            self.H_vertex,
+            self.H_face,
+            self.H_next,
+            self.H_prev,
+            self.H_twin,
+            self.F_hedge,
+        )
+        ###########################
+        # physical parameters
+        self.Kbend = bending_modulus
+        self.Ksplay = splay_modulus
+        self.Kvolume = volume_reg_stiffness
+        self.Karea = area_reg_stiffness
+        self.Klength = length_reg_stiffness
+        self.linear_drag_coeff = linear_drag_coeff
+        self.spontaneous_curvature = spontaneous_curvature
+        # self.params = params
+        ###########################
+        # geometric stuff
+        (
+            self.preferred_edge_length,
+            self.preferred_cell_area,
+            self.preferred_total_volume,
+            self.preferred_total_area,
+        ) = self._preferred_geometric_defaults(
+            vertices,
+            self.V_hedge,
+            self.H_vertex,
+            self.H_next,
+            self.H_prev,
+            self.H_twin,
+            self.faces,
+            self.F_hedge,
+        )
+        self.total_volume = self.preferred_total_volume
+        self.total_area = self.preferred_total_area
+        ###########################
+        # visualization stuff
+        (
+            self.V_vector_data,
+            self.V_rgb,
+            self.V_normal_rgb,
+            self.V_tangent1_rgb,
+            self.V_tangent2_rgb,
+            self.V_radius,
+            self.H_rgb,
+            self.F_rgb,
+            self.F_opacity,
+            self.H_opacity,
+            self.V_opacity,
+            self.F_scalar,
+            self.H_scalar,
+            self.V_scalar,
+        ) = self._visual_defaults(self.vertices, self.halfedges, self.faces)
+
     ###########################################################################
     # mesh navigation functions #
     ############################
@@ -667,7 +825,7 @@ class Brane:
     #     cos_phi = Aleft_Aright / (normAleft * normAright)
     #     phi = np.arccos(cos_phi)
     #     return phi
-    def dihedral_angle(self, h):
+    def dihedral_angle_dg(self, h):
         v2 = self.H_vertex[h]
         v3 = self.H_vertex[self.H_next[h]]
         v0 = self.H_vertex[self.H_twin[h]]
@@ -690,7 +848,7 @@ class Brane:
         phi = np.arccos(cos_phi)
         return phi
 
-    def mean_curvature_over_edge_DG(self, h):
+    def mean_curvature_over_edge_dg(self, h):
         v2 = self.H_vertex[h]
         v3 = self.H_vertex[self.H_next[h]]
         v0 = self.H_vertex[self.H_twin[h]]
@@ -715,42 +873,149 @@ class Brane:
         intH = Lh * phi / 2
         return intH
 
-    def pointwise_mean_curvature_DG(self, v):
-        """uses barycell area"""
-        v0 = v
-        r0 = self.V_pq[v0, :3]
+    def pointwise_mean_curvature_dg(self, v):
+        """uses barycell area, H_sphere < 0"""
+        vi = v
+        pi = self.V_pq[vi, :3]
         intH = 0.0
         # A = self.barcell_area(v)
         A = 0
-        h_start = self.V_hedge[v]
-        h = h_start
+
+        hij = self.V_hedge[vi]
+        # hir = self.H_next[self.H_twin[hij]]
+        hil = self.H_twin[self.H_prev[hij]]
+        hil_start = hil
+        vj = self.H_vertex[hij]
+        vl = self.H_vertex[hil]
+        pj = self.V_pq[vj, :3]
+        pl = self.V_pq[vl, :3]
+        Aijl = jitcross(pi, pj) + jitcross(pj, pl) + jitcross(pl, pi)
+        normAijl = np.sqrt(Aijl[0] ** 2 + Aijl[1] ** 2 + Aijl[2] ** 2)
         while True:
-            v2 = self.H_vertex[h]
-            v3 = self.H_vertex[self.H_next[h]]
-            v1 = self.H_vertex[self.H_next[self.H_twin[h]]]
-            r1 = self.V_pq[v1, :3]
-            r2 = self.V_pq[v2, :3]
-            r3 = self.V_pq[v3, :3]
-
-            Aleft = jitcross(r0, r2) + jitcross(r2, r3) + jitcross(r3, r0)
-            Aright = jitcross(r0, r1) + jitcross(r1, r2) + jitcross(r2, r0)
-            normAleft = np.sqrt(Aleft[0] ** 2 + Aleft[1] ** 2 + Aleft[2] ** 2)
-            A += normAleft / 6
-            normAright = np.sqrt(Aright[0] ** 2 + Aright[1] ** 2 + Aright[2] ** 2)
-            Aleft_Aright = (
-                Aleft[0] * Aright[0] + Aleft[1] * Aright[1] + Aleft[2] * Aright[2]
-            )
-            cos_phi = Aleft_Aright / (normAleft * normAright)
-            phi = np.arccos(cos_phi)
-            Eh = r0 - r2
-            Lh = np.sqrt(Eh[0] ** 2 + Eh[1] ** 2 + Eh[2] ** 2)
-            intH = Lh * phi / 4
-
-            h = self.H_twin[self.H_prev[h]]
-            if h == h_start:
+            # vr = vj
+            # pr = pj
+            # vj = vl
+            pj = pl
+            hil = self.H_twin[self.H_prev[hil]]
+            vl = self.H_vertex[hil]
+            pl = self.V_pq[vl, :3]
+            eij = pj - pi
+            Lij = np.sqrt(eij[0] ** 2 + eij[1] ** 2 + eij[2] ** 2)
+            Airj = Aijl
+            normAirj = normAijl
+            Aijl = jitcross(pi, pj) + jitcross(pj, pl) + jitcross(pl, pi)
+            normAijl = np.sqrt(Aijl[0] ** 2 + Aijl[1] ** 2 + Aijl[2] ** 2)
+            Airj_dot_Aijl = Airj[0] * Aijl[0] + Airj[1] * Aijl[1] + Airj[2] * Aijl[2]
+            phi_ij = np.arccos(Airj_dot_Aijl / (normAirj * normAijl))
+            intH += Lij * phi_ij / 4
+            A += normAirj / 6
+            if hil == hil_start:
                 break
+
         H = intH / A
+
         return H
+
+    def get_mean_curvature_dg(self):
+        """uses barycell area, H_sphere < 0"""
+        Nv = self.V_pq.shape[0]
+        H = np.zeros(Nv)
+        for vi in range(Nv):
+            # vi = v
+            pi = self.V_pq[vi, :3]
+            intH = 0.0
+            A = 0
+
+            hij = self.V_hedge[vi]
+            # hir = self.H_next[self.H_twin[hij]]
+            hil = self.H_twin[self.H_prev[hij]]
+            hil_start = hil
+            vj = self.H_vertex[hij]
+            vl = self.H_vertex[hil]
+            pj = self.V_pq[vj, :3]
+            pl = self.V_pq[vl, :3]
+            Aijl = jitcross(pi, pj) + jitcross(pj, pl) + jitcross(pl, pi)
+            normAijl = np.sqrt(Aijl[0] ** 2 + Aijl[1] ** 2 + Aijl[2] ** 2)
+            while True:
+                # vr = vj
+                # pr = pj
+                # vj = vl
+                pj = pl
+                hil = self.H_twin[self.H_prev[hil]]
+                vl = self.H_vertex[hil]
+                pl = self.V_pq[vl, :3]
+                eij = pj - pi
+                Lij = np.sqrt(eij[0] ** 2 + eij[1] ** 2 + eij[2] ** 2)
+                Airj = Aijl
+                normAirj = normAijl
+                Aijl = jitcross(pi, pj) + jitcross(pj, pl) + jitcross(pl, pi)
+                normAijl = np.sqrt(Aijl[0] ** 2 + Aijl[1] ** 2 + Aijl[2] ** 2)
+                Airj_dot_Aijl = (
+                    Airj[0] * Aijl[0] + Airj[1] * Aijl[1] + Airj[2] * Aijl[2]
+                )
+                phi_ij = np.arccos(Airj_dot_Aijl / (normAirj * normAijl))
+                intH += Lij * phi_ij / 4
+                A += normAirj / 6
+                if hil == hil_start:
+                    break
+
+            H[vi] = intH / A
+
+        return H
+
+    def cotan_laplacian_dg(self, Y):
+        """computes the laplacian of Y at each vertex"""
+        Nv = self.V_pq.shape[0]
+        lapY = np.zeros_like(Y)
+        for vi in range(Nv):
+            yi = Y[vi]
+            pi = self.V_pq[vi, :3]
+            h_start = self.V_hedge[vi]
+            hij = h_start
+            while True:
+                vj = self.H_vertex[hij]
+                pj = self.V_pq[vj, :3]
+                yj = Y[vj]
+                hijplus1 = self.H_twin[self.H_prev[hij]]
+                vjplus1 = self.H_vertex[hijplus1]
+                pjplus1 = self.V_pq[vjplus1, :3]
+
+                ejjplus1 = pjplus1 - pj
+                eji = pi - pj
+                ejplus1i = pi - pjplus1
+                ejplus1j = -ejjplus1
+                alpha = np.arccos(
+                    jitdot(ejjplus1, eji) / (jitnorm(ejjplus1) * jitnorm(eji))
+                )
+                beta = np.arccos(
+                    jitdot(ejplus1i, ejplus1j) / (jitnorm(ejplus1i) * jitnorm(ejplus1j))
+                )
+                lapY[vi] += (1 / np.tan(alpha) + 1 / np.tan(beta)) * (yj - yi) / 2
+                hij = hijplus1
+
+                if hij == h_start:
+                    break
+
+        return lapY
+
+    def Fbend_dg(self):
+        """from Tu"""
+        Kbend = self.Kbend
+        H, K = self.get_curvatures()
+        H = self.get_mean_curvature_dg()
+        H *= -1
+        Nv = H.shape[0]
+        lapH = self.cotan_laplacian_dg(H)
+        F = np.zeros((Nv, 3))
+        # Fn = np.zeros(Nv)
+        # Fn = Kbend * (lapH + 2 * H * (H**2 - K))
+        Fn = -Kbend * (lapH + 2 * H * (H**2 - K))
+        for v in range(Nv):
+            n = self.area_weighted_vertex_normal(v)
+            A = self.vorcell_area(v)
+            Fn[v] *= A
+            F[v] = Fn[v] * n
+        return F
 
     ###########################################################################
     # geometric computations #
@@ -1751,6 +2016,27 @@ class Brane:
         for v in range(Nv):
             self.shift_vertex_towards_barycenter(v, weight)
 
+    def smooth_samples(self, samples_in, weight, iters):
+        """shifts samples towards the avereage value of their neighbors"""
+        samples = samples_in.copy()
+        Nv = self.V_pq.shape[0]
+        for iter in range(iters):
+            for v in range(Nv):
+                h = self.V_hedge[v]
+                h_start = h
+                samp = np.zeros_like(samples[v])
+                val = 0
+                while True:
+                    vb = self.H_vertex[h]
+                    samp += samples[vb]
+                    val += 1
+                    h = self.H_twin[self.H_prev[h]]
+                    if h == h_start:
+                        break
+                samp /= val
+                samples[v] = weight * samp + (1 - weight) * samples[v]
+        return samples
+
     ###########################################################################
     # simulation/data functions #
     ############################
@@ -2360,7 +2646,7 @@ class Brane:
         Kbend = self.Kbend
         H, K = self.get_curvatures()
         Nv = H.shape[0]
-        lapH = self.cotan_laplacian(H)
+        lapH = self.cotan_laplacian2(H)
         F = np.zeros((Nv, 3))
         # Fn = np.zeros(Nv)
         Fn = Kbend * (lapH + 2 * H * (K - H**2))
