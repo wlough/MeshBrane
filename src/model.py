@@ -17,6 +17,7 @@ from src.numdiff import (
     mul_quaternion,
     log_unit_quaternion,
     exp_unit_quaternion,
+    rotate_by_quaternion,
     index_of_nested,
 )
 
@@ -2036,6 +2037,22 @@ class Brane:
                 samp /= val
                 samples[v] = weight * samp + (1 - weight) * samples[v]
         return samples
+
+    def edge_curve_length(self, h):
+        vj = self.H_vertex[h]
+        vi = self.H_vertex[self.H_twin[h]]
+        ri, qi = self.V_pq[vi, :3], self.V_pq[vi, 3:]
+        rj, qj = self.V_pq[vj, :3], self.V_pq[vj, 3:]
+        rij = rj - ri
+        normrij = jitnorm(rij)
+        u = rij / normrij
+        q = mul_quaternion(qi, inv_quaternion(qj))
+        quq = rotate_by_quaternion(q, u)
+
+        Lij = (normrij / np.sqrt(2)) * np.sqrt(
+            1 + u[0] * quq[0] + u[1] * quq[1] + u[2] * quq[2]
+        )
+        return Lij
 
     ###########################################################################
     # simulation/data functions #

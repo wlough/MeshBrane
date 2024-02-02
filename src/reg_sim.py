@@ -339,8 +339,21 @@ def run(sim_state, Trun, make_plots=True):
     return sim_state
 
 
-def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2):
+def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2, Dazim=5):
     b = sim_state["b"]
+    theta = np.pi / 2
+    e0 = np.array([1, 0, 0, 0])
+    u = np.array([0, 1, 0, 0])
+    q = np.cos(theta / 2) * e0 + np.sin(theta / 2) * u
+    p = np.array([0, 0, 0])
+    pq = np.array([*p, *q])
+    b.rigid_transform(pq)
+    view = {
+        "azimuth": 0,
+        "elevation": 55,
+        "distance": 4,
+        "focalpoint": (0, 0, 0),
+    }
     image_count = sim_state["image_count"]
 
     Nvertices = len(b.V_pq)
@@ -387,6 +400,7 @@ def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2):
             show=False,
             save=True,
             fig_path=fig_kwargs["fig_path"],
+            view=view,
         )
         image_count += 1
     for iter in range(iters):
@@ -396,7 +410,7 @@ def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2):
         vFmax = list(normF).index(Fmax)
         Frgb = scalars_to_rgbs(normF)
 
-        H = b.smooth_samples(H, 0.1, 1)
+        H = b.smooth_samples(H, weight, 1)
         Hmin = min(H)
         Hmax = max(H)
         vHmin = list(H).index(Hmin)
@@ -410,6 +424,12 @@ def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2):
             f"iter={iter} of {iters}, Fmax={Fmax}, Hmin={Hmin}, Hmax={Hmax}            ",
             end="\n",
         )
+        view = {
+            "azimuth": iter * Dazim,
+            "elevation": 55,
+            "distance": 4,
+            "focalpoint": (0, 0, 0),
+        }
 
         if make_plots:
             sim_state["image_count"] = image_count
@@ -423,6 +443,7 @@ def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2):
                 show=False,
                 save=True,
                 fig_path=fig_kwargs["fig_path"],
+                view=view,
             )
             image_count += 1
 
@@ -451,9 +472,11 @@ sim_kwargs = {
     "dt": 1e-3,
     "output_directory": "./output/smoothing",
 } | brane_kwargs
-sim_state = initialize_sim(**sim_kwargs)
-Trun = 1
-# sim_state = smooth_Fbend_run(sim_state, make_plots=True, iters=2, weight=0.2)
+# sim_state = initialize_sim(**sim_kwargs)
+# Trun = 1
+# sim_state = smooth_Fbend_run(
+#     sim_state, make_plots=True, iters=100, weight=0.1, Dazim=5
+# )  # smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2)
 # b = sim_state["b"]
 
 
@@ -466,17 +489,23 @@ Trun = 1
 
 
 b = m.Brane(**brane_kwargs)
-# %%
 
-for azim in range(0, 360, 30):
-    for elev in range(0, 90, 10):
+Lh = np.array([b.hedge_length(h) for h, _ in enumerate(b.halfedges)])
+Lc = np.array([b.edge_curve_length(h) for h, _ in enumerate(b.halfedges)])
+
+# %%
+elevs = [-90, -45, 0, 45, 90]
+elevs = [-90, -45, 0, 45, 90]
+
+for elev in range(0, 90, 10):
+    for azim in range(0, 360, 30):
         view = {
             "azimuth": azim,
             "elevation": elev,
             "distance": 3,
             "focalpoint": (0, 0, 0),
         }
-        fig_path = f"./output/smoothing/{azim:0>4}_{elev:0>4}.png"
+        fig_path = f"./output/smoothing/temp_images/{elev:0>4}_{azim:0>4}.png"
         mp.brane_plot(
             b,
             color_by_V_rgb=True,
@@ -488,6 +517,52 @@ for azim in range(0, 360, 30):
             fig_path=fig_path,
         )
 
+movie_dir = "./output/smoothing/temp_images"
+mp.movie(movie_dir)
+# %%
+b = m.Brane(**brane_kwargs)
+theta = np.pi / 2
+e0 = np.array([1, 0, 0, 0])
+u = np.array([0, 1, 0, 0])
+q = np.cos(theta / 2) * e0 + np.sin(theta / 2) * u
+p = np.array([0, 0, 0])
+pq = np.array([*p, *q])
+b.rigid_transform(pq)
+view = {
+    "azimuth": 0,
+    "elevation": 55,
+    "distance": 3,
+    "focalpoint": (0, 0, 0),
+}
+Nsmooth = 10
+weight = 0.2
+
+F = b.Fbend_dg()
+F = b.smooth_samples(F, weight, Nsmooth)
+normF = np.linalg.norm(F, axis=1)
+Fmax = np.max(normF)
+vFmax = list(normF).index(Fmax)
+Frgb = scalars_to_rgbs(normF)
+
+H = b.get_mean_curvature_dg()
+H = b.smooth_samples(H, weight, Nsmooth)
+Hmin = min(H)
+Hmax = max(H)
+vHmin = list(H).index(Hmin)
+vHmax = list(H).index(Hmax)
+Hrgb = scalars_to_rgbs(H)
+
+b.V_rgb = Hrgb  # valrgb.astype(np.float64)
+b.V_vector_data = F
+mp.brane_plot(
+    b,
+    color_by_V_rgb=True,
+    show_halfedges=True,
+    show_V_vector_data=True,
+    show=True,
+    save=False,
+    view=view,
+)
 # %%
 dt = 1e-3  # sim_state["dt"]
 for iter in range(20):
