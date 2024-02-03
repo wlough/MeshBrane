@@ -5,7 +5,7 @@ from src.utils import load_mesh_from_ply, load_halfedge_mesh_data
 import os
 from src.pretty_pictures import mayavi_plots as mp
 
-# from src.numdiff import jitnorm, jitcross, jitdot
+from src.numdiff import jitnorm, jitcross, jitdot
 import dill
 
 # from copy import deepcopy
@@ -252,7 +252,7 @@ def regularize_run(sim_state, make_plots=True, iters=20, weight=0.2):
             b.forward_euler_reg_step(dt)
         # b.V_pq[:, :3] = get_new_xyz(b.V_pq[:, :3], r_com, rad)
         print(
-            f"iter={iter} of {iters}, Nflips={Nflips}, val_min={val_min}, val_max={val_max}, L/L0={b.average_hedge_length()/b.preferred_edge_length}            ",
+            f"iter={iter} of {iters}, Nflips={Nflips}, val_min={val_min}, val_max={val_max}            ",
             end="\n",
         )
         # print(
@@ -382,7 +382,7 @@ def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2, Dazim=5):
     b.V_vector_data = F
 
     print(
-        f"iter={-1} of {iters}, Fmax={Fmax}, Hmin={Hmin}, Hmax={Hmax}, valmin={valmin}, valmax={valmax}, L/L0={b.average_hedge_length()/b.preferred_edge_length}            ",
+        f"iter={-1} of {iters}, Fmax={Fmax}, Hmin={Hmin}, Hmax={Hmax}, valmin={valmin}, valmax={valmax}          ",
         end="\n",
     )
 
@@ -455,7 +455,7 @@ def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2, Dazim=5):
 # ply_path = "./data/ply_files/oblate.ply"
 # vertices, faces = load_mesh_from_ply(ply_path)
 # mesh_directory = "./data/halfedge_meshes/dumbbell"
-mesh_directory = "./data/halfedge_meshes/dumbbell_fine"
+mesh_directory = "./data/halfedge_meshes/dumbbell"
 mesh_data = load_halfedge_mesh_data(mesh_directory)
 brane_kwargs = {
     "length_reg_stiffness": 0 * 1e-1,
@@ -490,35 +490,132 @@ sim_kwargs = {
 
 b = m.Brane(**brane_kwargs)
 
-Lh = np.array([b.hedge_length(h) for h, _ in enumerate(b.halfedges)])
-Lc = np.array([b.edge_curve_length(h) for h, _ in enumerate(b.halfedges)])
+b.is_delaunay(13)
+
 
 # %%
-elevs = [-90, -45, 0, 45, 90]
-elevs = [-90, -45, 0, 45, 90]
+def weighted_vertex_scalar_curvature(self, v):
+    kappa = 0.0
+    valence = 0
+    pi = self.vertices[v]
+    h_start = self.V_hedge[v]
+    h = h_start
+    theta = 0
+    n = self.area_weighted_vertex_normal(v)
+    while True:
+        vj = self.H_vertex[h]
+        vjm1 = self.H_vertex[self.H_next[self.H_twin[h]]]
+        vjp1 = self.H_vertex[self.H_twin[self.H_prev[h]]]
+        pj = self.vertices[vj]
+        pjp1 = self.vertices[vjp1]
+        pjm1 = self.vertices[vjm1]
+        rj = pj - pi
+        rjm1 = pjm1 - pi
+        rjp1 = pjp1 - pi
 
-for elev in range(0, 90, 10):
-    for azim in range(0, 360, 30):
-        view = {
-            "azimuth": azim,
-            "elevation": elev,
-            "distance": 3,
-            "focalpoint": (0, 0, 0),
-        }
-        fig_path = f"./output/smoothing/temp_images/{elev:0>4}_{azim:0>4}.png"
-        mp.brane_plot(
-            b,
-            color_by_V_rgb=True,
-            show_halfedges=False,
-            show_V_vector_data=False,
-            show=False,
-            save=True,
-            view=view,
-            fig_path=fig_path,
-        )
+        rj -= (n @ rj) * n
+        normrj = np.sqrt(rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2)
+        rjm1 -= (n @ rjm1) * n
+        normrjm1 = np.sqrt(rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2)
+        rjp1 -= (n @ rjp1) * n
+        normrjp1 = np.sqrt(rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2)
+        thetajm1 = np.arccos((rjm1 @ rj) / (normrjm1 * normrj)) / 2
+        thetajp1 = np.arccos((rj @ rjp1) / (normrj * normrjp1)) / 2
+        theta += thetajm1 + thetajp1
+        kappa += (thetajm1 + thetajp1) * self.hedge_scalar_curvature(h)
+        valence += 1
+        h = self.H_twin[self.H_prev[h]]
+        if h == h_start:
+            break
+    return kappa / theta
 
-movie_dir = "./output/smoothing/temp_images"
-mp.movie(movie_dir)
+
+k = weighted_vertex_scalar_curvature(b, 13)
+
+# %%
+Kmin = []
+Kmax = []
+Kweighted = []
+
+for v, _ in enumerate(b.vertices):
+    hmin, hmax = b.principal_directions(v)
+    kmin, kmax = b.hedge_scalar_curvature(hmin), b.hedge_scalar_curvature(hmax)
+    Kmin.append(kmin)
+    Kmax.append(kmax)
+    Kweighted.append(b.weighted_vertex_scalar_curvature(v))
+    # b.H_rgb[hmin] = np.array([0, 0, 1])
+    # b.H_rgb[hmax] = np.array([1, 0, 0])
+for h, _ in enumerate(b.halfedges):
+    if b.is_delaunay(h):
+        b.H_rgb[h] = np.array([0, 0, 1])
+    else:
+        b.H_rgb[h] = np.array([1, 0, 0])
+Kmin, Kmax = np.array(Kmin), np.array(Kmax)
+Kgaussian = Kmin * Kmax
+Kmean = (Kmin + Kmax) / 2
+Kweighted = np.array(Kweighted)
+
+Kweighted = b.smooth_samples(Kweighted, 0.1, 20)
+# %%
+# b.quat_normal_vector(3)-b.area_weighted_vertex_normal(3)
+V_kappa = np.array([b.vertex_scalar_curvature(_) for _, __ in enumerate(b.vertices)])
+H_kappa = np.array([b.hedge_scalar_curvature(_) for _, __ in enumerate(b.halfedges)])
+H_kappa = b.smooth_samples(H_kappa, 0.1, 20)
+
+Hdg = b.get_mean_curvature_dg()
+Hold, Kold = b.get_curvatures()
+
+Nv = len(Kmean)
+# plt.plot(Kmean[: int(Nv / 1)], label="Kmean")
+# plt.plot(V_kappa[: int(Nv / 1)], label="V_kappa")
+plt.plot(-Hdg[: int(Nv / 1)], label="-Hdg")
+# plt.plot(H_kappa_slow, label="kappa_slow")
+# plt.plot(H_kappa_slow, label="kappa_slow")
+plt.plot(Kweighted[: int(Nv / 1)], label="weighted")
+# plt.plot(H_kappa_slow[4600:4630], label="kappa_slow")
+# plt.plot(H_kappa[4600:4630], label="kappa")
+# plt.ylim(-5, 1)
+plt.legend()
+# %%
+b.V_rgb = scalars_to_rgbs(Kweighted)  # scalars_to_rgbs(np.clip(V_kappa, -4,2))
+b.H_rgb = scalars_to_rgbs(H_kappa)  # scalars_to_rgbs(np.clip(H_kappa, -7.5,5))
+# b.F_opacity = 1
+mp.brane_plot(
+    b,
+    color_by_V_scalar=False,
+    color_by_V_rgb=True,
+    show_halfedges=True,
+    show_normals=False,
+    show_V_vector_data=True,
+    show_tangent1=False,
+)
+#
+# # %%
+# elevs = [-90, -45, 0, 45, 90]
+# elevs = [-90, -45, 0, 45, 90]
+#
+# for elev in range(0, 90, 10):
+#     for azim in range(0, 360, 30):
+#         view = {
+#             "azimuth": azim,
+#             "elevation": elev,
+#             "distance": 3,
+#             "focalpoint": (0, 0, 0),
+#         }
+#         fig_path = f"./output/smoothing/temp_images/{elev:0>4}_{azim:0>4}.png"
+#         mp.brane_plot(
+#             b,
+#             color_by_V_rgb=True,
+#             show_halfedges=False,
+#             show_V_vector_data=False,
+#             show=False,
+#             save=True,
+#             view=view,
+#             fig_path=fig_path,
+#         )
+#
+# movie_dir = "./output/smoothing/temp_images"
+# mp.movie(movie_dir)
 # %%
 b = m.Brane(**brane_kwargs)
 theta = np.pi / 2
@@ -827,40 +924,34 @@ def save_state_data(sim_state):
     }
     b = sim_state["b"]
 
-    brane_data = b.get_state_data()
-    (
-        sample_times,
-        V_pq_samples,
-        faces,
-        halfedges,
-        V_label,
-        V_hedge,
-        H_label,
-        H_vertex,
-        H_face,
-        H_next,
-        H_prev,
-        H_twin,
-        H_isboundary,
-        F_label,
-        F_hedge,
-    ) = brane_data
+    ######
+    sample_times = b.sample_times
+    V_pq_samples = b.V_pq_samples
+
+    # topological/combinatorial
+    faces = b.faces
+    halfedges = b.halfedges
+    V_hedge = b.V_hedge
+    H_vertex = b.H_vertex
+    H_face = b.H_face
+    H_next = b.H_next
+    H_prev = b.H_prev
+    H_twin = b.H_twin
+    H_isboundary = b.H_isboundary
+    F_hedge = b.F_hedge
 
     sim_data |= {
         "sample_times": sample_times,
         "V_pq_samples": V_pq_samples,
         "faces": faces,
         "halfedges": halfedges,
-        "V_label": V_label,
         "V_hedge": V_hedge,
-        "H_label": H_label,
         "H_vertex": H_vertex,
         "H_face": H_face,
         "H_next": H_next,
         "H_prev": H_prev,
         "H_twin": H_twin,
         "H_isboundary": H_isboundary,
-        "F_label": F_label,
         "F_hedge": F_hedge,
     }
     with open(data_path, "wb") as _f:
