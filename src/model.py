@@ -2349,13 +2349,47 @@ class Brane:
         kappa = 2 * (tij[1] * qij[1] - tij[0] * qij[2]) / Lij**2
         return kappa
 
-    def hedge_scalar_curvature(self, h):
+    def hedge_scalar_curvature_that_works(self, h):
         """computes scalar curvature vector at midpoint
         of curve connecting vertices in the direction tangent to the curve"""
         vj = self.H_vertex[h]
         vi = self.H_vertex[self.H_twin[h]]
         ri, qi = self.V_pq[vi, :3], self.V_pq[vi, 3:]
         rj, qj = self.V_pq[vj, :3], self.V_pq[vj, 3:]
+        qi_dot_qj = qi[0] * qj[0] + qi[1] * qj[1] + qi[2] * qj[2] + qi[3] * qj[3]
+        if qi_dot_qj < 0:
+            qj *= -1
+        rij = rj - ri
+        qij1 = qi[0] * qj[1] - qj[0] * qi[1] - qi[2] * qj[3] + qi[3] * qj[2]
+        qij2 = qi[0] * qj[2] - qj[0] * qi[2] - qi[3] * qj[1] + qi[1] * qj[3]
+        tij = (
+            (2 * qi[0] ** 2 - 1) * rij
+            - 2 * qi[0] * jitcross(qi[1:], rij)
+            + 2 * (qi[1] * rij[0] + qi[2] * rij[1] + qi[3] * rij[2]) * qi[1:]
+            + (2 * qj[0] ** 2 - 1) * rij
+            - 2 * qj[0] * jitcross(qj[1:], rij)
+            + 2 * (qj[1] * rij[0] + qj[2] * rij[1] + qj[3] * rij[2]) * qj[1:]
+        ) / 2
+        Lij = np.sqrt(tij[0] ** 2 + tij[1] ** 2 + tij[2] ** 2)
+        kappa = 2 * (tij[1] * qij1 - tij[0] * qij2) / Lij**2
+        return kappa
+
+    def hedge_scalar_curvature(self, h):
+        """hedge_scalar_curvature_local"""
+        vj = self.H_vertex[h]
+        vi = self.H_vertex[self.H_twin[h]]
+        ri, qi = self.V_pq[vi, :3], self.V_pq[vi, 3:]
+        rj, _qj = self.V_pq[vj, :3], self.V_pq[vj, 3:]
+        Qj = quaternion_to_matrix(_qj)
+        Qi = quaternion_to_matrix(qi)
+        ez = Qj[:, 2]
+        ex = Qi[:, 0]
+        ex -= (ex @ ez) * ez
+        ex /= np.sqrt(ex @ ex)
+        ey = jitcross(ez, ex)
+        Qj[:, 0] = ex
+        Qj[:, 1] = ey
+        qj = matrix_to_quaternion(Qj)
         qi_dot_qj = qi[0] * qj[0] + qi[1] * qj[1] + qi[2] * qj[2] + qi[3] * qj[3]
         if qi_dot_qj < 0:
             qj *= -1
