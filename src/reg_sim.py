@@ -451,7 +451,7 @@ def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2, Dazim=5):
 
 
 # %%
-
+# use local frames!
 # ply_path = "./data/ply_files/oblate.ply"
 # vertices, faces = load_mesh_from_ply(ply_path)
 # mesh_directory = "./data/halfedge_meshes/dumbbell"
@@ -543,21 +543,23 @@ for v, _ in enumerate(b.vertices):
     Kmin.append(kmin)
     Kmax.append(kmax)
     Kweighted.append(b.weighted_vertex_scalar_curvature(v))
-    # b.H_rgb[hmin] = np.array([0, 0, 1])
-    # b.H_rgb[hmax] = np.array([1, 0, 0])
-for h, _ in enumerate(b.halfedges):
-    if b.is_delaunay(h):
-        b.H_rgb[h] = np.array([0, 0, 1])
-    else:
-        b.H_rgb[h] = np.array([1, 0, 0])
+    b.H_rgb[hmin] = np.array([0, 0, 1])
+    b.H_rgb[hmax] = np.array([1, 0, 0])
+# for h, _ in enumerate(b.halfedges):
+#     if b.is_delaunay(h):
+#         b.H_rgb[h] = np.array([0, 0, 1])
+#     else:
+#         b.H_rgb[h] = np.array([1, 0, 0])
 Kmin, Kmax = np.array(Kmin), np.array(Kmax)
 Kgaussian = Kmin * Kmax
 Kmean = (Kmin + Kmax) / 2
 Kweighted = np.array(Kweighted)
 
-Kweighted = b.smooth_samples(Kweighted, 0.1, 20)
+# Kweighted = b.smooth_samples(Kweighted, 0.1, 20)
 # %%
 # b.quat_normal_vector(3)-b.area_weighted_vertex_normal(3)
+
+n = np.array([b.area_weighted_vertex_normal(_) for _, __ in enumerate(b.vertices)])
 V_kappa = np.array([b.vertex_scalar_curvature(_) for _, __ in enumerate(b.vertices)])
 H_kappa = np.array([b.hedge_scalar_curvature(_) for _, __ in enumerate(b.halfedges)])
 H_kappa = b.smooth_samples(H_kappa, 0.1, 20)
@@ -566,9 +568,9 @@ Hdg = b.get_mean_curvature_dg()
 Hold, Kold = b.get_curvatures()
 
 Nv = len(Kmean)
-# plt.plot(Kmean[: int(Nv / 1)], label="Kmean")
+plt.plot(Kmean[: int(Nv / 1)], label="Kmean")
 # plt.plot(V_kappa[: int(Nv / 1)], label="V_kappa")
-plt.plot(-Hdg[: int(Nv / 1)], label="-Hdg")
+# plt.plot(-Hdg[: int(Nv / 1)], label="-Hdg")
 # plt.plot(H_kappa_slow, label="kappa_slow")
 # plt.plot(H_kappa_slow, label="kappa_slow")
 plt.plot(Kweighted[: int(Nv / 1)], label="weighted")
@@ -577,17 +579,20 @@ plt.plot(Kweighted[: int(Nv / 1)], label="weighted")
 # plt.ylim(-5, 1)
 plt.legend()
 # %%
-b.V_rgb = scalars_to_rgbs(Kweighted)  # scalars_to_rgbs(np.clip(V_kappa, -4,2))
-b.H_rgb = scalars_to_rgbs(H_kappa)  # scalars_to_rgbs(np.clip(H_kappa, -7.5,5))
-# b.F_opacity = 1
+# b.V_rgb = scalars_to_rgbs(Hdg)  # scalars_to_rgbs(np.clip(V_kappa, -4,2))
+# b.H_rgb = scalars_to_rgbs(H_kappa)  # scalars_to_rgbs(np.clip(H_kappa, -7.5,5))
+b.V_rgb = scalars_to_rgbs(Kgaussian)
+b.F_opacity = 0.8
+b.V_vector_data = np.einsum("v, vi->vi", 0.01 * Kgaussian, n)
 mp.brane_plot(
     b,
     color_by_V_scalar=False,
     color_by_V_rgb=True,
-    show_halfedges=True,
+    show_halfedges=False,
     show_normals=False,
     show_V_vector_data=True,
     show_tangent1=False,
+    show_tangent2=False,
 )
 #
 # # %%
