@@ -466,7 +466,7 @@ def brane_plot(
     H_opacity = brane.H_opacity
     V_opacity = brane.V_opacity
 
-    vertices = brane.vertex_positions()
+    vertices = brane.V_pq[:, :3]
     faces = brane.faces
     # hedges = brane.halfedges
     # frame_scale = 0.15
@@ -661,7 +661,7 @@ def brane_plot(
         try:
             V_normal = V_frames[:, :, 2]
         except NameError:
-            V_frames = brane.orthogonal_matrices()
+            V_frames = quaternion_to_matrix_vectorized(brane.V_pq[:, 3:])
             V_normal = V_frames[:, :, 2]
 
         V_normal_kwargs = {
@@ -694,7 +694,7 @@ def brane_plot(
         try:
             V_tangent1 = V_frames[:, :, 0]
         except NameError:
-            V_frames = brane.orthogonal_matrices()
+            V_frames = quaternion_to_matrix_vectorized(brane.V_pq[:, 3:])
             V_tangent1 = V_frames[:, :, 0]
 
         V_tangent1_kwargs = {
@@ -728,7 +728,7 @@ def brane_plot(
         try:
             V_tangent2 = V_frames[:, :, 1]
         except NameError:
-            V_frames = brane.orthogonal_matrices()
+            V_frames = quaternion_to_matrix_vectorized(brane.V_pq[:, 3:])
             V_tangent2 = V_frames[:, :, 1]
 
         V_tangent2_kwargs = {
@@ -915,7 +915,7 @@ def plot_from_data(
     #     try:
     #         V_tangent1 = V_frames[:, :, 0]
     #     except NameError:
-    #         V_frames = brane.orthogonal_matrices()
+    #         V_frames = quaternion_to_matrix_vectorized(brane.V_pq[:, 3:])
     #         V_tangent1 = V_frames[:, :, 0]
     #
     #     V_tangent1_kwargs = {
@@ -949,7 +949,7 @@ def plot_from_data(
     #     try:
     #         V_tangent2 = V_frames[:, :, 1]
     #     except NameError:
-    #         V_frames = brane.orthogonal_matrices()
+    #         V_frames = quaternion_to_matrix_vectorized(brane.V_pq[:, 3:])
     #         V_tangent2 = V_frames[:, :, 1]
     #
     #     V_tangent2_kwargs = {
