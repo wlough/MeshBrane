@@ -490,48 +490,30 @@ sim_kwargs = {
 
 b = m.Brane(**brane_kwargs)
 
-b.is_delaunay(13)
+mp.brane_plot(
+    b,
+    # color_by_V_scalar=False,
+    # color_by_V_rgb=True,
+    show_halfedges=True,
+    # show_normals=False,
+    # show_V_vector_data=True,
+)
 
-
+h1 = b.hedge_scalar_curvature_slow(13)
+h2 = b.local_frame_hedge_scalar_curvature(13)
+h3 = b.hedge_scalar_curvature(13)
+h1
 # %%
-def weighted_vertex_scalar_curvature(self, v):
-    kappa = 0.0
-    valence = 0
-    pi = self.vertices[v]
-    h_start = self.V_hedge[v]
-    h = h_start
-    theta = 0
-    n = self.area_weighted_vertex_normal(v)
-    while True:
-        vj = self.H_vertex[h]
-        vjm1 = self.H_vertex[self.H_next[self.H_twin[h]]]
-        vjp1 = self.H_vertex[self.H_twin[self.H_prev[h]]]
-        pj = self.vertices[vj]
-        pjp1 = self.vertices[vjp1]
-        pjm1 = self.vertices[vjm1]
-        rj = pj - pi
-        rjm1 = pjm1 - pi
-        rjp1 = pjp1 - pi
+V_mean_curvature_dg = b.get_mean_curvature_dg()
+Nv = len(b.V_pq)
+V_mean_curvature_coc_vertex_scalar_curvature = np.zeros(Nv)
+V_mean_curvature_angle_weighted_vertex_scalar_curvature = np.zeros(Nv)
+V_mean_curvature_unweighted_vertex_scalar_curvature = np.zeros(Nv)
 
-        rj -= (n @ rj) * n
-        normrj = np.sqrt(rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2)
-        rjm1 -= (n @ rjm1) * n
-        normrjm1 = np.sqrt(rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2)
-        rjp1 -= (n @ rjp1) * n
-        normrjp1 = np.sqrt(rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2)
-        thetajm1 = np.arccos((rjm1 @ rj) / (normrjm1 * normrj)) / 2
-        thetajp1 = np.arccos((rj @ rjp1) / (normrj * normrjp1)) / 2
-        theta += thetajm1 + thetajp1
-        kappa += (thetajm1 + thetajp1) * self.hedge_scalar_curvature(h)
-        valence += 1
-        h = self.H_twin[self.H_prev[h]]
-        if h == h_start:
-            break
-    return kappa / theta
-
-
-k = weighted_vertex_scalar_curvature(b, 13)
-
+Nh = len(b.hedges)
+H_mean_curvature_over_edge_dg = np.zeros(Nh)
+H_hedge_scalar_curvature = np.zeros(Nh)
+H_local_frame_hedge_scalar_curvature = np.zeros(Nh)
 # %%
 Kmin = []
 Kmax = []
