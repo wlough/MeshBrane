@@ -671,7 +671,7 @@ class Brane:
         phi = np.arccos(cos_phi)
         return phi
 
-    def mean_curvature_over_edge_dg(self, h):
+    def mean_curvature_integrated_over_edge_dg(self, h):
         v2 = self.H_vertex[h]
         v3 = self.H_vertex[self.H_next[h]]
         v0 = self.H_vertex[self.H_twin[h]]
@@ -2349,7 +2349,7 @@ class Brane:
         kappa = 2 * (tij[1] * qij[1] - tij[0] * qij[2]) / Lij**2
         return kappa
 
-    def hedge_scalar_curvature_that_works(self, h):
+    def hedge_scalar_curvature(self, h):
         """computes scalar curvature vector at midpoint
         of curve connecting vertices in the direction tangent to the curve"""
         vj = self.H_vertex[h]
@@ -2374,7 +2374,7 @@ class Brane:
         kappa = 2 * (tij[1] * qij1 - tij[0] * qij2) / Lij**2
         return kappa
 
-    def hedge_scalar_curvature(self, h):
+    def local_frame_hedge_scalar_curvature(self, h):
         """hedge_scalar_curvature_local"""
         vj = self.H_vertex[h]
         vi = self.H_vertex[self.H_twin[h]]
@@ -2408,7 +2408,7 @@ class Brane:
         kappa = 2 * (tij[1] * qij1 - tij[0] * qij2) / Lij**2
         return kappa
 
-    def vertex_scalar_curvature(self, v):
+    def unweighted_vertex_scalar_curvature(self, v):
         kappa = 0.0
         valence = 0
         h_start = self.V_hedge[v]
@@ -2421,7 +2421,7 @@ class Brane:
                 break
         return kappa / valence
 
-    def weighted_vertex_scalar_curvature(self, v):
+    def angle_weighted_vertex_scalar_curvature(self, v):
         kappa = 0.0
         valence = 0
         pi = self.vertices[v]
@@ -2455,6 +2455,50 @@ class Brane:
             if h == h_start:
                 break
         return kappa / theta
+
+    def coc_vertex_scalar_curvature(self, v):
+        kappa = 0.0
+        valence = 0
+        pi = self.vertices[v]
+        h_start = self.V_hedge[v]
+        h = h_start
+        theta = 0
+        ni = self.area_weighted_vertex_normal(v)
+        Rvec = np.zeros(3)
+        while True:
+            vj = self.H_vertex[h]
+            nij = self.area_weighted_vertex_normal(vj) + ni
+            nij /= jitnorm(nij)
+            kappaij = self.hedge_scalar_curvature(h)
+            # Rij = 1 / kappaij
+            Rvecij = nij / kappaij
+            vjm1 = self.H_vertex[self.H_next[self.H_twin[h]]]
+            vjp1 = self.H_vertex[self.H_twin[self.H_prev[h]]]
+            pj = self.vertices[vj]
+            pjp1 = self.vertices[vjp1]
+            pjm1 = self.vertices[vjm1]
+            rj = pj - pi
+            rjm1 = pjm1 - pi
+            rjp1 = pjp1 - pi
+
+            rj -= (ni @ rj) * ni
+            normrj = np.sqrt(rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2)
+            rjm1 -= (ni @ rjm1) * ni
+            normrjm1 = np.sqrt(rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2)
+            rjp1 -= (ni @ rjp1) * ni
+            normrjp1 = np.sqrt(rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2)
+            thetajm1 = np.arccos((rjm1 @ rj) / (normrjm1 * normrj)) / 2
+            thetajp1 = np.arccos((rj @ rjp1) / (normrj * normrjp1)) / 2
+            theta += thetajm1 + thetajp1
+            # kappa += (thetajm1 + thetajp1) * kappaij
+            Rvec += (thetajm1 + thetajp1) * Rvecij
+            valence += 1
+            h = self.H_twin[self.H_prev[h]]
+            if h == h_start:
+                break
+            Rvec /= theta
+            kappa = 1 / jitdot(ni, Rvec)
+        return kappa
 
     def principal_directions(self, v):
         kappa = []
