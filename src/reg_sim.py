@@ -455,7 +455,7 @@ def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2, Dazim=5):
 # ply_path = "./data/ply_files/oblate.ply"
 # vertices, faces = load_mesh_from_ply(ply_path)
 # mesh_directory = "./data/halfedge_meshes/dumbbell"
-mesh_directory = "./data/halfedge_meshes/dumbbell"
+mesh_directory = "./data/halfedge_meshes/sphere_fine"
 mesh_data = load_halfedge_mesh_data(mesh_directory)
 brane_kwargs = {
     "length_reg_stiffness": 0 * 1e-1,
@@ -490,22 +490,121 @@ sim_kwargs = {
 
 b = m.Brane(**brane_kwargs)
 
+# mp.brane_plot(
+#     b,
+#     # color_by_V_scalar=False,
+#     # color_by_V_rgb=True,
+#     show_halfedges=True,
+#     # show_normals=False,
+#     # show_V_vector_data=True,
+# )
+# %%
+
+# %%
+# DG test
+Nv = len(b.V_pq)
+n_area_weighted_vertex_normal = np.array(
+    [b.area_weighted_vertex_normal(v) for v in range(Nv)]
+)
+get_mean_curvature_dg = b.get_mean_curvature_dg()
+R = np.mean(np.linalg.norm(b.V_pq[:, :3], axis=1))
+
+b.V_rgb = scalars_to_rgbs(get_mean_curvature_dg)
+b.F_opacity = 0.8
+b.V_vector_data = 0.1 * np.einsum(
+    "vj,v->vj", n_area_weighted_vertex_normal, get_mean_curvature_dg
+)
 mp.brane_plot(
     b,
-    # color_by_V_scalar=False,
-    # color_by_V_rgb=True,
+    color_by_V_scalar=False,
+    color_by_V_rgb=True,
     show_halfedges=True,
-    # show_normals=False,
-    # show_V_vector_data=True,
+    show_normals=False,
+    show_V_vector_data=True,
+    show_tangent1=False,
+    show_tangent2=False,
 )
 
-h1 = b.hedge_scalar_curvature_slow(13)
-h2 = b.local_frame_hedge_scalar_curvature(13)
-h3 = b.hedge_scalar_curvature(13)
-h1
+
 # %%
-V_mean_curvature_dg = b.get_mean_curvature_dg()
+# regular test--all consistent up to sign
 Nv = len(b.V_pq)
+n_area_weighted_vertex_normal = np.array(
+    [b.area_weighted_vertex_normal(v) for v in range(Nv)]
+)
+####
+get_mean_curvature = b.get_mean_curvature()
+get_mean_curvature_vector = b.get_mean_curvature_vector()
+get_curvatures, K = b.get_curvatures()
+#####
+cotan_laplacian = b.cotan_laplacian(b.V_pq[:, :3])  # sphere=positive curvature
+n_cotan_laplacian = np.einsum(
+    "vj,v->vj", cotan_laplacian, 1 / np.linalg.norm(cotan_laplacian, axis=1)
+)
+mean_curvature_cotan_laplacian = np.einsum(
+    "vj,vj->v", n_area_weighted_vertex_normal, 0.5 * cotan_laplacian
+)
+
+###
+R = np.mean(np.linalg.norm(b.V_pq[:, :3], axis=1))
+b.V_rgb = scalars_to_rgbs(-get_mean_curvature)
+b.F_opacity = 0.8
+b.V_vector_data = 0.1 * np.einsum(
+    "vj,v->vj", n_area_weighted_vertex_normal, -get_mean_curvature
+)
+
+mp.brane_plot(
+    b,
+    color_by_V_scalar=False,
+    color_by_V_rgb=True,
+    show_halfedges=True,
+    show_normals=False,
+    show_V_vector_data=True,
+    show_tangent1=False,
+    show_tangent2=False,
+)
+
+# %%
+# frame test
+Nv = len(b.V_pq)
+n_area_weighted_vertex_normal = np.array(
+    [b.area_weighted_vertex_normal(v) for v in range(Nv)]
+)
+####
+unweighted_vertex_scalar_curvature = np.array(
+    [b.unweighted_vertex_scalar_curvature(v) for v in range(Nv)]
+)
+angle_weighted_vertex_scalar_curvature = np.array(
+    [b.angle_weighted_vertex_scalar_curvature(v) for v in range(Nv)]
+)
+local_frame_angle_weighted_vertex_scalar_curvature = np.array(
+    [b.local_frame_angle_weighted_vertex_scalar_curvature(v) for v in range(Nv)]
+)
+H_mpc, K_mpc = b.get_midpoint_angle_weighted_vertex_curvatures()
+H_old, K_old = b.get_curvatures()
+###
+R = np.mean(np.linalg.norm(b.V_pq[:, :3] - np.mean(b.V_pq[:, :3], axis=0), axis=1))
+
+H = b.smooth_samples(H_mpc, 0.2, 10)
+K = b.smooth_samples(K_old, 0.2, 0)
+Rh = 1 / np.mean(-b.smooth_samples(H, 0.1, 1))
+np.mean(H_old**2) - np.mean(H_old) ** 2
+b.V_rgb = scalars_to_rgbs(K)
+b.F_opacity = 0.8
+b.V_vector_data = 1 * np.einsum("vj,v->vj", n_area_weighted_vertex_normal, -H)
+# b.V_vector_data = b.smooth_samples(b.V_vector_data, 0.2, 200)
+mp.brane_plot(
+    b,
+    color_by_V_scalar=False,
+    color_by_V_rgb=True,
+    show_halfedges=True,
+    show_normals=False,
+    show_V_vector_data=True,
+    show_tangent1=False,
+    show_tangent2=False,
+)
+
+# %%Nv = len(b.V_pq)
 V_mean_curvature_coc_vertex_scalar_curvature = np.zeros(Nv)
 V_mean_curvature_angle_weighted_vertex_scalar_curvature = np.zeros(Nv)
 V_mean_curvature_unweighted_vertex_scalar_curvature = np.zeros(Nv)

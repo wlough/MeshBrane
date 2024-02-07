@@ -2456,6 +2456,41 @@ class Brane:
                 break
         return kappa / theta
 
+    def local_frame_angle_weighted_vertex_scalar_curvature(self, v):
+        kappa = 0.0
+        valence = 0
+        pi = self.vertices[v]
+        h_start = self.V_hedge[v]
+        h = h_start
+        theta = 0
+        n = self.area_weighted_vertex_normal(v)
+        while True:
+            vj = self.H_vertex[h]
+            vjm1 = self.H_vertex[self.H_next[self.H_twin[h]]]
+            vjp1 = self.H_vertex[self.H_twin[self.H_prev[h]]]
+            pj = self.vertices[vj]
+            pjp1 = self.vertices[vjp1]
+            pjm1 = self.vertices[vjm1]
+            rj = pj - pi
+            rjm1 = pjm1 - pi
+            rjp1 = pjp1 - pi
+
+            rj -= (n @ rj) * n
+            normrj = np.sqrt(rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2)
+            rjm1 -= (n @ rjm1) * n
+            normrjm1 = np.sqrt(rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2)
+            rjp1 -= (n @ rjp1) * n
+            normrjp1 = np.sqrt(rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2)
+            thetajm1 = np.arccos((rjm1 @ rj) / (normrjm1 * normrj)) / 2
+            thetajp1 = np.arccos((rj @ rjp1) / (normrj * normrjp1)) / 2
+            theta += thetajm1 + thetajp1
+            kappa += (thetajm1 + thetajp1) * self.local_frame_hedge_scalar_curvature(h)
+            valence += 1
+            h = self.H_twin[self.H_prev[h]]
+            if h == h_start:
+                break
+        return kappa / theta
+
     def coc_vertex_scalar_curvature(self, v):
         kappa = 0.0
         valence = 0
@@ -2507,7 +2542,7 @@ class Brane:
         h_start = self.V_hedge[v]
         h = h_start
         while True:
-            kappah = self.hedge_scalar_curvature(h)
+            kappah = self.local_frame_hedge_scalar_curvature(h)
             kappa.append(kappah)
             H.append(h)
             h = self.H_twin[self.H_prev[h]]
@@ -2541,5 +2576,71 @@ class Brane:
         )
         return Lij / L
 
-    def assign_local_frame(self, v):
-        return 1
+    def midpoint_curvature(self, h):
+        """curvature at midpoint of halfedge"""
+        hij = h
+        hji = self.H_twin[h]
+        vi = self.H_vertex[hji]
+        vj = self.H_vertex[hij]
+        ri = self.V_pq[vi, :3]
+        rj = self.V_pq[vj, :3]
+        # ni = self.area_weighted_vertex_normal(vi)
+        # nj = self.area_weighted_vertex_normal(vj)
+        ni = self.quat_normal_vector(vi)
+        nj = self.quat_normal_vector(vj)
+        rij = rj - ri
+        nij = nj - ni
+        # normrij = np.sqrt(rij[0]**2+rij[1]**2+rij[2]**2)
+        kappa = -(rij[0] * nij[0] + rij[1] * nij[1] + rij[2] * nij[2]) / (
+            rij[0] ** 2 + rij[1] ** 2 + rij[2] ** 2
+        )
+        return kappa
+
+    def midpoint_angle_weighted_vertex_curvatures(self, v):
+        kappa = 0.0
+        kappa_squared = 0.0
+        valence = 0
+        pi = self.vertices[v]
+        h_start = self.V_hedge[v]
+        h = h_start
+        theta = 0
+        n = self.area_weighted_vertex_normal(v)
+        while True:
+            vj = self.H_vertex[h]
+            vjm1 = self.H_vertex[self.H_next[self.H_twin[h]]]
+            vjp1 = self.H_vertex[self.H_twin[self.H_prev[h]]]
+            pj = self.vertices[vj]
+            pjp1 = self.vertices[vjp1]
+            pjm1 = self.vertices[vjm1]
+            rj = pj - pi
+            rjm1 = pjm1 - pi
+            rjp1 = pjp1 - pi
+
+            rj -= (n @ rj) * n
+            normrj = np.sqrt(rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2)
+            rjm1 -= (n @ rjm1) * n
+            normrjm1 = np.sqrt(rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2)
+            rjp1 -= (n @ rjp1) * n
+            normrjp1 = np.sqrt(rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2)
+            thetajm1 = np.arccos((rjm1 @ rj) / (normrjm1 * normrj)) / 2
+            thetajp1 = np.arccos((rj @ rjp1) / (normrj * normrjp1)) / 2
+            theta += thetajm1 + thetajp1
+            kappa0 = self.midpoint_curvature(h)
+            kappa += (thetajm1 + thetajp1) * kappa0
+            kappa_squared += (thetajm1 + thetajp1) * kappa0**2
+            valence += 1
+            h = self.H_twin[self.H_prev[h]]
+            if h == h_start:
+                break
+        mean_curvature = kappa / theta
+        gaussian_curvature = 3 * (kappa / theta) ** 2 - 2 * kappa_squared / theta
+        return mean_curvature, gaussian_curvature
+
+    def get_midpoint_angle_weighted_vertex_curvatures(self):
+        Nv = len(self.V_pq)
+        H = np.zeros(Nv)
+        K = np.zeros(Nv)
+        for v in range(Nv):
+            H[v], K[v] = self.midpoint_angle_weighted_vertex_curvatures(v)
+
+        return H, K
