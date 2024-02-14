@@ -1636,6 +1636,16 @@ class Brane:
                 samples[v] = weight * samp + (1 - weight) * samples[v]
         return samples
 
+    def delaunay_regularize_by_flips(self):
+        Nh = len(self.halfedges)
+        Nflips = 0
+        for h in range(Nh):
+            is_del = self.is_delaunay(h)
+            if not is_del:
+                self.edge_flip(h)
+                Nflips += 1
+        return Nflips
+
     ###########################################################################
     # forces and time evolution #
     #############################
@@ -2024,6 +2034,30 @@ class Brane:
             h = self.H_twin[h]
 
             if h == h_start:
+                break
+
+        n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
+        return n
+
+    def other_weighted_vertex_normal(self, v):
+        """Weights for Computing Vertex Normals from Facet Normals Max99"""
+        n = np.zeros(3)
+        ri = self.V_pq[v, :3]
+        h_start = self.V_hedge[v]
+        hj = h_start
+        while True:
+            hjp1 = self.H_twin[self.H_prev[hj]]
+            vj = self.H_vertex[hj]
+            vjp1 = self.H_vertex[hjp1]
+            Drj = self.V_pq[vj, :3] - ri
+            Drjp1 = self.V_pq[vjp1, :3] - ri
+            Drj_dot_Drj = Drj[0] ** 2 + Drj[1] ** 2 + Drj[2] ** 2
+            Drjp1_dot_Drjp1 = Drjp1[0] ** 2 + Drjp1[1] ** 2 + Drjp1[2] ** 2
+
+            n += jitcross(Drj, Drjp1) / (Drj_dot_Drj * Drjp1_dot_Drjp1)
+            hj = hjp1
+
+            if hj == h_start:
                 break
 
         n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
@@ -2604,7 +2638,8 @@ class Brane:
         h_start = self.V_hedge[v]
         h = h_start
         theta = 0
-        n = self.area_weighted_vertex_normal(v)
+        # n = self.area_weighted_vertex_normal(v)
+        n = self.other_weighted_vertex_normal(v)
         while True:
             vj = self.H_vertex[h]
             vjm1 = self.H_vertex[self.H_next[self.H_twin[h]]]
@@ -2644,3 +2679,94 @@ class Brane:
             H[v], K[v] = self.midpoint_angle_weighted_vertex_curvatures(v)
 
         return H, K
+
+    def arc_curvature(self, h):
+        hij = h
+        hji = self.H_twin[h]
+        vi = self.H_vertex[hji]
+        vj = self.H_vertex[hij]
+        ri = self.V_pq[vi, :3]
+        rj = self.V_pq[vj, :3]
+        # ni = self.area_weighted_vertex_normal(vi)
+        # nj = self.area_weighted_vertex_normal(vj)
+        ni = self.quat_normal_vector(vi)
+        rij = rj - ri
+        kappa = (
+            2
+            * (ni[0] * rij[0] + ni[1] * rij[1] + ni[2] * rij[2])
+            / (rij[0] * rij[0] + rij[1] * rij[1] + rij[2] * rij[2])
+        )
+        return kappa
+
+    def get_angle_weighted_arc_curvatures(self):
+        Nv = len(self.V_pq)
+        H = np.zeros(Nv)
+        K = np.zeros(Nv)
+        for vi in range(Nv):
+            ri = self.V_pq[vi, :3]
+            # ni = self.quat_normal_vector(vi)
+            ni = self.other_weighted_vertex_normal(vi)
+            kappai = 0.0
+            kappa2i = 0.0
+            h_start = self.V_hedge[vi]
+            hj = h_start
+            while True:
+                hjp1 = self.H_twin[self.H_prev[hj]]
+                hjm1 = self.H_next[self.H_twin[hj]]
+                vj = self.H_vertex[hj]
+                vjp1 = self.H_vertex[hjp1]
+                vjm1 = self.H_vertex[hjm1]
+                rjp1 = self.V_pq[vjp1, :3]
+                rjm1 = self.V_pq[vjm1, :3]
+                rj = self.V_pq[vj, :3]
+                # ni += jitcross(ri, rj)+jitcross(rj, rjp1)+jitcross(rjp1, ri)
+                Drj = rj - ri
+                Drj_dot_Drj = Drj[0] ** 2 + Drj[1] ** 2 + Drj[2] ** 2
+                Drjm1 = rjm1 - ri
+                Drjm1_dot_Drjm1 = Drjm1[0] ** 2 + Drjm1[1] ** 2 + Drjm1[2] ** 2
+                Drjp1 = rjp1 - ri
+                Drjp1_dot_Drjp1 = Drjp1[0] ** 2 + Drjp1[1] ** 2 + Drjp1[2] ** 2
+                ni_dot_Drj = ni[0] * Drj[0] + ni[1] * Drj[1] + ni[2] * Drj[2]
+                ni_dot_Drjp1 = ni[0] * Drjp1[0] + ni[1] * Drjp1[1] + ni[2] * Drjp1[2]
+                ni_dot_Drjm1 = ni[0] * Drjm1[0] + ni[1] * Drjm1[1] + ni[2] * Drjm1[2]
+                tjp1 = (Drjp1 - ni_dot_Drjp1 * ni) / np.sqrt(
+                    Drjp1_dot_Drjp1 - ni_dot_Drjp1**2
+                )
+                tjm1 = (Drjm1 - ni_dot_Drjm1 * ni) / np.sqrt(
+                    Drjm1_dot_Drjm1 - ni_dot_Drjm1**2
+                )
+                tjp1_dot_tjm1 = (
+                    tjp1[0] * tjm1[0] + tjp1[1] * tjm1[1] + tjp1[2] * tjm1[2]
+                )
+                kappaj = 2 * ni_dot_Drj / Drj_dot_Drj
+                Dthetaj = np.arccos(tjp1_dot_tjm1) / 2
+                kappai += kappaj * Dthetaj / (2 * np.pi)
+                kappa2i += kappaj**2 * Dthetaj / (2 * np.pi)
+
+                hj = hjp1
+                if hj == h_start:
+                    break
+            H[vi] = kappai
+            K[vi] = 3 * kappai**2 - 2 * kappa2i
+
+        return H, K
+
+    def principal_curvatures(self, H, K):
+        try:
+            N = len(H)
+            kappa = np.zeros((N, 2))
+            for i in range(N):
+                kappap = H[i] + np.sqrt(H[i] ** 2 - K[i])
+                kappam = H[i] - np.sqrt(H[i] ** 2 - K[i])
+                if abs(kappap) > abs(kappam):
+                    kappa = np.array([kappap, kappam])
+                else:
+                    kappa = np.array([kappam, kappap])
+        except:
+            kappa = np.zeros(2)
+            if abs(kappap) > abs(kappam):
+                kappa = np.array([kappap, kappam])
+            else:
+                kappa = np.array([kappam, kappap])
+
+        return kappa
