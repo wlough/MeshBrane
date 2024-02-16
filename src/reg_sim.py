@@ -455,7 +455,7 @@ def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2, Dazim=5):
 # ply_path = "./data/ply_files/oblate.ply"
 # vertices, faces = load_mesh_from_ply(ply_path)
 # mesh_directory = "./data/halfedge_meshes/dumbbell"
-mesh_directory = "./data/halfedge_meshes/dumbbell_fine"
+mesh_directory = "./data/halfedge_meshes/sphere"
 mesh_data = load_halfedge_mesh_data(mesh_directory)
 brane_kwargs = {
     "length_reg_stiffness": 0 * 1e-1,
@@ -490,7 +490,6 @@ sim_kwargs = {
 
 b = m.Brane(**brane_kwargs)
 
-b.delaunay_regularize_by_flips()
 
 # mp.brane_plot(
 #     b,
@@ -503,67 +502,8 @@ b.delaunay_regularize_by_flips()
 
 
 # %%
-# def get_angle_weighted_arc_curvatures(self):
-#     Nv = len(self.V_pq)
-#     H = np.zeros(Nv)
-#     K = np.zeros(Nv)
-#     for vi in range(Nv):
-#         ri = self.V_pq[vi, :3]
-#         ni = self.quat_normal_vector(vi)
-#         kappai = 0.0
-#         kappa2i = 0.0
-#         h_start = self.V_hedge[vi]
-#         hj = h_start
-#         while True:
-#             hjp1 = self.H_twin[self.H_prev[hj]]
-#             hjm1 = self.H_next[self.H_twin[hj]]
-#             vj = self.H_vertex[hj]
-#             vjp1 = self.H_vertex[hjp1]
-#             vjm1 = self.H_vertex[hjm1]
-#             rjp1 = self.V_pq[vjp1, :3]
-#             rjm1 = self.V_pq[vjm1, :3]
-#             rj = self.V_pq[vj, :3]
-#             # ni += jitcross(ri, rj)+jitcross(rj, rjp1)+jitcross(rjp1, ri)
-#             Drj = rj - ri
-#             Drj_dot_Drj = Drj[0] ** 2 + Drj[1] ** 2 + Drj[2] ** 2
-#             Drjm1 = rjm1 - ri
-#             Drjm1_dot_Drjm1 = Drjm1[0] ** 2 + Drjm1[1] ** 2 + Drjm1[2] ** 2
-#             Drjp1 = rjp1 - ri
-#             Drjp1_dot_Drjp1 = Drjp1[0] ** 2 + Drjp1[1] ** 2 + Drjp1[2] ** 2
-#             ni_dot_Drj = ni[0] * Drj[0] + ni[1] * Drj[1] + ni[2] * Drj[2]
-#             ni_dot_Drjp1 = ni[0] * Drjp1[0] + ni[1] * Drjp1[1] + ni[2] * Drjp1[2]
-#             ni_dot_Drjm1 = ni[0] * Drjm1[0] + ni[1] * Drjm1[1] + ni[2] * Drjm1[2]
-#             tjp1 = (Drjp1 - ni_dot_Drjp1 * ni) / np.sqrt(
-#                 Drjp1_dot_Drjp1 - ni_dot_Drjp1**2
-#             )
-#             tjm1 = (Drjm1 - ni_dot_Drjm1 * ni) / np.sqrt(
-#                 Drjm1_dot_Drjm1 - ni_dot_Drjm1**2
-#             )
-#             tjp1_dot_tjm1 = tjp1[0] * tjm1[0] + tjp1[1] * tjm1[1] + tjp1[2] * tjm1[2]
-#             kappaj = 2 * ni_dot_Drj / Drj_dot_Drj
-#             Dthetaj = np.arccos(tjp1_dot_tjm1) / 2
-#             kappai += kappaj * Dthetaj / (2 * np.pi)
-#             kappa2i += kappaj**2 * Dthetaj / (2 * np.pi)
-#
-#             hj = hjp1
-#             if hj == h_start:
-#                 break
-#         H[vi] = kappai
-#         K[vi] = 3*kappai**2-2*kappa2i
-#
-#     return H, K
-
-
-# kappap = H+np.sqrt(H**2-K)
-# kappam = H-np.sqrt(H**2-K)
-# kappapm = np.zeros((len(H), 2))
-# kappapm[:,0], kappapm[:,1]=kappap, kappam
-# kappa = np.zeros_like(kappapm)
-# A = np.array([[2,3],[1,4],[5,-16]])
-# I=np.argmax(A, axis=1)
-# B = np.zeros_like(A)
-# np.max(,axis=1)
-# len(5)
+Hn = b.cotan_laplacian(b.V_pq[:, :3])
+Hn = b.cotan_laplacian(b.V_pq[:, :3])
 # %%
 # DG test
 Nv = len(b.V_pq)
@@ -575,9 +515,9 @@ R = np.mean(np.linalg.norm(b.V_pq[:, :3], axis=1))
 
 b.V_rgb = scalars_to_rgbs(get_mean_curvature_dg)
 b.F_opacity = 0.8
-b.V_vector_data = 0.1 * np.einsum(
-    "vj,v->vj", n_area_weighted_vertex_normal, get_mean_curvature_dg
-)
+b.V_vector_data = 10 * Fb_dg  # 0.1 * np.einsum(
+#     "vj,v->vj", n_area_weighted_vertex_normal, get_mean_curvature_dg
+# )
 mp.brane_plot(
     b,
     color_by_V_scalar=False,
@@ -638,7 +578,11 @@ n_area_weighted_vertex_normal = np.array(
 n_other_weighted_vertex_normal = np.array(
     [b.other_weighted_vertex_normal(v) for v in range(Nv)]
 )
-
+np.mean(np.einsum("vi,vi->v", nK, b.V_pq[:, :3])) / np.mean(
+    np.linalg.norm(b.V_pq[:, :3], axis=1)
+)
+np.mean(np.linalg.norm(b.V_pq[:, :3], axis=1)) * np.mean(np.sqrt(Kn))
+np.max(Kn)
 ####
 unweighted_vertex_scalar_curvature = np.array(
     [b.unweighted_vertex_scalar_curvature(v) for v in range(Nv)]
@@ -651,6 +595,7 @@ local_frame_angle_weighted_vertex_scalar_curvature = np.array(
 )
 H_mpc, K_mpc = b.get_midpoint_angle_weighted_vertex_curvatures()
 H_old, K_old = b.get_curvatures()
+np.min(Kn)
 ###
 R = np.mean(np.linalg.norm(b.V_pq[:, :3] - np.mean(b.V_pq[:, :3], axis=0), axis=1))
 
@@ -660,8 +605,8 @@ Rh = 1 / np.mean(-b.smooth_samples(H, 0.1, 1))
 np.mean(H_old**2) - np.mean(H_old) ** 2
 b.V_rgb = scalars_to_rgbs(K)
 b.F_opacity = 0.8
-b.V_vector_data = 0.1 * np.einsum("vj,v->vj", n_area_weighted_vertex_normal, -H)
-# b.V_vector_data = b.smooth_samples(b.V_vector_data, 0.2, 200)
+b.V_vector_data = 0.1 * np.einsum("vj,v->vj", n_area_weighted_vertex_normal, Kk)
+# b.V_vector_data = .1*gaussian_curvature_normal
 mp.brane_plot(
     b,
     color_by_V_scalar=False,
@@ -672,7 +617,7 @@ mp.brane_plot(
     show_tangent1=False,
     show_tangent2=False,
 )
-# b.delaunay_regularize_by_flips()
+b.delaunay_regularize_by_flips()
 # b.regularize_by_flips()
 # %%Nv = len(b.V_pq)
 V_mean_curvature_coc_vertex_scalar_curvature = np.zeros(Nv)
