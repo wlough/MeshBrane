@@ -38,8 +38,8 @@ Brane_spec = [
     ("F_hedge", int32[:]),
     ###########################
     # physical parameters
-    ("Kbend", float64),
-    ("Ksplay", float64),
+    ("bending_modulus", float64),
+    ("splay_modulus", float64),
     ("Kvolume", float64),
     ("Karea", float64),
     ("Klength", float64),
@@ -160,8 +160,8 @@ class Brane:
         )
         ###########################
         # physical parameters
-        self.Kbend = bending_modulus
-        self.Ksplay = splay_modulus
+        self.bending_modulus = bending_modulus
+        self.splay_modulus = splay_modulus
         self.Kvolume = volume_reg_stiffness
         self.Karea = area_reg_stiffness
         self.Klength = length_reg_stiffness
@@ -185,8 +185,14 @@ class Brane:
             self.faces,
             self.F_hedge,
         )
-        self.total_volume = self.preferred_total_volume
-        self.total_area = self.preferred_total_area
+        self.total_volume = self._total_volume(self.vertices, self.faces)
+        self.total_area = self._total_area(
+            self.vertices,
+            self.V_hedge,
+            self.H_vertex,
+            self.H_prev,
+            self.H_twin,
+        )
         ###########################
         # visualization stuff
         (
@@ -620,6 +626,10 @@ class Brane:
             V_scalar,
         )
 
+    def _params(self):
+        kBT = 0.2
+        R = 9.0
+
     ###########################################################################
     # mesh navigation functions
     # using only H_twin/next/vertex/face, V_hedge, F_hedge
@@ -826,54 +836,11 @@ class Brane:
         """computes the laplacian of Y at each vertex"""
         Nv = self.V_pq.shape[0]
         lapY = np.zeros_like(Y)
-        for v in range(Nv):
-            Atot = 0.0
-            y = Y[v]
-            r = self.V_pq[v, :3]
-            r_r = r[0] ** 2 + r[1] ** 2 + r[2] ** 2
-            h_start = self.V_hedge[v]
-            h = h_start
-            while True:
-                v1 = self.H_vertex[h]
-                r1 = self.V_pq[v1, :3]
-                y1 = Y[v1]
-                h = self.H_twin[self.H_prev[h]]
-                v2 = self.H_vertex[h]
-                r2 = self.V_pq[v2, :3]
-                y2 = Y[v2]
-
-                r1_r1 = r1[0] ** 2 + r1[1] ** 2 + r1[2] ** 2
-                r2_r2 = r2[0] ** 2 + r2[1] ** 2 + r2[2] ** 2
-                r_r1 = r[0] * r1[0] + r[1] * r1[1] + r[2] * r1[2]
-                r1_r2 = r1[0] * r2[0] + r1[1] * r2[1] + r1[2] * r2[2]
-                r2_r = r2[0] * r[0] + r2[1] * r[1] + r2[2] * r[2]
-
-                normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
-                normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
-                normu3 = np.sqrt(r_r - 2 * r2_r + r2_r2)  # jitnorm(u3)
-                cos_alpha = (r1_r1 + r2_r - r_r1 - r1_r2) / (normu1 * normu2)
-                cos_beta = (r2_r2 + r_r1 - r1_r2 - r2_r) / (normu2 * normu3)
-                cot_alpha = cos_alpha / np.sqrt(1 - cos_alpha**2)
-                cot_beta = cos_beta / np.sqrt(1 - cos_beta**2)
-
-                lapY[v] += -(cot_alpha * (y2 - y) / 2 + cot_beta * (y1 - y) / 2)
-                Atot += normu3**2 * cot_alpha / 8 + normu1**2 * cot_beta / 8
-
-                if h == h_start:
-                    break
-            lapY[v] /= Atot
-
-        return lapY
-
-    def cotan_laplacian2(self, Y):
-        """computes the laplacian of Y at each vertex"""
-        Nv = self.V_pq.shape[0]
-        lapY = np.zeros_like(Y)
         for vi in range(Nv):
             Atot = 0.0
-            yi = Y[vi]
             ri = self.V_pq[vi, :3]
-
+            yi = Y[vi]
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
             h_start = self.V_hedge[vi]
             hij = h_start
             while True:
@@ -882,10 +849,37 @@ class Brane:
                 vjm1 = self.H_vertex[hijm1]
                 vj = self.H_vertex[hij]
                 vjp1 = self.H_vertex[hijp1]
-                Drijm1 = self.V_pq[vjm1, :3] - ri
-                Drij = self.V_pq[vj, :3] - ri
-                Drijp1 = self.V_pq[vjp1, :3] - ri
-                Drjm1j = Drij - Drijm1
+
+                yj = Y[vj]
+
+                rjm1 = self.V_pq[vjm1, :3]
+                rj = self.V_pq[vj, :3]
+                rjp1 = self.V_pq[vjp1, :3]
+
+                rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
+                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+                ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
+                rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
+                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
+                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+
+                Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
+                Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
+                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
+                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+
+                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
+
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
+
+                cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
+                cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
+
+                Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
+                lapY[vi] += (cot_thetam + cot_thetap) * (yj - yi) / 2
 
                 hij = hijp1
 
@@ -1558,10 +1552,40 @@ class Brane:
 
         return alphai + alphak <= np.pi
 
+    def is_flippable(self, h):
+        r"""
+          vj
+          /|\
+        vk | vi
+          \|/
+           vl
+        """
+        hlj = h
+        hjk = self.H_next[hlj]
+        hkl = self.H_next[hjk]
+
+        hjl = self.H_twin[hlj]
+        hli = self.H_next[hjl]
+        hij = self.H_next[hli]
+
+        hkj = self.H_twin[hjk]
+        fkj = self.H_face[hkj]
+        hji = self.H_twin[hij]
+        fji = self.H_face[hji]
+
+        hlk = self.H_twin[hkl]
+        flk = self.H_face[hlk]
+        hil = self.H_twin[hli]
+        fil = self.H_face[hil]
+
+        flippable = (fkj != fji) and (flk != fil)
+
+        return flippable
+
     def shift_vertex_towards_barycenter(self, v, weight):
         """Translates vertex in the direction of the barycenter of
         its neighbors. weight=1 means all the way to the barycenter."""
-        r0 = self.V_pq[v, :3]
+        r0 = self.V_pq[v, :3].copy()
         h = self.V_hedge[v]
         h_start = h
         r = np.zeros(3)
@@ -1581,7 +1605,7 @@ class Brane:
         Nh = len(self.halfedges)
         Nflips = 0
         for h in range(Nh):
-            flip_it = self.flip_helps_valence(h)
+            flip_it = self.flip_helps_valence(h) & self.is_flippable(h)
             if flip_it:
                 self.edge_flip(h)
                 Nflips += 1
@@ -1619,9 +1643,39 @@ class Brane:
         for h in range(Nh):
             is_del = self.is_delaunay(h)
             if not is_del:
-                self.edge_flip(h)
-                Nflips += 1
+                flippable = self.is_flippable(h)
+                if flippable:
+                    self.edge_flip(h)
+                    Nflips += 1
         return Nflips
+
+    def gaussian_smooth_samples(self, samples_in, iters, a):
+        """shifts samples towards the avereage value of their neighbors"""
+        samples = samples_in.copy()
+        Nv = self.V_pq.shape[0]
+        for iter in range(iters):
+            # samples0 = samples_in.copy()
+            for v in range(Nv):
+                r0 = self.V_pq[v, :3]
+                r0_r0 = r0[0] ** 2 + r0[1] ** 2 + r0[2] ** 2
+                h = self.V_hedge[v]
+                h_start = h
+                samp = samples[v]
+                W = 1
+                while True:
+                    vb = self.H_vertex[h]
+                    r = self.V_pq[vb, :3]
+                    r_r0 = r[0] * r0[0] + r[1] * r0[1] + r[2] * r0[2]
+                    r_r = r[0] ** 2 + r[1] ** 2 + r[2] ** 2
+                    w = np.exp(-(r_r - 2 * r_r0 + r0_r0) / a**2)
+                    samp += w * samples[vb]
+                    W += w
+                    h = self.H_twin[self.H_prev[h]]
+                    if h == h_start:
+                        break
+
+                samples[v] = samp / W
+        return samples
 
     ###########################################################################
     # forces and time evolution #
@@ -1782,60 +1836,9 @@ class Brane:
         # for v in range(Nv):
         #     self.V_pq[v, 3:] = self.get_new_quat_dumb(v)
 
-    def regularization_step(
-        self,
-        T,
-        dt,
-        weight,
-        reg_length,
-        reg_flips,
-        reg_shifts,
-        reg_local_area,
-        reg_total_area,
-        reg_local_volume,
-        reg_total_volume,
-    ):
-        if reg_flips:
-            self.regularize_by_flips()
-        if reg_shifts:
-            self.regularize_by_shifts(weight)
-        Nv = len(self.V_pq)
-        if reg_total_area:
-            self.total_area = self.get_total_area()
-        if reg_total_volume:
-            self.total_volume = self.volume_of_mesh()
-
-        t = 0
-        while t <= T:
-            for v in range(Nv):
-                F = np.zeros(3)
-                F += self.length_reg_force(v)
-                F += self.area_reg_force(v)
-                F += self.volume_reg_force(v)
-                self.V_pq[v, :3] = self.V_pq[v, :3] + dt * F / self.linear_drag_coeff
-            t += dt
-
-        # for v in range(Nv):
-        #     self.V_pq[v, 3:] = self.get_new_quat_dumb(v)
-
-    def get_new_quat_dumb(self, v):
-        qw, qx, qy, qz = self.V_pq[v, 3:]
-        Q = np.zeros((3, 3))
-        Q[:, 2] = self.area_weighted_vertex_normal(v)
-
-        Q[0, 0] = qw**2 + qx**2 - qy**2 - qz**2
-        Q[1, 0] = 2 * qw * qz + 2 * qx * qy
-        Q[2, 0] = 2 * qx * qz - 2 * qw * qy
-        Q[:, 0] -= jitdot(Q[:, 2], Q[:, 0]) * Q[:, 2]
-        Q[:, 0] /= jitnorm(Q[:, 0])
-        Q[:, 1] = jitcross(Q[:, 2], Q[:, 0])
-
-        q = matrix_to_quaternion(Q)
-        return q
-
     def get_new_euler_state(self, dt):
-        Nv = len(self.V_pq)
-        vertices = np.zeros((Nv, 3))
+        # Nv = len(self.V_pq)
+        # vertices = np.zeros((Nv, 3))
         linear_drag_coeff = self.linear_drag_coeff
         self.total_volume = self.volume_of_mesh()
         self.total_area = self.get_total_area()
@@ -1851,21 +1854,24 @@ class Brane:
         success = True
         return vertices, success
 
-    def Fbend(self):
+    def Fbend(self, Nsmooth=0):
         """from Tu"""
-        Kbend = self.Kbend
-        H, K = self.get_curvatures()
+        a = self.preferred_edge_length
+        Kbend = self.bending_modulus
+        H, K = self.get_angle_weighted_arc_curvatures()
+        for _ in range(Nsmooth):
+            H = self.gaussian_smooth_samples(H, 1, a)
+            K = self.gaussian_smooth_samples(K, 1, a)
         Nv = H.shape[0]
         lapH = self.cotan_laplacian(H)
         F = np.zeros((Nv, 3))
-        # Fn = np.zeros(Nv)
-        # Fn = Kbend * (lapH + 2 * H * (H**2 - K))
-        Fn = -Kbend * (lapH + 2 * H * (H**2 - K))
+
+        Fn = -2 * Kbend * (lapH + 2 * H * (H**2 - K))
+
         for v in range(Nv):
-            n = self.area_weighted_vertex_normal(v)
-            A = self.vorcell_area(v)
-            Fn[v] *= A
-            F[v] = Fn[v] * n
+            n = self.other_weighted_vertex_normal(v)
+            Av = self.vorcell_area(v)
+            F[v] = Fn[v] * n * Av
         return F
 
     def Flength(self):
@@ -2023,6 +2029,32 @@ class Brane:
 
         n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
         return n
+
+    def quat_normal_vector(self, v):
+        qw, qx, qy, qz = self.V_pq[v, 3:]
+        n = np.array(
+            [
+                2 * qw * qy + 2 * qx * qz,
+                2 * qy * qz - 2 * qw * qx,
+                qw**2 - qx**2 - qy**2 + qz**2,
+            ]
+        )
+        return n
+
+    def get_new_quat_dumb(self, v):
+        qw, qx, qy, qz = self.V_pq[v, 3:]
+        Q = np.zeros((3, 3))
+        Q[:, 2] = self.other_weighted_vertex_normal(v)
+
+        Q[0, 0] = qw**2 + qx**2 - qy**2 - qz**2
+        Q[1, 0] = 2 * qw * qz + 2 * qx * qy
+        Q[2, 0] = 2 * qx * qz - 2 * qw * qy
+        Q[:, 0] -= jitdot(Q[:, 2], Q[:, 0]) * Q[:, 2]
+        Q[:, 0] /= jitnorm(Q[:, 0])
+        Q[:, 1] = jitcross(Q[:, 2], Q[:, 0])
+
+        q = matrix_to_quaternion(Q)
+        return q
 
     ###########################################################################
     # simulation/data management/visualization functions #
@@ -2268,375 +2300,3 @@ class Brane:
     ###########################################################################
     # framed brane functions #
     ##########################
-    def quat_normal_vector(self, v):
-        qw, qx, qy, qz = self.V_pq[v, 3:]
-        n = np.array(
-            [
-                2 * qw * qy + 2 * qx * qz,
-                2 * qy * qz - 2 * qw * qx,
-                qw**2 - qx**2 - qy**2 + qz**2,
-            ]
-        )
-        return n
-
-    def hedge_tangent_vector(self, h):
-        """tangent vector at midpoint of hedge curve"""
-        vj = self.H_vertex[h]
-        vi = self.H_vertex[self.H_twin[h]]
-        ri, qi = self.V_pq[vi, :3], self.V_pq[vi, 3:]
-        rj, qj = self.V_pq[vj, :3], self.V_pq[vj, 3:]
-        rij = rj - ri
-        tij = rotate_by_quaternion(inv_quaternion(qi), rij) + rotate_by_quaternion(
-            inv_quaternion(qj), rij
-        )
-        tij /= np.sqrt(tij[0] ** 2 + tij[1] ** 2 + tij[2] ** 2)
-
-    def hedge_curve_length(self, h):
-        """computes length of curve connecting vertices"""
-        vj = self.H_vertex[h]
-        vi = self.H_vertex[self.H_twin[h]]
-        ri, qi = self.V_pq[vi, :3], self.V_pq[vi, 3:]
-        rj, qj = self.V_pq[vj, :3], self.V_pq[vj, 3:]
-        rij = rj - ri
-        normrij = jitnorm(rij)
-        u = rij / normrij
-        q = mul_quaternion(qi, inv_quaternion(qj))
-        quq = rotate_by_quaternion(q, u)
-
-        Lij = (normrij / np.sqrt(2)) * np.sqrt(
-            1 + u[0] * quq[0] + u[1] * quq[1] + u[2] * quq[2]
-        )
-        return Lij
-
-    def hedge_curvature_vector(self, h):
-        """computes curvature vector components at midpoint
-        of curve connecting vertices"""
-        vj = self.H_vertex[h]
-        vi = self.H_vertex[self.H_twin[h]]
-        ri, qi = self.V_pq[vi, :3], self.V_pq[vi, 3:]
-        rj, qj = self.V_pq[vj, :3], self.V_pq[vj, 3:]
-        rij = rj - ri
-        normrij = jitnorm(rij)
-        u = rij / normrij
-        q = mul_quaternion(qi, inv_quaternion(qj))
-        quq = rotate_by_quaternion(q, u)
-
-        L = (normrij / np.sqrt(2)) * np.sqrt(
-            1 + u[0] * quq[0] + u[1] * quq[1] + u[2] * quq[2]
-        )
-        w = -2 * q[1:] / L
-        return w
-
-    def hedge_scalar_curvature_slow(self, h):
-        """computes scalar curvature vector at midpoint
-        of curve connecting vertices in the direction tangent to the curve"""
-        vj = self.H_vertex[h]
-        vi = self.H_vertex[self.H_twin[h]]
-        ri, qi = self.V_pq[vi, :3], self.V_pq[vi, 3:]
-        rj, qj = self.V_pq[vj, :3], self.V_pq[vj, 3:]
-        rij = rj - ri
-        qij = mul_quaternion(inv_quaternion(qi), qj)
-        tij = (
-            rotate_by_quaternion(inv_quaternion(qi), rij)
-            + rotate_by_quaternion(inv_quaternion(qj), rij)
-        ) / 2
-        Lij = np.sqrt(tij[0] ** 2 + tij[1] ** 2 + tij[2] ** 2)
-        kappa = 2 * (tij[1] * qij[1] - tij[0] * qij[2]) / Lij**2
-        return kappa
-
-    def hedge_scalar_curvature(self, h):
-        """computes scalar curvature vector at midpoint
-        of curve connecting vertices in the direction tangent to the curve"""
-        vj = self.H_vertex[h]
-        vi = self.H_vertex[self.H_twin[h]]
-        ri, qi = self.V_pq[vi, :3], self.V_pq[vi, 3:]
-        rj, qj = self.V_pq[vj, :3], self.V_pq[vj, 3:]
-        qi_dot_qj = qi[0] * qj[0] + qi[1] * qj[1] + qi[2] * qj[2] + qi[3] * qj[3]
-        if qi_dot_qj < 0:
-            qj *= -1
-        rij = rj - ri
-        qij1 = qi[0] * qj[1] - qj[0] * qi[1] - qi[2] * qj[3] + qi[3] * qj[2]
-        qij2 = qi[0] * qj[2] - qj[0] * qi[2] - qi[3] * qj[1] + qi[1] * qj[3]
-        tij = (
-            (2 * qi[0] ** 2 - 1) * rij
-            - 2 * qi[0] * jitcross(qi[1:], rij)
-            + 2 * (qi[1] * rij[0] + qi[2] * rij[1] + qi[3] * rij[2]) * qi[1:]
-            + (2 * qj[0] ** 2 - 1) * rij
-            - 2 * qj[0] * jitcross(qj[1:], rij)
-            + 2 * (qj[1] * rij[0] + qj[2] * rij[1] + qj[3] * rij[2]) * qj[1:]
-        ) / 2
-        Lij = np.sqrt(tij[0] ** 2 + tij[1] ** 2 + tij[2] ** 2)
-        kappa = 2 * (tij[1] * qij1 - tij[0] * qij2) / Lij**2
-        return kappa
-
-    def local_frame_hedge_scalar_curvature(self, h):
-        """hedge_scalar_curvature_local"""
-        vj = self.H_vertex[h]
-        vi = self.H_vertex[self.H_twin[h]]
-        ri, qi = self.V_pq[vi, :3], self.V_pq[vi, 3:]
-        rj, _qj = self.V_pq[vj, :3], self.V_pq[vj, 3:]
-        Qj = quaternion_to_matrix(_qj)
-        Qi = quaternion_to_matrix(qi)
-        ez = Qj[:, 2]
-        ex = Qi[:, 0]
-        ex -= (ex @ ez) * ez
-        ex /= np.sqrt(ex @ ex)
-        ey = jitcross(ez, ex)
-        Qj[:, 0] = ex
-        Qj[:, 1] = ey
-        qj = matrix_to_quaternion(Qj)
-        qi_dot_qj = qi[0] * qj[0] + qi[1] * qj[1] + qi[2] * qj[2] + qi[3] * qj[3]
-        if qi_dot_qj < 0:
-            qj *= -1
-        rij = rj - ri
-        qij1 = qi[0] * qj[1] - qj[0] * qi[1] - qi[2] * qj[3] + qi[3] * qj[2]
-        qij2 = qi[0] * qj[2] - qj[0] * qi[2] - qi[3] * qj[1] + qi[1] * qj[3]
-        tij = (
-            (2 * qi[0] ** 2 - 1) * rij
-            - 2 * qi[0] * jitcross(qi[1:], rij)
-            + 2 * (qi[1] * rij[0] + qi[2] * rij[1] + qi[3] * rij[2]) * qi[1:]
-            + (2 * qj[0] ** 2 - 1) * rij
-            - 2 * qj[0] * jitcross(qj[1:], rij)
-            + 2 * (qj[1] * rij[0] + qj[2] * rij[1] + qj[3] * rij[2]) * qj[1:]
-        ) / 2
-        Lij = np.sqrt(tij[0] ** 2 + tij[1] ** 2 + tij[2] ** 2)
-        kappa = 2 * (tij[1] * qij1 - tij[0] * qij2) / Lij**2
-        return kappa
-
-    def unweighted_vertex_scalar_curvature(self, v):
-        kappa = 0.0
-        valence = 0
-        h_start = self.V_hedge[v]
-        h = h_start
-        while True:
-            kappa += self.hedge_scalar_curvature(h)
-            valence += 1
-            h = self.H_twin[self.H_prev[h]]
-            if h == h_start:
-                break
-        return kappa / valence
-
-    def angle_weighted_vertex_scalar_curvature(self, v):
-        kappa = 0.0
-        valence = 0
-        pi = self.vertices[v]
-        h_start = self.V_hedge[v]
-        h = h_start
-        theta = 0
-        n = self.area_weighted_vertex_normal(v)
-        while True:
-            vj = self.H_vertex[h]
-            vjm1 = self.H_vertex[self.H_next[self.H_twin[h]]]
-            vjp1 = self.H_vertex[self.H_twin[self.H_prev[h]]]
-            pj = self.vertices[vj]
-            pjp1 = self.vertices[vjp1]
-            pjm1 = self.vertices[vjm1]
-            rj = pj - pi
-            rjm1 = pjm1 - pi
-            rjp1 = pjp1 - pi
-
-            rj -= (n @ rj) * n
-            normrj = np.sqrt(rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2)
-            rjm1 -= (n @ rjm1) * n
-            normrjm1 = np.sqrt(rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2)
-            rjp1 -= (n @ rjp1) * n
-            normrjp1 = np.sqrt(rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2)
-            thetajm1 = np.arccos((rjm1 @ rj) / (normrjm1 * normrj)) / 2
-            thetajp1 = np.arccos((rj @ rjp1) / (normrj * normrjp1)) / 2
-            theta += thetajm1 + thetajp1
-            kappa += (thetajm1 + thetajp1) * self.hedge_scalar_curvature(h)
-            valence += 1
-            h = self.H_twin[self.H_prev[h]]
-            if h == h_start:
-                break
-        return kappa / theta
-
-    def local_frame_angle_weighted_vertex_scalar_curvature(self, v):
-        kappa = 0.0
-        valence = 0
-        pi = self.vertices[v]
-        h_start = self.V_hedge[v]
-        h = h_start
-        theta = 0
-        n = self.area_weighted_vertex_normal(v)
-        while True:
-            vj = self.H_vertex[h]
-            vjm1 = self.H_vertex[self.H_next[self.H_twin[h]]]
-            vjp1 = self.H_vertex[self.H_twin[self.H_prev[h]]]
-            pj = self.vertices[vj]
-            pjp1 = self.vertices[vjp1]
-            pjm1 = self.vertices[vjm1]
-            rj = pj - pi
-            rjm1 = pjm1 - pi
-            rjp1 = pjp1 - pi
-
-            rj -= (n @ rj) * n
-            normrj = np.sqrt(rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2)
-            rjm1 -= (n @ rjm1) * n
-            normrjm1 = np.sqrt(rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2)
-            rjp1 -= (n @ rjp1) * n
-            normrjp1 = np.sqrt(rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2)
-            thetajm1 = np.arccos((rjm1 @ rj) / (normrjm1 * normrj)) / 2
-            thetajp1 = np.arccos((rj @ rjp1) / (normrj * normrjp1)) / 2
-            theta += thetajm1 + thetajp1
-            kappa += (thetajm1 + thetajp1) * self.local_frame_hedge_scalar_curvature(h)
-            valence += 1
-            h = self.H_twin[self.H_prev[h]]
-            if h == h_start:
-                break
-        return kappa / theta
-
-    def coc_vertex_scalar_curvature(self, v):
-        kappa = 0.0
-        valence = 0
-        pi = self.vertices[v]
-        h_start = self.V_hedge[v]
-        h = h_start
-        theta = 0
-        ni = self.area_weighted_vertex_normal(v)
-        Rvec = np.zeros(3)
-        while True:
-            vj = self.H_vertex[h]
-            nij = self.area_weighted_vertex_normal(vj) + ni
-            nij /= jitnorm(nij)
-            kappaij = self.hedge_scalar_curvature(h)
-            # Rij = 1 / kappaij
-            Rvecij = nij / kappaij
-            vjm1 = self.H_vertex[self.H_next[self.H_twin[h]]]
-            vjp1 = self.H_vertex[self.H_twin[self.H_prev[h]]]
-            pj = self.vertices[vj]
-            pjp1 = self.vertices[vjp1]
-            pjm1 = self.vertices[vjm1]
-            rj = pj - pi
-            rjm1 = pjm1 - pi
-            rjp1 = pjp1 - pi
-
-            rj -= (ni @ rj) * ni
-            normrj = np.sqrt(rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2)
-            rjm1 -= (ni @ rjm1) * ni
-            normrjm1 = np.sqrt(rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2)
-            rjp1 -= (ni @ rjp1) * ni
-            normrjp1 = np.sqrt(rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2)
-            thetajm1 = np.arccos((rjm1 @ rj) / (normrjm1 * normrj)) / 2
-            thetajp1 = np.arccos((rj @ rjp1) / (normrj * normrjp1)) / 2
-            theta += thetajm1 + thetajp1
-            # kappa += (thetajm1 + thetajp1) * kappaij
-            Rvec += (thetajm1 + thetajp1) * Rvecij
-            valence += 1
-            h = self.H_twin[self.H_prev[h]]
-            if h == h_start:
-                break
-            Rvec /= theta
-            kappa = 1 / jitdot(ni, Rvec)
-        return kappa
-
-    def principal_directions(self, v):
-        kappa = []
-        H = []
-
-        h_start = self.V_hedge[v]
-        h = h_start
-        while True:
-            kappah = self.local_frame_hedge_scalar_curvature(h)
-            kappa.append(kappah)
-            H.append(h)
-            h = self.H_twin[self.H_prev[h]]
-            if h == h_start:
-                break
-        kmax = max(kappa)
-        kmin = min(kappa)
-        hmax = H[kappa.index(kmax)]
-        hmin = H[kappa.index(kmin)]
-        return hmin, hmax
-
-    def length_test(self, h):
-        vj = self.H_vertex[h]
-        vi = self.H_vertex[self.H_twin[h]]
-        ri, qi = self.V_pq[vi, :3], self.V_pq[vi, 3:]
-        rj, qj = self.V_pq[vj, :3], self.V_pq[vj, 3:]
-        rij = rj - ri
-        qij = mul_quaternion(inv_quaternion(qi), qj)
-        tij = (
-            rotate_by_quaternion(inv_quaternion(qi), rij)
-            + rotate_by_quaternion(inv_quaternion(qj), rij)
-        ) / 2
-        Lij = np.sqrt(tij[0] ** 2 + tij[1] ** 2 + tij[2] ** 2)
-        normrij = jitnorm(rij)
-        u = rij / normrij
-        q = mul_quaternion(qi, inv_quaternion(qj))
-        quq = rotate_by_quaternion(q, u)
-
-        L = (normrij / np.sqrt(2)) * np.sqrt(
-            1 + u[0] * quq[0] + u[1] * quq[1] + u[2] * quq[2]
-        )
-        return Lij / L
-
-    def midpoint_curvature(self, h):
-        """curvature at midpoint of halfedge"""
-        hij = h
-        hji = self.H_twin[h]
-        vi = self.H_vertex[hji]
-        vj = self.H_vertex[hij]
-        ri = self.V_pq[vi, :3]
-        rj = self.V_pq[vj, :3]
-        # ni = self.area_weighted_vertex_normal(vi)
-        # nj = self.area_weighted_vertex_normal(vj)
-        ni = self.quat_normal_vector(vi)
-        nj = self.quat_normal_vector(vj)
-        rij = rj - ri
-        nij = nj - ni
-        # normrij = np.sqrt(rij[0]**2+rij[1]**2+rij[2]**2)
-        kappa = -(rij[0] * nij[0] + rij[1] * nij[1] + rij[2] * nij[2]) / (
-            rij[0] ** 2 + rij[1] ** 2 + rij[2] ** 2
-        )
-        return kappa
-
-    def midpoint_angle_weighted_vertex_curvatures(self, v):
-        kappa = 0.0
-        kappa_squared = 0.0
-        valence = 0
-        pi = self.vertices[v]
-        h_start = self.V_hedge[v]
-        h = h_start
-        theta = 0
-        # n = self.area_weighted_vertex_normal(v)
-        n = self.other_weighted_vertex_normal(v)
-        while True:
-            vj = self.H_vertex[h]
-            vjm1 = self.H_vertex[self.H_next[self.H_twin[h]]]
-            vjp1 = self.H_vertex[self.H_twin[self.H_prev[h]]]
-            pj = self.vertices[vj]
-            pjp1 = self.vertices[vjp1]
-            pjm1 = self.vertices[vjm1]
-            rj = pj - pi
-            rjm1 = pjm1 - pi
-            rjp1 = pjp1 - pi
-
-            rj -= (n @ rj) * n
-            normrj = np.sqrt(rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2)
-            rjm1 -= (n @ rjm1) * n
-            normrjm1 = np.sqrt(rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2)
-            rjp1 -= (n @ rjp1) * n
-            normrjp1 = np.sqrt(rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2)
-            thetajm1 = np.arccos((rjm1 @ rj) / (normrjm1 * normrj)) / 2
-            thetajp1 = np.arccos((rj @ rjp1) / (normrj * normrjp1)) / 2
-            theta += thetajm1 + thetajp1
-            kappa0 = self.midpoint_curvature(h)
-            kappa += (thetajm1 + thetajp1) * kappa0
-            kappa_squared += (thetajm1 + thetajp1) * kappa0**2
-            valence += 1
-            h = self.H_twin[self.H_prev[h]]
-            if h == h_start:
-                break
-        mean_curvature = kappa / theta
-        gaussian_curvature = 3 * (kappa / theta) ** 2 - 2 * kappa_squared / theta
-        return mean_curvature, gaussian_curvature
-
-    def get_midpoint_angle_weighted_vertex_curvatures(self):
-        Nv = len(self.V_pq)
-        H = np.zeros(Nv)
-        K = np.zeros(Nv)
-        for v in range(Nv):
-            H[v], K[v] = self.midpoint_angle_weighted_vertex_curvatures(v)
-
-        return H, K
