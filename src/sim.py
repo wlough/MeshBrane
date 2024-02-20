@@ -398,7 +398,10 @@ def run(
             Fn = b.gaussian_smooth_samples(Fn, Nbendingforcesmooth, smooth_length)
             n = np.array([b.other_weighted_vertex_normal(v) for v, fn in enumerate(Fn)])
             Fb = np.array(
-                [fn * b.other_weighted_vertex_normal(v) for v, fn in enumerate(Fn)]
+                [
+                    fn * b.other_weighted_vertex_normal(v) * b.vorcell_area(v)
+                    for v, fn in enumerate(Fn)
+                ]
             )
             Fl = b.Flength()
             Fa = b.Farea()
@@ -418,12 +421,12 @@ def run(
             else:
                 print("oh no")
         # b.V_pq[:, :3] = b.gaussian_smooth_samples(b.V_pq[:, :3], 1, smooth_length)
-        # try:
-        #     Nflips = b.delaunay_regularize_by_flips()
-        #     # Nflips = b.regularize_by_flips()
-        # except ZeroDivisionError:
-        #     success = False
-        #     print(f"\nZeroDivisionError at t={t}\n")
+        try:
+            Nflips = b.delaunay_regularize_by_flips()
+            # Nflips = b.regularize_by_flips()
+        except ZeroDivisionError:
+            success = False
+            print(f"\nZeroDivisionError at t={t}\n")
 
         b.preferred_cell_area = b._average_cell_area(
             b.V_pq[:, :3],
@@ -643,22 +646,22 @@ def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2, Dazim=5):
 # ply_path = "./data/ply_files/oblate.ply"
 # vertices, faces = load_mesh_from_ply(ply_path)
 # mesh_directory = "./data/halfedge_meshes/dumbbell"
-mesh_directory = "./data/halfedge_meshes/dumbbell"
+mesh_directory = "./data/halfedge_meshes/dumbbell_ultrafine"
 mesh_data = load_halfedge_mesh_data(mesh_directory)
 brane_kwargs = {
     "length_reg_stiffness": 1e-2,
     "area_reg_stiffness": 1e-3,
     "volume_reg_stiffness": 1e1,
-    "bending_modulus": 1e-2,
+    "bending_modulus": 1e2,
     "splay_modulus": 1.0,
     "spontaneous_curvature": 0.0,
-    "linear_drag_coeff": 10.0,
+    "linear_drag_coeff": 5.0,
 } | mesh_data
 sim_kwargs = {
     "Tplot": 5e-2,
     "Tsave": 5e-1,
-    "dt": 1e-2,
-    "output_directory": "./output/sim_output",
+    "dt": 1e-3,
+    "output_directory": "./output/ultrafine_output",
 } | brane_kwargs
 sim_state = initialize_sim(**sim_kwargs)
 Trun = 15
@@ -666,8 +669,8 @@ sim_state = run(
     sim_state,
     Trun,
     make_plots=True,
-    Ncurvaturesmooth=10,
-    Nbendingforcesmooth=10,
+    Ncurvaturesmooth=40,
+    Nbendingforcesmooth=40,
     Nvertexsmooth=0,
     smooth_length=None,
 )  # smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2)
