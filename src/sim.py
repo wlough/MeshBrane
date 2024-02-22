@@ -646,13 +646,13 @@ def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2, Dazim=5):
 # ply_path = "./data/ply_files/oblate.ply"
 # vertices, faces = load_mesh_from_ply(ply_path)
 # mesh_directory = "./data/halfedge_meshes/dumbbell"
-mesh_directory = "./data/halfedge_meshes/dumbbell_ultrafine"
+mesh_directory = "./data/halfedge_meshes/oblate"
 mesh_data = load_halfedge_mesh_data(mesh_directory)
 brane_kwargs = {
     "length_reg_stiffness": 1e-2,
     "area_reg_stiffness": 1e-3,
     "volume_reg_stiffness": 1e1,
-    "bending_modulus": 1e2,
+    "bending_modulus": 1e1,
     "splay_modulus": 1.0,
     "spontaneous_curvature": 0.0,
     "linear_drag_coeff": 5.0,
@@ -663,29 +663,36 @@ sim_kwargs = {
     "dt": 1e-3,
     "output_directory": "./output/ultrafine_output",
 } | brane_kwargs
-sim_state = initialize_sim(**sim_kwargs)
-Trun = 15
-sim_state = run(
-    sim_state,
-    Trun,
-    make_plots=True,
-    Ncurvaturesmooth=40,
-    Nbendingforcesmooth=40,
-    Nvertexsmooth=0,
-    smooth_length=None,
-)  # smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2)
+# sim_state = initialize_sim(**sim_kwargs)
+# Trun = 15
+# sim_state = run(
+#     sim_state,
+#     Trun,
+#     make_plots=True,
+#     Ncurvaturesmooth=40,
+#     Nbendingforcesmooth=40,
+#     Nvertexsmooth=0,
+#     smooth_length=None,
+# )  # smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2)
 # b = sim_state["b"]
 # os.system("mkdir ./output")
 # sim_state = run(sim_state, Trun, make_plots=True)
 # sim_state = smooth_Fbend_run(sim_state, make_plots=True, iters=2, weight=0.2)
 # b = sim_state["b"]
-movie_dir = sim_state["output_directory"] + "/temp_images"
+# movie_dir = sim_state["output_directory"] + "/temp_images"
 # movie_dir = "./output/sim_output/temp_images"
-mp.movie(movie_dir)
+# mp.movie(movie_dir)
 # view=(45.0, 54.735610317245346, 4.472045526822957, array([ 3.45557928e-05, -2.15917826e-05,  1.52885914e-05]))
 
 
-# b = m.Brane(**brane_kwargs)
+b = m.Brane(**brane_kwargs)
+#
+F = len(b.faces)
+E = int(len(b.halfedges) / 2)
+V = len(b.V_pq)
+3 * F / 2 - E
+
+# %%
 
 # mp.brane_plot(
 #     b,
