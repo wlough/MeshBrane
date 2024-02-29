@@ -425,7 +425,11 @@ def mayavi_mesh_minimesh_plot(
 
 
 def set_rgba_colors(rgb, a):
-    rgba = np.array([[_[0], _[1], _[2], a] for _ in rgb])
+    if len(np.atleast_1d(a).shape) == 1:
+        A = a * np.ones(len(rgb))
+    else:
+        A = a
+    rgba = np.array([[_rgb[0], _rgb[1], _rgb[2], _a] for _rgb, _a in zip(rgb, A)])
     rgba = rgb_float_to_int(rgba)
     # scalars = np.arange(rgba.shape[0])
     scalars = np.linspace(0, 1, rgba.shape[0])
@@ -462,9 +466,12 @@ def brane_plot(
     H_rgb = brane.H_rgb
     # H_radius = brane.H_radius
     F_rgb = brane.F_rgb
-    F_opacity = brane.F_opacity
-    H_opacity = brane.H_opacity
-    V_opacity = brane.V_opacity
+    # F_opacity = brane.F_opacity
+    # H_opacity = brane.H_opacity
+    # V_opacity = brane.V_opacity
+    F_opacity = brane.F_alpha
+    H_opacity = brane.H_alpha
+    V_opacity = brane.V_alpha
 
     vertices = brane.V_pq[:, :3]
     faces = brane.faces

@@ -293,7 +293,7 @@ def regularize_run(sim_state, make_plots=True, iters=20, weight=0.2):
     return sim_state
 
 
-def run(
+def run0(
     sim_state,
     Trun,
     make_plots=True,
@@ -379,7 +379,7 @@ def run(
         while tstop - t > 0.5 * dt and success:
             # b.forward_euler_step(dt)
             # vertices, success = b.get_new_euler_state(dt)
-
+            Nflips = b.delaunay_regularize_by_flips()
             success = True
             b.preferred_edge_length = b._average_hedge_length(
                 b.V_pq[:, :3], b.H_twin, b.H_vertex
@@ -387,9 +387,9 @@ def run(
 
             # b.total_volume = b.volume_of_mesh()
             # b.total_area = b.get_total_area()
-            b.V_pq[:, :3] = b.gaussian_smooth_samples(
-                b.V_pq[:, :3], Nvertexsmooth, smooth_length
-            )
+            # b.V_pq[:, :3] = b.gaussian_smooth_samples(
+            #     b.V_pq[:, :3], Nvertexsmooth, smooth_length
+            # )
             H, K = b.get_angle_weighted_arc_curvatures()
             K = b.gaussian_smooth_samples(K, Ncurvaturesmooth, smooth_length)
             H = b.gaussian_smooth_samples(H, Ncurvaturesmooth, smooth_length)
@@ -419,7 +419,7 @@ def run(
                 print("oh no")
         # b.V_pq[:, :3] = b.gaussian_smooth_samples(b.V_pq[:, :3], 1, smooth_length)
         # try:
-        #     Nflips = b.delaunay_regularize_by_flips()
+        # Nflips = b.delaunay_regularize_by_flips()
         #     # Nflips = b.regularize_by_flips()
         # except ZeroDivisionError:
         #     success = False
@@ -445,7 +445,7 @@ def run(
             Famax = np.round(np.max(np.linalg.norm(Fa, np.inf, axis=0)), 3)
             Fvmax = np.round(np.max(np.linalg.norm(Fv, np.inf, axis=0)), 3)
             print(
-                f"t={tt}, Fb={Fbmax},Fl={Flmax},Fa={Famax},Fv={Fvmax}              ",
+                f"t={tt}, Fb={Fbmax},Fl={Flmax},Fa={Famax},Fv={Fvmax},Nflips={Nflips}             ",
                 end="\r",
             )
 
@@ -501,6 +501,160 @@ def run(
                     show=False,
                     save=True,
                     fig_path=fig_kwargs["fig_path"],
+                    view=view,
+                )
+            image_count += 1
+
+            if t2save <= 0:
+                t2save = Tsave
+                sim_state["success"] = success
+                sim_state["t"] = t
+                # sim_state["t2plot"] = t2plot
+                sim_state["t2save"] = t2save
+                sim_state["tstop"] = tstop
+                sim_state["image_count"] = image_count
+                # save_state_data(sim_state)
+
+    return sim_state
+
+
+def run(sim_state, Trun, make_plots=True):
+    view = {
+        "azimuth": 0,
+        "elevation": 55,
+        "distance": 4,
+        "focalpoint": (0, 0, 0),
+    }
+    b = sim_state["b"]
+
+    success = sim_state["success"]
+    t = sim_state["t"]
+    dt = sim_state["dt"]
+    # t2plot = sim_state["t2plot"]
+    t2save = sim_state["t2save"]
+    tstop = sim_state["tstop"]
+    image_count = sim_state["image_count"]
+    Tplot = sim_state["Tplot"]
+    Tsave = sim_state["Tsave"]
+    output_directory = sim_state["output_directory"]
+
+    tt = np.round(t, int(-np.floor(np.log10(dt))))
+    print(f"T={Trun}", end="\n")
+    print(f"t={tt}              ", end="\r")
+
+    # fig_kwargs = save_fig_data(sim_state)
+    fig_path = f"{output_directory}/temp_images/fig_{image_count:0>4}.png"
+    if make_plots:
+        Fb = b.Fbend_mixed()
+        # Fl = b.Flength()
+        Fl = b.Ftether()
+        Fa, Fv = b.Fa_Fv()
+        F = Fb + Fl + Fa + Fv
+        b.F_opacity = 0.8
+        Fplot = 0.1 * F
+        Fmax = np.max(np.linalg.norm(Fplot, np.inf, axis=0))
+        if Fmax > 0.25:
+            Fplot *= 0.25 / Fmax
+        b.V_vector_data = Fplot
+        mp.brane_plot(
+            b,
+            # color_by_V_scalar=False,
+            # color_by_V_rgb=True,
+            show_halfedges=True,
+            show_normals=False,
+            show_V_vector_data=True,
+            show_tangent1=False,
+            show_tangent2=False,
+            show=False,
+            save=True,
+            fig_path=fig_path,
+            view=view,
+        )
+    image_count += 1
+
+    while Trun - t > 0.5 * dt and success:
+        while tstop - t > 0.5 * dt and success:
+            try:
+                b.delaunay_regularize_by_flips()
+                # Fl = b.Flength()
+                Fl = b.Ftether()
+                Fa, Fv = b.Fa_Fv()
+                # Fb = b.Fbend_mixed()
+                #############################
+                #############################
+                smooth_length = b.preferred_edge_length
+                Nvertexsmooth = 1
+                Ncurvaturesmooth = 150
+                Nbendingforcesmooth = 50
+                b.V_pq[:, :3] = b.gaussian_smooth_samples(
+                    b.V_pq[:, :3], Nvertexsmooth, smooth_length
+                )
+                H, K = b.get_angle_weighted_arc_curvatures()
+                K = b.gaussian_smooth_samples(K, Ncurvaturesmooth, smooth_length)
+                H = b.gaussian_smooth_samples(H, Ncurvaturesmooth, smooth_length)
+                lapH = b.cotan_laplacian(H)
+                Fn = -2 * b.bending_modulus * (lapH + 2 * H * (H**2 - K))
+                Fn = b.gaussian_smooth_samples(Fn, Nbendingforcesmooth, smooth_length)
+                # n = np.array([b.other_weighted_vertex_normal(v) for v, fn in enumerate(Fn)])
+                Fb = np.array(
+                    [fn * b.other_weighted_vertex_normal(v) for v, fn in enumerate(Fn)]
+                )
+                #############################
+                #############################
+                F = Fb + Fl + Fa + Fv
+                success = True
+            except Exception:
+                success = False
+            if success:
+                b.V_pq[:, :3] += dt * F / b.linear_drag_coeff
+                t += dt
+
+            else:
+                print("oh no")
+
+        if success:
+            tstop = np.min([t + Tplot, Trun])
+            t2save -= Tplot
+
+            tt = np.round(t, int(-np.floor(np.log10(dt))))
+            Fbmax = np.round(np.max(np.linalg.norm(Fb, np.inf, axis=0)), 3)
+            Flmax = np.round(np.max(np.linalg.norm(Fl, np.inf, axis=0)), 3)
+            Famax = np.round(np.max(np.linalg.norm(Fa, np.inf, axis=0)), 3)
+            Fvmax = np.round(np.max(np.linalg.norm(Fv, np.inf, axis=0)), 3)
+            print(
+                f"t={tt}, Fb={Fbmax},Fl={Flmax},Fa={Famax},Fv={Fvmax}              ",
+                end="\r",
+            )
+
+            sim_state["success"] = success
+            sim_state["t"] = t
+            sim_state["t2save"] = t2save
+            sim_state["tstop"] = tstop
+            sim_state["image_count"] = image_count
+
+            # fig_kwargs = save_fig_data(sim_state)
+            fig_path = f"{output_directory}/temp_images/fig_{image_count:0>4}.png"
+            if make_plots:
+                b.F_opacity = 0.8
+                Fplot = 0.2 * F
+                Fmax = np.max(np.linalg.norm(Fplot, np.inf, axis=0))
+                # FFmax = .25
+                if Fmax > 0.25:
+                    print("\nFmax\n")
+                    Fplot *= 0.25 / Fmax
+                b.V_vector_data = Fplot
+                mp.brane_plot(
+                    b,
+                    color_by_V_scalar=False,
+                    # color_by_V_rgb=True,
+                    show_halfedges=True,
+                    show_normals=False,
+                    show_V_vector_data=True,
+                    show_tangent1=False,
+                    show_tangent2=False,
+                    show=False,
+                    save=True,
+                    fig_path=fig_path,
                     view=view,
                 )
             image_count += 1
@@ -629,30 +783,55 @@ def smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2, Dazim=5):
     return sim_state
 
 
+def color_by_tether(b, _a=None):
+    Nh = len(b.halfedges)
+    U = np.zeros(Nh)
+    for h in range(Nh):
+        i, j = b.halfedges[h]
+        ri, rj = b.V_pq[i, :3], b.V_pq[j, :3]
+        Drij = rj - ri
+        s = np.sqrt(Drij @ Drij)
+        U[h] = b.Utether(s, _a)
+    return U
+
+
+#
+# l0 = b.preferred_edge_length
+#
+# s = np.linspace(.6*l0, 1.4*l0, 5000)[1:-1]
+# a = np.array([l0*10**(p) for p in [-3,-2,-1, 0, 1]])
+# # a = np.linspace(l0*10**-1, l0, 3)
+# # U = np.array([[b.Utether(si, _a) for si in s] for _a in a])
+# for p in range(len(a)):
+#     ap = a[p]
+#     pp = np.log10(ap/l0)
+#     Up = np.array([b.Utether(si, ap) for si in s])
+#     plt.plot(s/l0, Up, "--", label=f"a/l0=1e{pp}")
+# plt.legend()
+# plt.ylim(-.01, .1)
+# plt.show()
+# plt.close()
 # %%
-# b.preferred_cell_area = b._average_cell_area(
-#     b.V_pq[:, :3],
-#     b.V_hedge,
-#     b.H_vertex,
-#     b.H_prev,
-#     b.H_twin,
-# )
-# sim_state["b"].Karea = 1e-2
-# b.total_area = b.get_total_area()
-# b.total_volume = b.volume_of_mesh()
 # ply_path = "./data/ply_files/oblate.ply"
 # vertices, faces = load_mesh_from_ply(ply_path)
 # mesh_directory = "./data/halfedge_meshes/dumbbell"
-mesh_directory = "./data/halfedge_meshes/dumbbell"
+mesh_directory = "./data/halfedge_meshes/dumbbell_coarse"
 mesh_data = load_halfedge_mesh_data(mesh_directory)
 brane_kwargs = {
-    "length_reg_stiffness": 1e-2,
-    "area_reg_stiffness": 1e-3,
+    # "length_reg_stiffness": 1e-6,
+    # "area_reg_stiffness": 1e-3,
+    # "volume_reg_stiffness": 1e1,
+    # "bending_modulus": 1e1,
+    # "splay_modulus": 1.0,
+    # "spontaneous_curvature": 0.0,
+    # "linear_drag_coeff": 1e1,
+    "length_reg_stiffness": 1e-1,
+    "area_reg_stiffness": 1e-1,
     "volume_reg_stiffness": 1e1,
-    "bending_modulus": 1e-2,
+    "bending_modulus": 1e0,
     "splay_modulus": 1.0,
     "spontaneous_curvature": 0.0,
-    "linear_drag_coeff": 10.0,
+    "linear_drag_coeff": 1e1,
 } | mesh_data
 sim_kwargs = {
     "Tplot": 5e-2,
@@ -661,380 +840,682 @@ sim_kwargs = {
     "output_directory": "./output/sim_output",
 } | brane_kwargs
 sim_state = initialize_sim(**sim_kwargs)
-Trun = 15
-sim_state = run(
-    sim_state,
-    Trun,
-    make_plots=True,
-    Ncurvaturesmooth=10,
-    Nbendingforcesmooth=10,
-    Nvertexsmooth=0,
-    smooth_length=None,
-)  # smooth_Fbend_run(sim_state, make_plots=True, iters=20, weight=0.2)
+Trun = 0.5
+# sim_state = run0(
+#     sim_state,
+#     Trun,
+#     make_plots=True,
+# )
 # b = sim_state["b"]
 # os.system("mkdir ./output")
 # sim_state = run(sim_state, Trun, make_plots=True)
 # sim_state = smooth_Fbend_run(sim_state, make_plots=True, iters=2, weight=0.2)
-# b = sim_state["b"]
-movie_dir = sim_state["output_directory"] + "/temp_images"
-# movie_dir = "./output/sim_output/temp_images"
-mp.movie(movie_dir)
+b = sim_state["b"]
+
+# movie_dir = sim_state["output_directory"] + "/temp_images"
+# # movie_dir = "./output/sim_output/temp_images"
+# mp.movie(movie_dir)
 # view=(45.0, 54.735610317245346, 4.472045526822957, array([ 3.45557928e-05, -2.15917826e-05,  1.52885914e-05]))
 
+#
+b = m.Brane(**brane_kwargs)
 
-# b = m.Brane(**brane_kwargs)
+mp.brane_plot(
+    b,
+    # color_by_V_scalar=False,
+    # color_by_V_rgb=True,
+    show_halfedges=True,
+    # show_normals=False,
+    # show_V_vector_data=True,
+)
 
+
+# %%
+def make_bs():
+    mesh_directory = "./data/halfedge_meshes/dumbbell_coarse"
+    mesh_data = load_halfedge_mesh_data(mesh_directory)
+    brane_kwargs = {
+        "length_reg_stiffness": 1e-1,
+        "area_reg_stiffness": 1e-1,
+        "volume_reg_stiffness": 1e1,
+        "bending_modulus": 1e0,
+        "splay_modulus": 1.0,
+        "spontaneous_curvature": 0.0,
+        "linear_drag_coeff": 1e1,
+    } | mesh_data
+    b0 = m.Brane(**brane_kwargs)
+    b1 = m.Brane(**brane_kwargs)
+    b2 = m.Brane(**brane_kwargs)
+
+    # def is_delaunay(self, h):
+    #     r"""
+    #     checks if edge is locally delaunay
+    #       vj
+    #       /|\
+    #     vk | vi
+    #       \|/
+    #        vl
+    #     """
+    #     vi = self.H_vertex[self.H_next[self.H_twin[h]]]
+    #     vj = self.H_vertex[h]
+    #     vk = self.H_vertex[self.H_next[h]]
+    #     vl = self.H_vertex[self.H_prev[h]]
+    #
+    #     pij = self.V_pq[vj, :3] - self.V_pq[vi, :3]
+    #     pil = self.V_pq[vl, :3] - self.V_pq[vi, :3]
+    #     pkj = self.V_pq[vj, :3] - self.V_pq[vk, :3]
+    #     pkl = self.V_pq[vl, :3] - self.V_pq[vk, :3]
+    #
+    #     pij_pil = pij[0] * pil[0] + pij[1] * pil[1] + pij[2] * pil[2]
+    #     pkl_pkj = pkl[0] * pkj[0] + pkl[1] * pkj[1] + pkl[2] * pkj[2]
+    #     normpij = np.sqrt(pij[0] ** 2 + pij[1] ** 2 + pij[2] ** 2)
+    #     normpil = np.sqrt(pil[0] ** 2 + pil[1] ** 2 + pil[2] ** 2)
+    #     normpkj = np.sqrt(pkj[0] ** 2 + pkj[1] ** 2 + pkj[2] ** 2)
+    #     normpkl = np.sqrt(pkl[0] ** 2 + pkl[1] ** 2 + pkl[2] ** 2)
+    #     # if any([normpij == 0, normpil == 0, normpkj == 0, normpkl == 0]):
+    #     #     print(f"oh no... h={h}")
+    #     #     is_del = False
+    #     if vi == vj:
+    #         print(f"oh no... h={h}, vi=vj={vi}")
+    #         is_del = False
+    #     if vi == vl:
+    #         print(f"oh no... h={h}, vi=vl={vi}")
+    #         is_del = False
+    #     if vk == vj:
+    #         print(f"oh no... h={h}, vk=vj={vk}")
+    #         is_del = False
+    #     if vk == vl:
+    #         print(f"oh no... h={h}, vk=vl={vk}")
+    #         is_del = False
+    #     if all([normpij != 0, normpil != 0, normpkj != 0, normpkl != 0]):
+    #         alphai = np.arccos(pij_pil / (normpij * normpil))
+    #         alphak = np.arccos(pkl_pkj / (normpkl * normpkj))
+    #         is_del = alphai + alphak <= np.pi
+    #
+    #     return is_del
+
+    def broke_del(self, h):
+        r"""
+        checks if edge is locally delaunay
+          vj
+          /|\
+        vk | vi
+          \|/
+           vl
+        """
+        vi = self.H_vertex[self.H_next[self.H_twin[h]]]
+        vj = self.H_vertex[h]
+        vk = self.H_vertex[self.H_next[h]]
+        vl = self.H_vertex[self.H_prev[h]]
+
+        pij = self.V_pq[vj, :3] - self.V_pq[vi, :3]
+        pil = self.V_pq[vl, :3] - self.V_pq[vi, :3]
+        pkj = self.V_pq[vj, :3] - self.V_pq[vk, :3]
+        pkl = self.V_pq[vl, :3] - self.V_pq[vk, :3]
+
+        pij_pil = pij[0] * pil[0] + pij[1] * pil[1] + pij[2] * pil[2]
+        pkl_pkj = pkl[0] * pkj[0] + pkl[1] * pkj[1] + pkl[2] * pkj[2]
+        normpij = np.sqrt(pij[0] ** 2 + pij[1] ** 2 + pij[2] ** 2)
+        normpil = np.sqrt(pil[0] ** 2 + pil[1] ** 2 + pil[2] ** 2)
+        normpkj = np.sqrt(pkj[0] ** 2 + pkj[1] ** 2 + pkj[2] ** 2)
+        normpkl = np.sqrt(pkl[0] ** 2 + pkl[1] ** 2 + pkl[2] ** 2)
+        if vi == vj:
+            print(f"oh no... h={h}, vi=vj={vi}")
+            bad = True
+        if vi == vl:
+            print(f"oh no... h={h}, vi=vl={vi}")
+            bad = True
+        if vk == vj:
+            print(f"oh no... h={h}, vk=vj={vk}")
+            bad = True
+        if vk == vl:
+            print(f"oh no... h={h}, vk=vl={vk}")
+            bad = True
+        if all([vi != vj, vi != vl, vk != vj, vk != vl]):
+            bad = False
+
+        return bad
+
+    Vflip = [0, 1, 2, 3]
+    max_iters = 2
+    weight = 0.5
+    Nreg = 3
+    iters = 0
+    go = True
+    while go and (iters <= max_iters):
+        Nflips = 0
+        for vm in Vflip:
+            hm = b0.V_hedge[vm]
+            if b1.is_flippable(hm) and go:
+                b0.edge_flip(hm)
+                b1.edge_flip(hm)
+                b2.edge_flip(hm)
+                for ii in range(Nreg):
+                    b0.regularize_by_shifts(weight)
+                    b1.regularize_by_shifts(weight)
+                    b2.regularize_by_shifts(weight)
+                Nflips += 1
+                for h, _ in enumerate(b1.halfedges):
+                    bad = broke_del(b1, h)
+                    if bad:
+                        go = False
+
+        iters += 1
+    Vflip = [1, 2]
+    for vm in Vflip:
+        hm = b1.V_hedge[vm]
+        if b1.is_flippable(hm) and go:
+            v01, v02 = b1.halfedges[hm]
+            b1.edge_flip(hm)
+            b2.edge_flip(hm)
+            v11, v12 = b1.halfedges[hm]
+            print(f"b0->b1  ---  flip h={hm}, e={(v01,v02)}-->e={(v11,v12)}")
+            for ii in range(Nreg):
+                b0.regularize_by_shifts(weight)
+                b1.regularize_by_shifts(weight)
+                b2.regularize_by_shifts(weight)
+            Nflips += 1
+            for h, _ in enumerate(b1.halfedges):
+                bad = broke_del(b1, h)
+                if bad:
+                    go = False
+
+    Vflip = [2]
+    for vm in Vflip:
+        hm = b2.V_hedge[vm]
+        if b2.is_flippable(hm) and go:
+            v01, v02 = b2.halfedges[hm]
+            b2.edge_flip(hm)
+            v11, v12 = b2.halfedges[hm]
+            print(f"b1->b2  ---  flip h={hm}, e={(v01,v02)}-->e={(v11,v12)}")
+            for ii in range(Nreg):
+                b0.regularize_by_shifts(weight)
+                b1.regularize_by_shifts(weight)
+                b2.regularize_by_shifts(weight)
+            Nflips += 1
+            # print(f"iters={iters}, Nflips={Nflips}, hm={hm}, vm={vm}")
+            for h, _ in enumerate(b2.halfedges):
+                bad = broke_del(b2, h)
+                if bad:
+                    go = False
+                    print(f"broke on flip vm={vm}, hm={hm}")
+        return b0, b1, b2  # ,V_pq_OG = b0.V_pq.copy()
+
+
+b0, b1, b2 = make_bs()
+V_pq_OG = b0.V_pq.copy()
+# %%
+# black = plt_cmap["nipy_spectral"]
+# %%
+_cm = get_cmap(name="nipy_spectral")
+cm = lambda x: _cm(x)[:3]
+black = cm(0)
+purple = cm(0.1)
+darkblue = cm(0.2)
+lightblue = cm(0.3125)
+green = cm(0.45)
+yellow = cm(0.7)
+orange = cm(0.8)
+red = cm(0.9)
+grey = cm(1)
+white = (1.0, 1.0, 1.0)
+# colors = [black, purple, darkblue, lightblue, green, yellow, orange, red, grey, white]
+# names = [
+#     "black",
+#     "purple",
+#     "darkblue",
+#     "lightblue",
+#     "green",
+#     "yellow",
+#     "orange",
+#     "red",
+#     "grey",
+#     "white",
+# ]
+#
+# for i in range(len(colors)):
+#     ci = colors[i]
+#     ni = names[i]
+#     plt.plot([i], [0], "o", color=ci, markersize=10, label=ni)
+# plt.legend()
+# plt.show()
+# plt.close()
+# plt_cmap["nipy_spectral"]
+# %%
+b = b0
+V_radius = np.zeros(len(b.V_pq))
+F_rgb = np.ones((len(b.faces), 3))
+H_rgb = np.ones((len(b.halfedges), 3))
+V_rgb = np.ones((len(b.V_pq), 3))
+F_alpha = 0.05 * np.ones(len(b.faces))
+H_alpha = 0.05 * np.ones(len(b.halfedges))
+V_alpha = 0.05 * np.ones(len(b.V_pq))
+hm1, hm2, hm3 = 290, 297, 34
+vm1, vm2, vm3, vm4, vm5 = 56, 16, 1, 2, 15
+vms = [vm1, vm2, vm3, vm4, vm5]
+for vv in vms:
+    V_radius[vv] = 0.0025
+    V_alpha[vv] = 1
+
+r13 = (b.V_pq[vm1, :3] + b.V_pq[vm3, :3]) / 2
+view = {
+    "azimuth": 180,
+    "elevation": 90,
+    "distance": 0.25,
+    "focalpoint": r13,
+}
+
+b.V_radius = V_radius
+b.F_rgb = F_rgb
+b.H_rgb = H_rgb
+b.V_rgb = V_rgb
+b.F_alpha = F_alpha
+b.H_alpha = H_alpha
+b.V_alpha = V_alpha
+mp.brane_plot(
+    b,
+    # color_by_V_scalar=False,
+    # color_by_V_rgb=True,
+    show_halfedges=True,
+    show_vertices=True,
+    # show_normals=False,
+    # show_V_vector_data=True,
+    view=view,
+)
+# %%
+# b.edge_flip(h)
+h = 290
+ht = b.H_twin[h]
+h1 = b.H_next[h]
+h2 = b.H_prev[h]
+h3 = b.H_next[ht]
+h4 = b.H_prev[ht]
+f1 = b.H_face[h]
+f2 = b.H_face[ht]
+v1 = b.H_vertex[h4]
+v2 = b.H_vertex[h1]
+v3 = b.H_vertex[h2]
+v4 = b.H_vertex[h3]
+##
+ht1 = b.H_twin[h1]
+ht2 = b.H_twin[h2]
+ht3 = b.H_twin[h3]
+ht4 = b.H_twin[h4]
+f12 = b.H_face[ht1]
+f23 = b.H_face[ht2]
+f34 = b.H_face[ht3]
+f41 = b.H_face[ht4]
+
+for vv in [v1, v2, v3, v4]:
+    Vradius[vv] = 0.0025
+    V_alpha[vv] = 1
+for hh in [h1, h2, h3, h4]:
+    H_rgb[hh] = np.array([0, 0, 1])
+for hh in [h, ht, h1, h2, h3, h4]:
+    H_alpha[hh] = 0.8
+for ff in [f1, f2, f12, f23, f34, f41]:
+    F_alpha[ff] = 0.8
+    F_rgb[ff] = np.array([0, 1, 0])
+V_rgb[v1] = np.array([1, 0, 0])
+V_rgb[v3] = np.array([1, 0.5, 0])
+V_rgb[v2] = np.array([0, 0, 1])
+V_rgb[v4] = np.array([0.5, 0, 1])
+F_rgb[f1] = np.array([1, 0, 0])
+F_rgb[f2] = np.array([0, 0, 1])
+H_rgb[h] = np.array([1, 0, 0])
+H_rgb[ht] = np.array([1, 0, 0])
+
+# b.H_rgb = scalars_to_rgbs(Hscalar)
+# b.V_rgb = scalars_to_rgbs(Vscalar)
+b.F_rgb = F_rgb
+b.H_rgb = H_rgb
+b.V_rgb = V_rgb
+b.V_radius = Vradius
+b.F_opacity = 0.5
+b.F_alpha = F_alpha
+b.H_alpha = H_alpha
+b.V_alpha = V_alpha
+
+# for iters in range(100):
+#     b.regularize_by_shifts(.5)
+# b.V_pq[v4,:3] = b.V_pq[v4,:3]+.5*(b.V_pq[v1,:3]-b.V_pq[v3,:3])
+# V_pq_OG = b.V_pq.copy()
+b.V_pq = V_pq_OG.copy()
+# b.V_pq[v4,:3] = b.V_pq[v4,:3]+(b.V_pq[v4,:3]-b.V_pq[v3,:3])/1
+# b.V_pq[v3,:3] = b.V_pq[v3,:3]+(b.V_pq[v4,:3]-b.V_pq[v3,:3])/2
+# b.V_pq[v4,:3] = b.V_pq[v4,:3]+(b.V_pq[v1,:3]-b.V_pq[v4,:3])/2.5
+# b.V_pq[v3,:3] = b.V_pq[v3,:3]+(b.V_pq[v1,:3]-b.V_pq[v3,:3])/5
+r13 = (b.V_pq[v1, :3] + b.V_pq[v3, :3]) / 2
+view = {
+    "azimuth": 180,
+    "elevation": 90,
+    "distance": 0.25,
+    "focalpoint": r13,
+}
+
+mp.brane_plot(
+    b,
+    # color_by_V_scalar=False,
+    # color_by_V_rgb=True,
+    show_halfedges=True,
+    show_vertices=True,
+    # show_normals=False,
+    # show_V_vector_data=True,
+    view=view,
+)
+# %%
+b = b0
+Hscalar = np.zeros(len(b.halfedges))
+Vscalar = np.zeros(len(b.V_pq))
+Vradius = np.zeros(len(b.V_pq))
+F_rgb = np.ones((len(b.faces), 3))
+H_rgb = np.ones((len(b.halfedges), 3))
+V_rgb = np.ones((len(b.V_pq), 3))
+F_alpha = 0.05 * np.ones(len(b.faces))
+H_alpha = 0.05 * np.ones(len(b.halfedges))
+V_alpha = 0.05 * np.ones(len(b.V_pq))
+h = 290
+# b.edge_flip(h)
+# h=290
+ht = b.H_twin[h]
+h1 = b.H_next[h]
+h2 = b.H_prev[h]
+h3 = b.H_next[ht]
+h4 = b.H_prev[ht]
+f1 = b.H_face[h]
+f2 = b.H_face[ht]
+v1 = b.H_vertex[h4]
+v2 = b.H_vertex[h1]
+v3 = b.H_vertex[h2]
+v4 = b.H_vertex[h3]
+##
+ht1 = b.H_twin[h1]
+ht2 = b.H_twin[h2]
+ht3 = b.H_twin[h3]
+ht4 = b.H_twin[h4]
+f12 = b.H_face[ht1]
+f23 = b.H_face[ht2]
+f34 = b.H_face[ht3]
+f41 = b.H_face[ht4]
+
+for vv in [v1, v2, v3, v4]:
+    Vradius[vv] = 0.0025
+    V_alpha[vv] = 1
+for hh in [h1, h2, h3, h4]:
+    H_rgb[hh] = np.array([0, 0, 1])
+for hh in [h, ht, h1, h2, h3, h4]:
+    H_alpha[hh] = 0.8
+for ff in [f1, f2, f12, f23, f34, f41]:
+    F_alpha[ff] = 0.8
+    F_rgb[ff] = np.array([0, 1, 0])
+V_rgb[v1] = np.array([1, 0, 0])
+V_rgb[v3] = np.array([1, 0.5, 0])
+V_rgb[v2] = np.array([0, 0, 1])
+V_rgb[v4] = np.array([0.5, 0, 1])
+F_rgb[f1] = np.array([1, 0, 0])
+F_rgb[f2] = np.array([0, 0, 1])
+H_rgb[h] = np.array([1, 0, 0])
+H_rgb[ht] = np.array([1, 0, 0])
+
+# b.H_rgb = scalars_to_rgbs(Hscalar)
+# b.V_rgb = scalars_to_rgbs(Vscalar)
+b.F_rgb = F_rgb
+b.H_rgb = H_rgb
+b.V_rgb = V_rgb
+b.V_radius = Vradius
+b.F_opacity = 0.5
+b.F_alpha = F_alpha
+b.H_alpha = H_alpha
+b.V_alpha = V_alpha
+
+# for iters in range(100):
+#     b.regularize_by_shifts(.5)
+# b.V_pq[v4,:3] = b.V_pq[v4,:3]+.5*(b.V_pq[v1,:3]-b.V_pq[v3,:3])
+# V_pq_OG = b.V_pq.copy()
+b.V_pq = V_pq_OG.copy()
+# b.V_pq[v4,:3] = b.V_pq[v4,:3]+(b.V_pq[v4,:3]-b.V_pq[v3,:3])/1
+# b.V_pq[v3,:3] = b.V_pq[v3,:3]+(b.V_pq[v4,:3]-b.V_pq[v3,:3])/2
+# b.V_pq[v4,:3] = b.V_pq[v4,:3]+(b.V_pq[v1,:3]-b.V_pq[v4,:3])/2.5
+# b.V_pq[v3,:3] = b.V_pq[v3,:3]+(b.V_pq[v1,:3]-b.V_pq[v3,:3])/5
+r13 = (b.V_pq[v1, :3] + b.V_pq[v3, :3]) / 2
+view = {
+    "azimuth": 180,
+    "elevation": 90,
+    "distance": 0.25,
+    "focalpoint": r13,
+}
+
+mp.brane_plot(
+    b,
+    # color_by_V_scalar=False,
+    # color_by_V_rgb=True,
+    show_halfedges=True,
+    show_vertices=True,
+    # show_normals=False,
+    # show_V_vector_data=True,
+    view=view,
+)
+# %%
+
+b.faces[f1] = np.array([v2, v3, v4], dtype=np.int32)
+b.faces[f2] = np.array([v4, v1, v2])
+b.F_hedge[f1] = h2
+b.F_hedge[f2] = h4
+b.halfedges[h] = np.array([v4, v2], dtype=np.int32)
+b.halfedges[ht] = np.array([v2, v4], dtype=np.int32)
+b.H_next[h] = h2
+b.H_prev[h2] = h
+b.H_next[h2] = h3
+b.H_prev[h3] = h2
+b.H_next[h3] = h
+b.H_prev[h] = h3  #
+b.H_next[ht] = h4
+b.H_prev[h4] = ht
+b.H_next[h4] = h1
+b.H_prev[h1] = h4
+b.H_next[h1] = ht
+b.H_prev[ht] = h1
+b.H_face[h3] = f1
+b.H_face[h1] = f2
+b.H_vertex[h] = v2
+b.H_vertex[ht] = v4
+b.V_hedge[v3] = h3
+b.V_hedge[v1] = h1
+b.V_hedge[v2] = h2
+b.V_hedge[v4] = h4
+
+
+# %%
+# b = sim_state["b"]
+# is_flippable = np.array([b.is_flippable(h) for h, _ in enumerate(b.halfedges)])
+# unflippable = np.array([not b.is_flippable(h) for h, _ in enumerate(b.halfedges)])
+# any(unflippable)
+# # is_delaunay = np.array([is_delaunay(b, h) for h, _ in enumerate(b.halfedges)])
+
+# flip_helps_valence = np.array(
+#     [b.flip_helps_valence(h) for h, _ in enumerate(b.halfedges)]
+# )
+# flip_it = np.array(
+#     [
+#         b.flip_helps_valence(h) and not is_delaunay(b, h) and b.is_flippable(h)
+#         for h, _ in enumerate(b.halfedges)
+#     ]
+# )
+valence = np.array([b1.valence(v) for v, _ in enumerate(b1.V_pq)])
+vals = list(valence.copy())
+
+
+#################################
+max_iters = 308
+iters = 0
+go = True
+while go and (iters <= max_iters):
+    print(f"iters={iters}", end="\r")
+    vm = vals.index(min(vals))
+    hm = b1.V_hedge[vm]
+    if b1.is_flippable(hm):
+        b0.edge_flip(hm)
+        b1.edge_flip(hm)
+        b2.edge_flip(hm)
+    else:
+        vals[vm] = 33
+    for h, _ in enumerate(b1.halfedges):
+        bad = broke_del(b1, h)
+        if bad:
+            go = False
+            print(f"iters={iters}, vm={vm}, hm={hm}")
+            break
+    iters += 1
+#########################
+# %%
+vm = vals.index(min(vals))
+hm = b1.V_hedge[vm]
+if b1.is_flippable(hm):
+    b1.edge_flip(hm)
+    b2.edge_flip(hm)
+else:
+    vals[vm] = 33
+for h, _ in enumerate(b1.halfedges):
+    bad = broke_del(b1, h)
+    if bad:
+        go = False
+        print(f"iters={iters}, vm={vm}, hm={hm}")
+        break
+#######################
+vm = vals.index(min(vals))
+hm = b2.V_hedge[vm]
+if b2.is_flippable(hm):
+    b2.edge_flip(hm)
+else:
+    vals[vm] = 33
+for h, _ in enumerate(b2.halfedges):
+    bad = broke_del(b2, h)
+    if bad:
+        go = False
+        print(f"iters={iters}, vm={vm}, hm={hm}")
+        break
+# %%
+
+
+# %%
+b = b2
+hlj = 1
+hjk = b.H_next[hlj]
+hkl = b.H_next[hjk]
+ffljk = [b.H_face[h] for h in [hlj, hjk, hkl]]
+
+hjl = b.H_twin[hlj]
+hli = b.H_next[hjl]
+hij = b.H_next[hli]
+fflij = [b.H_face[h] for h in [hjl, hli, hij]]
+
+hh = [hlj, hjk, hkl, hjl, hli, hij]
+
+vi = b.H_vertex[hli]
+vj = b.H_vertex[hlj]
+vk = b.H_vertex[hjk]
+vl = b.H_vertex[hkl]
+
+
+hkj = b.H_twin[hjk]
+fkj = b.H_face[hkj]
+hji = b.H_twin[hij]
+fji = b.H_face[hji]
+
+hlk = b.H_twin[hkl]
+flk = b.H_face[hlk]
+hil = b.H_twin[hli]
+fil = b.H_face[hil]
+
+flippable = (fkj != fji) and (flk != fil)
+vals1 = [b.valence(v) for v in [vi, vj, vk, vl]]
+vals2 = [b.valence(v) for v in [vi, vj, vk, vl]]
+
+# %%
+# b = b0
+# Hscalar = np.zeros(len(b.halfedges))
+# Vscalar = np.zeros(len(b.V_pq))
+# Vradius = np.zeros(len(b.V_pq))
+# h = 1
+# ht = b.H_twin[h]
+# h1 = b.H_next[h]
+# h2 = b.H_prev[h]
+# h3 = b.H_next[ht]
+# h4 = b.H_prev[ht]
+# f1 = b.H_face[h]
+# f2 = b.H_face[ht]
+# v1 = b.H_vertex[h4]
+# v2 = b.H_vertex[h1]
+# v3 = b.H_vertex[h2]
+# v4 = b.H_vertex[h3]
+# for v in [v1, v2, v3, v4]:
+#     Vscalar[v] = 1.0
+#     Vradius[v] = 0.025
+# for hh in [h1, h2, h3, h4]:
+#     Hscalar[hh] = 1.0
+# Hscalar[h] = 0.5
+#
+# b.H_rgb = scalars_to_rgbs(Hscalar)
+# b.V_rgb = scalars_to_rgbs(Vscalar)
+# b.V_radius = Vradius
+# b.F_opacity = 0
 # mp.brane_plot(
 #     b,
 #     # color_by_V_scalar=False,
 #     # color_by_V_rgb=True,
 #     show_halfedges=True,
+#     show_vertices=True,
 #     # show_normals=False,
 #     # show_V_vector_data=True,
 # )
-
-
+# # %%
+#
+# b.faces[f1] = np.array([v2, v3, v4], dtype=np.int32)
+# b.faces[f2] = np.array([v4, v1, v2])
+# b.F_hedge[f1] = h2
+# b.F_hedge[f2] = h4
+# b.halfedges[h] = np.array([v4, v2], dtype=np.int32)
+# b.halfedges[ht] = np.array([v2, v4], dtype=np.int32)
+# b.H_next[h] = h2
+# b.H_prev[h2] = h
+# b.H_next[h2] = h3
+# b.H_prev[h3] = h2
+# b.H_next[h3] = h
+# b.H_prev[h] = h3  #
+# b.H_next[ht] = h4
+# b.H_prev[h4] = ht
+# b.H_next[h4] = h1
+# b.H_prev[h1] = h4
+# b.H_next[h1] = ht
+# b.H_prev[ht] = h1
+# b.H_face[h3] = f1
+# b.H_face[h1] = f2
+# b.H_vertex[h] = v2
+# b.H_vertex[ht] = v4
+# b.V_hedge[v3] = h3
+# b.V_hedge[v1] = h1
+# b.V_hedge[v2] = h2
+# b.V_hedge[v4] = h4
 # %%
 b = sim_state["b"]
 
+U = color_by_tether(b)
+b.H_rgb = scalars_to_rgbs(U)
+Fb_mixed = b.Fbend_mixed()
+Ftether = b.Ftether()
 
-def test_mesh(self):
-    Nv = len(self.V_pq)
-    for v in range(Nv):
-        h_start = self.V_hedge[v]
-        h = h_start
-        v1 = self.H_vertex[h]
-        h = self.H_twin[self.H_prev[h]]
-        v2 = self.H_vertex[h]
-        while True:
-            v1 = self.H_vertex[h]
-            h = self.H_twin[self.H_prev[h]]
-            v2 = self.H_vertex[h]
-
-            if v == v1 or v == v2 or v1 == v2:
-                print(f"(v,v1,v2)={(v,v1,v2)} normu1=0")
-
-            if h == h_start:
-                break
+b.V_vector_data = Ftether
 
 
-# b.delaunay_regularize_by_flips()
-test_mesh(b)
-Nh = len(b.halfedges)
-Nv = len(b.V_pq)
-vals = [b.valence(v) for v in range(Nv)]
-max(vals)
-min(vals)
-flips = [b.is_flippable(h) for h in range(Nh)]
-
-for h in range(Nh):
-    is_del = b.is_delaunay(h)
-    is_flip = b.is_flippable(h)
-    if not is_del:
-        print(f"h={h} not delaunay        ", end="\r")
-        if is_flip:
-            b._edge_flip(h)
-        else:
-            print(f"h={h} not delaunay but not flippable        ", end="\n")
-# H, K = b.get_angle_weighted_arc_curvatures()
-b.valence(1086)
-
-
-def get_curvatures(self):
-    """ """
-    Nv = self.V_pq.shape[0]
-    H = np.zeros(Nv)
-    K = np.zeros(Nv)
-
-    for v in range(Nv):
-        print(f"vertex {v}              ", end="\r")
-        Atot = 0.0
-        r = self.V_pq[v, :3]
-        r_r = r[0] ** 2 + r[1] ** 2 + r[2] ** 2
-        Hvec = np.zeros(3)
-        n = np.zeros(3)
-        defect = 2 * np.pi
-        h_start = self.V_hedge[v]
-        h = h_start
-        while True:
-            v1 = self.H_vertex[h]
-            r1 = self.V_pq[v1, :3]
-            h = self.H_twin[self.H_prev[h]]
-            v2 = self.H_vertex[h]
-            r2 = self.V_pq[v2, :3]
-
-            r1_r1 = r1[0] ** 2 + r1[1] ** 2 + r1[2] ** 2
-            r2_r2 = r2[0] ** 2 + r2[1] ** 2 + r2[2] ** 2
-            r_r1 = r[0] * r1[0] + r[1] * r1[1] + r[2] * r1[2]
-            r1_r2 = r1[0] * r2[0] + r1[1] * r2[1] + r1[2] * r2[2]
-            r2_r = r2[0] * r[0] + r2[1] * r[1] + r2[2] * r[2]
-
-            normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
-            normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
-            normu3 = np.sqrt(r_r - 2 * r2_r + r2_r2)  # jitnorm(u3)
-            if normu1 == 0:
-                print(f"(v,v1,v2)={(v,v1,v2)} normu1=0")
-            if normu2 == 0:
-                print(f"(v,v1,v2)={(v,v1,v2)} normu2=0")
-            if normu3 == 0:
-                print(f"(v,v1,v2)={(v,v1,v2)} normu3=0")
-            cos_alpha = (r1_r1 + r2_r - r_r1 - r1_r2) / (normu1 * normu2)
-            cos_beta = (r2_r2 + r_r1 - r1_r2 - r2_r) / (normu2 * normu3)
-            cos_gamma = (r_r + r1_r2 - r_r1 - r2_r) / (normu1 * normu3)
-            cot_alpha = cos_alpha / np.sqrt(1 - cos_alpha**2)
-            cot_beta = cos_beta / np.sqrt(1 - cos_beta**2)
-
-            defect -= np.arccos(cos_gamma)
-            Hvec += cot_alpha * (r2 - r) / 2 + cot_beta * (r1 - r) / 2
-            Atot += normu3**2 * cot_alpha / 8 + normu1**2 * cot_beta / 8
-            n += jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)
-
-            if h == h_start:
-                break
-
-        Hvec /= 2 * Atot
-        n /= np.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
-        H[v] = n[0] * Hvec[0] + n[1] * Hvec[1] + n[2] * Hvec[2]
-        K[v] = defect / Atot
-    return H, K
-
-
-H, K = get_curvatures(b)
-plt.plot(K)
-lapH = b.cotan_laplacian(H)
-Fn = -2 * b.bending_modulus * (lapH + 2 * H * (H**2 - K))
-Fb = np.array([fn * b.other_weighted_vertex_normal(v) for v, fn in enumerate(Fn)])
-Fl = b.Flength()
-Fa = b.Farea()
-Fv = b.Fvolume()
-v = 912
-h_start = b.V_hedge[v]
-h = h_start
-v1 = b.H_vertex[h]
-h = b.H_twin[b.H_prev[h]]
-v2 = b.H_vertex[h]
-while True:
-    v1 = b.H_vertex[h]
-    r1 = b.V_pq[v1, :3]
-    h = b.H_twin[b.H_prev[h]]
-    v2 = b.H_vertex[h]
-    r2 = b.V_pq[v2, :3]
-
-    r1_r1 = r1[0] ** 2 + r1[1] ** 2 + r1[2] ** 2
-    r2_r2 = r2[0] ** 2 + r2[1] ** 2 + r2[2] ** 2
-    r_r1 = r[0] * r1[0] + r[1] * r1[1] + r[2] * r1[2]
-    r1_r2 = r1[0] * r2[0] + r1[1] * r2[1] + r1[2] * r2[2]
-    r2_r = r2[0] * r[0] + r2[1] * r[1] + r2[2] * r[2]
-
-    normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
-    normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
-    normu3 = np.sqrt(r_r - 2 * r2_r + r2_r2)  # jitnorm(u3)
-    if normu1 == 0:
-        print(f"(v,v1,v2)={(v,v1,v2)} normu1=0")
-    if normu2 == 0:
-        print(f"(v,v1,v2)={(v,v1,v2)} normu2=0")
-    if normu3 == 0:
-        print(f"(v,v1,v2)={(v,v1,v2)} normu3=0")
-    cos_alpha = (r1_r1 + r2_r - r_r1 - r1_r2) / (normu1 * normu2)
-    cos_beta = (r2_r2 + r_r1 - r1_r2 - r2_r) / (normu2 * normu3)
-    cos_gamma = (r_r + r1_r2 - r_r1 - r2_r) / (normu1 * normu3)
-    cot_alpha = cos_alpha / np.sqrt(1 - cos_alpha**2)
-    cot_beta = cos_beta / np.sqrt(1 - cos_beta**2)
-
-    # defect -= np.arccos(cos_gamma)
-    # Hvec += cot_alpha * (r2 - r) / 2 + cot_beta * (r1 - r) / 2
-    # Atot += normu3**2 * cot_alpha / 8 + normu1**2 * cot_beta / 8
-    # n += jitcross(r, r1) + jitcross(r1, r2) + jitcross(r2, r)
-
-    if h == h_start:
-        break
-
-
-# %%
-def is_delaunay(self, h):
-    r"""
-      v2
-      /|\
-    v3 | v1
-      \|/
-       v4
-    """
-    vi = self.H_vertex[self.H_next[self.H_twin[h]]]
-    vj = self.H_vertex[h]
-    vk = self.H_vertex[self.H_next[h]]
-    vl = self.H_vertex[self.H_prev[h]]
-
-    pij = self.V_pq[vj, :3] - self.V_pq[vi, :3]
-    pil = self.V_pq[vl, :3] - self.V_pq[vi, :3]
-    pkj = self.V_pq[vj, :3] - self.V_pq[vk, :3]
-    pkl = self.V_pq[vl, :3] - self.V_pq[vk, :3]
-
-    pij_pil = pij[0] * pil[0] + pij[1] * pil[1] + pij[2] * pil[2]
-    pkl_pkj = pkl[0] * pkj[0] + pkl[1] * pkj[1] + pkl[2] * pkj[2]
-    normpij = np.sqrt(pij[0] ** 2 + pij[1] ** 2 + pij[2] ** 2)
-    normpil = np.sqrt(pil[0] ** 2 + pil[1] ** 2 + pil[2] ** 2)
-    normpkj = np.sqrt(pkj[0] ** 2 + pkj[1] ** 2 + pkj[2] ** 2)
-    normpkl = np.sqrt(pkl[0] ** 2 + pkl[1] ** 2 + pkl[2] ** 2)
-    # print()
-
-    alphai = np.arccos(pij_pil / (normpij * normpil))
-    alphak = np.arccos(pkl_pkj / (normpkl * normpkj))
-
-    return alphai + alphak <= np.pi
-
-
-def delaunay_regularize_by_flips(self):
-    Nh = len(self.halfedges)
-    Nflips = 0
-    for h in range(Nh):
-        # print("is_del                  ", end="\r")
-        is_del = is_delaunay(b, h)
-        if not is_del:
-            # print("eflip             ", end="\r")
-            self.edge_flip(h)
-            Nflips += 1
-    return Nflips
-
-
-def cotan_laplacian(self, Y):
-    """computes the laplacian of Y at each vertex"""
-    Nv = self.V_pq.shape[0]
-    lapY = np.zeros_like(Y)
-    for vi in range(Nv):
-        Atot = 0.0
-        ri = self.V_pq[vi, :3]
-        yi = Y[vi]
-        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-        h_start = self.V_hedge[vi]
-        hij = h_start
-        while True:
-            hijm1 = self.H_next[self.H_twin[hij]]
-            hijp1 = self.H_twin[self.H_prev[hij]]
-            vjm1 = self.H_vertex[hijm1]
-            vj = self.H_vertex[hij]
-            vjp1 = self.H_vertex[hijp1]
-
-            yj = Y[vj]
-
-            rjm1 = self.V_pq[vjm1, :3]
-            rj = self.V_pq[vj, :3]
-            rjp1 = self.V_pq[vjp1, :3]
-
-            rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
-            rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
-            rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
-            ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
-            ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
-            rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
-            ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
-            rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
-
-            Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
-            Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
-            Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
-            Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
-            Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
-
-            cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
-
-            cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
-
-            cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
-            cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
-            if cot_thetam is np.nan:
-                print("cot_thetam")
-            if cot_thetap is np.nan:
-                print("cot_thetap")
-
-            Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
-            lapY[vi] += (cot_thetam + cot_thetap) * (yj - yi) / 2
-
-            hij = hijp1
-
-            if hij == h_start:
-                break
-        lapY[vi] /= Atot
-
-    return lapY
-
-
-b = m.Brane(**brane_kwargs)
-smooth_length = b.preferred_edge_length
-Ncurvaturesmooth = 10
-Nbendingforcesmooth = 10
-weight = 0.2
-dt = 1e-2
-T = 1e-2
-t = 0
-while t <= T:
-    print(f"t={t/T}    ", end="\r")
-    # b.V_pq[:, :3] = b.gaussian_smooth_samples(b.V_pq[:,:3], 1, smooth_length)
-    b.preferred_edge_length = b._average_hedge_length(
-        b.V_pq[:, :3], b.H_twin, b.H_vertex
-    )
-
-    b.total_volume = b.volume_of_mesh()
-    b.total_area = b.get_total_area()
-    H, K = b.get_angle_weighted_arc_curvatures()
-    K = b.gaussian_smooth_samples(K, Ncurvaturesmooth, smooth_length)
-    H = b.gaussian_smooth_samples(H, Ncurvaturesmooth, smooth_length)
-    lapH = b.cotan_laplacian(H)
-    Fn = -2 * b.bending_modulus * (lapH + 2 * H * (H**2 - K))
-    Fn = b.gaussian_smooth_samples(Fn, Nbendingforcesmooth, smooth_length)
-    Fb = np.array([fn * b.other_weighted_vertex_normal(v) for v, fn in enumerate(Fn)])
-    Fl = b.Flength()
-    Fa = b.Farea()
-    Fv = b.Fvolume()
-
-    # Fl =  b.gaussian_smooth_samples(Fl, 0, smooth_length)
-    F = Fb + Fl + Fa + Fv
-    b.V_pq[:, :3] += dt * F / b.linear_drag_coeff
-    t += dt
-    # b.delaunay_regularize_by_flips()
-    # delaunay_regularize_by_flips(b)
-#
-# for _ in range(1):
-# print(f"iter={_}    ", end="\r")
-# # b.V_pq[:, :3] = b.gaussian_smooth_samples(b.V_pq[:,:3], 1, smooth_length)
-# b.preferred_edge_length = b._average_hedge_length(
-#     b.V_pq[:, :3], b.H_twin, b.H_vertex
-# )
-#
-# b.total_volume = b.volume_of_mesh()
-# b.total_area = b.get_total_area()
-# H, K = b.get_angle_weighted_arc_curvatures()
-# K = b.gaussian_smooth_samples(K, Ncurvaturesmooth, smooth_length)
-# H = b.gaussian_smooth_samples(H, Ncurvaturesmooth, smooth_length)
-# lapH = cotan_laplacian(b,H)
-# Fn = -2 * b.bending_modulus * (lapH + 2 * H * (H**2 - K))
-# Fn = b.gaussian_smooth_samples(Fn, Nbendingforcesmooth, smooth_length)
-# Fb = np.array([fn * b.other_weighted_vertex_normal(v) for v, fn in enumerate(Fn)])
-# Fl = b.Flength()
-# Fa = b.Farea()
-# Fv = b.Fvolume()
-
-# Fl =  b.gaussian_smooth_samples(Fl, 0, smooth_length)
-# F = Fb + Fl + Fa + Fv
-# b.V_pq[:, :3] += dt * F / b.linear_drag_coeff
-# b.delaunay_regularize_by_flips()
-# delaunay_regularize_by_flips(b)
-#
-#
-b.V_rgb = scalars_to_rgbs(Fn)
-b.F_opacity = 0.8
-Fplot = F
-Fmax = np.max(np.linalg.norm(Fplot, np.inf, axis=0))
-b.V_vector_data = 0.1 * Fplot / Fmax
 mp.brane_plot(
     b,
-    color_by_V_scalar=False,
-    color_by_V_rgb=True,
-    show_halfedges=False,
-    show_normals=False,
+    # color_by_V_scalar=False,
+    # color_by_V_rgb=True,
+    show_halfedges=True,
+    # show_normals=False,
     show_V_vector_data=True,
-    show_tangent1=False,
-    show_tangent2=False,
 )
+# %%
 
 
 # %%

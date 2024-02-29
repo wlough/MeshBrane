@@ -52,6 +52,7 @@ Brane_spec = [
     ("preferred_total_volume", float64),
     ("preferred_total_area", float64),
     ("preferred_cell_area", float64),
+    ("preferred_face_area", float64),
     ("preferred_cell_volume", float64),
     ("preferred_edge_length", float64),
     ###########################
@@ -70,6 +71,9 @@ Brane_spec = [
     ("F_opacity", float64),
     ("H_opacity", float64),
     ("V_opacity", float64),
+    ("F_alpha", float64[:]),
+    ("H_alpha", float64[:]),
+    ("V_alpha", float64[:]),
     ###########################
 ]
 
@@ -173,6 +177,7 @@ class Brane:
         (
             self.preferred_edge_length,
             self.preferred_cell_area,
+            self.preferred_face_area,
             self.preferred_total_volume,
             self.preferred_total_area,
         ) = self._preferred_geometric_defaults(
@@ -211,7 +216,9 @@ class Brane:
             self.H_scalar,
             self.V_scalar,
         ) = self._visual_defaults(self.vertices, self.halfedges, self.faces)
-
+        self.F_alpha = self.F_opacity * np.ones(len(self.faces))
+        self.H_alpha = self.H_opacity * np.ones(len(self.halfedges))
+        self.V_alpha = self.V_opacity * np.ones(len(self.V_pq))
         #############################################################
         Nflips = self.delaunay_regularize_by_flips()
 
@@ -541,25 +548,46 @@ class Brane:
         faces,
         F_hedge,
     ):
-        preferred_edge_length = self._average_hedge_length(vertices, H_twin, H_vertex)
-        preferred_cell_area = self._average_cell_area(
+        Nf = len(faces)
+        Nv = len(vertices)
+        volume = self._total_volume(vertices, faces)
+        area = self._total_area(
             vertices,
             V_hedge,
             H_vertex,
             H_prev,
             H_twin,
         )
-        preferred_total_volume = self._total_volume(vertices, faces)
-        preferred_total_area = self._total_area(
-            vertices,
-            V_hedge,
-            H_vertex,
-            H_prev,
-            H_twin,
-        )
+        Rv = (3 * volume / (4 * np.pi)) ** (1 / 3)
+        Ra = np.sqrt(area / (4 * np.pi))
+        w = 0.75
+        R = (1 - w) * Ra + w * Rv
+        preferred_total_area = 4 * np.pi * R**2
+        preferred_face_area = preferred_total_area / Nf
+        preferred_cell_area = preferred_face_area * Nf / Nv
+        preferred_total_volume = 4 * np.pi * R**3 / 3
+        preferred_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
+
+        # preferred_edge_length = self._average_hedge_length(vertices, H_twin, H_vertex)
+        # preferred_cell_area = self._average_cell_area(
+        #     vertices,
+        #     V_hedge,
+        #     H_vertex,
+        #     H_prev,
+        #     H_twin,
+        # )
+        # preferred_total_volume = self._total_volume(vertices, faces)
+        # preferred_total_area = self._total_area(
+        #     vertices,
+        #     V_hedge,
+        #     H_vertex,
+        #     H_prev,
+        #     H_twin,
+        # )
         return (
             preferred_edge_length,
             preferred_cell_area,
+            preferred_face_area,
             preferred_total_volume,
             preferred_total_area,
         )
@@ -654,6 +682,184 @@ class Brane:
 
     def prev(self, h):
         return self.H_twin[self.H_next[self.H_twin[h]]]
+
+    ###########################################################################
+    # Forces
+    ############################
+    def Fa_Fv(self):
+        Nv = len(self.V_pq)
+        Fv = np.zeros((Nv, 3))
+        V0 = self.preferred_total_volume
+        V = self.volume_of_mesh()
+        Kv = self.Kvolume
+        Fa = np.zeros((Nv, 3))
+        Ka = self.Karea
+        A0 = self.preferred_face_area
+
+        for i in range(Nv):
+            ri = self.V_pq[i, :3]
+            h_start = self.V_hedge[i]
+            hk = h_start
+            while True:
+                vk = self.H_vertex[hk]
+                hkp1 = self.H_twin[self.H_prev[hk]]
+                vkp1 = self.H_vertex[hkp1]
+                rk = self.V_pq[vk, :3]
+                rkp1 = self.V_pq[vkp1, :3]
+                Fv[i] += -Kv * ((V - V0) / V0) * jitcross(rk, rkp1)
+                ############
+                vecAikkp1 = (
+                    jitcross(ri, rk) + jitcross(rk, rkp1) + jitcross(rkp1, ri)
+                ) / 2
+                Aikkp1 = np.sqrt(
+                    vecAikkp1[0] ** 2 + vecAikkp1[1] ** 2 + vecAikkp1[2] ** 2
+                )
+                nikkp1 = vecAikkp1 / Aikkp1
+                Fa[i] += -Ka * ((Aikkp1 - A0) / (2 * A0)) * jitcross(nikkp1, rkp1 - rk)
+                ############
+                hk = hkp1
+                if hk == h_start:
+                    break
+        return Fa, Fv
+
+    def Utether_OG(self, s, _a=None):
+        l0 = self.preferred_edge_length
+        if _a is None:
+            a = l0
+        else:
+            a = _a
+        Kl = self.Klength
+        Dl = 0.8 * l0
+        normDs = np.abs(s - l0)
+        if normDs > Dl / 4 and normDs < Dl / 2:
+            # U = a * Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
+            U = Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
+        else:
+            U = 0.0
+        return U
+
+    def Utether(self, s, _a=None):
+        l0 = self.preferred_edge_length
+        if _a is None:
+            a = l0
+        else:
+            a = _a
+        Kl = self.Klength
+        Dl = 0.8 * l0
+        normDs = np.abs(s - l0)
+        if normDs <= Dl / 4:
+            U = 0.0
+        elif normDs < Dl / 2:
+            U = Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
+        else:
+            U = np.inf
+        return U
+
+    def Utether1(self, s, _a=None):
+        l0 = self.preferred_edge_length
+        Dl = 0.8 * l0
+        lmin = l0 - Dl / 2
+        lrep = l0 - Dl / 4
+        latt = l0 + Dl / 4
+        lmax = l0 + Dl / 2
+        if _a is None:
+            a = l0
+        else:
+            a = _a
+        Kl = self.Klength
+        if s > latt:
+            Uatt = Kl * np.exp(a / (latt - s)) / (lmax - s)
+        else:
+            Uatt = 0.0
+        if s < lrep:
+            Urep = Kl * np.exp(a / (s - lrep)) / (s - lmin)
+        else:
+            Urep = 0.0
+
+        U = Urep + Uatt
+        return U
+
+    def Ftether(self, _a=None):
+        Nv = len(self.V_pq)
+        Fl = np.zeros((Nv, 3))
+        l0 = self.preferred_edge_length
+        Kl = self.Klength
+        if _a is None:
+            a = l0
+        else:
+            a = _a
+        Dl = 0.8 * l0
+
+        for i in range(Nv):
+            ri = self.V_pq[i, :3]
+            h_start = self.V_hedge[i]
+            hk = h_start
+            while True:
+                vk = self.H_vertex[hk]
+                rk = self.V_pq[vk, :3]
+                Drki = ri - rk
+                s = np.sqrt(Drki[0] ** 2 + Drki[1] ** 2 + Drki[2] ** 2)
+                Ds = s - l0
+                normDs = np.abs(Ds)
+                if normDs > Dl / 4 and normDs < Dl / 2:
+                    # U = a * Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
+                    U = Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
+                    Fl[i] += -(
+                        (1 / (Dl / 2 - normDs) + a / (normDs - Dl / 4) ** 2)
+                        * U
+                        * (Ds / normDs)
+                        * Drki
+                        / s
+                    )
+                else:
+                    pass
+                ############
+                hk = self.H_twin[self.H_prev[hk]]
+                if hk == h_start:
+                    break
+        return Fl
+
+    def Fb(self, Nsmooth=0, _a=None):
+        a = self.preferred_edge_length
+        Kb = self.bending_modulus
+        H, K = self.get_angle_weighted_arc_curvatures()
+        H0 = self.spontaneous_curvature
+        for _ in range(Nsmooth):
+            H = self.gaussian_smooth_samples(H, 1, a)
+            K = self.gaussian_smooth_samples(K, 1, a)
+        Nv = len(H)
+        lapH = self.cotan_laplacian(H)
+        F = np.zeros((Nv, 3))
+
+        Fn = -2 * Kb * (lapH + 2 * (H - H0) * (H**2 + H0 * H - K))
+
+        for v in range(Nv):
+            n = self.other_weighted_vertex_normal(v)
+            Av = self.vorcell_area(v)
+            F[v] = Fn[v] * n * Av
+        return F
+
+    def Fbend_mixed(self):
+        Nv = len(self.V_pq)
+        F = np.zeros((Nv, 3))
+        Kb = self.bending_modulus
+        K = self.get_gaussian_curvature_meyer()
+        H = np.zeros_like(K)
+        H0 = self.spontaneous_curvature
+        Hn = self.slow_smoothed_laplacian(self.V_pq[:, :3]) / 2
+        n = np.zeros((Nv, 3))
+        A = np.zeros(Nv)
+        for i in range(Nv):
+            n[i] = self.other_weighted_vertex_normal(i)
+            A[i] = self.meyercell_area(i)
+            H[i] = n[i, 0] * Hn[i, 0] + n[i, 1] * Hn[i, 1] + n[i, 2] * Hn[i, 2]
+        lapH = self.slow_smoothed_laplacian(H)
+
+        Fn = -2 * Kb * (lapH + 2 * (H - H0) * (H**2 + H0 * H - K))
+
+        for i in range(Nv):
+            F[i] = Fn[i] * n[i] * A[i]
+        return F
 
     ###########################################################################
     # Curvature #
@@ -796,6 +1002,77 @@ class Brane:
     ###########################################################################
     # cotan stuff #
     ##########################
+    def meyercell_area(self, v):
+        """Meyer's mixed area of cell dual to vertex v"""
+        Atot = 0.0
+        ri = self.V_pq[v, :3]
+        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+        h_start = self.V_hedge[v]
+        hij = h_start
+        while True:
+            vj = self.H_vertex[hij]
+            rj = self.V_pq[vj, :3]
+            hijp1 = self.H_twin[self.H_prev[hij]]
+            vjp1 = self.H_vertex[hijp1]
+            rjp1 = self.V_pq[vjp1, :3]
+
+            rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+            rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+            ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+            rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+            rjp1_ri = rjp1[0] * ri[0] + rjp1[1] * ri[1] + rjp1[2] * ri[2]
+
+            normDrij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+            # normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
+            normDrjjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+            # normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
+            normDrjp1i = np.sqrt(rjp1_rjp1 - 2 * rjp1_ri + ri_ri)
+            cos_thetajijp1 = (ri_ri + rj_rjp1 - ri_rj - rjp1_ri) / (
+                normDrij * normDrjp1i
+            )
+            cos_thetajp1ji = (rj_rj + rjp1_ri - rj_rjp1 - ri_rj) / (
+                normDrij * normDrjjp1
+            )
+            cos_thetaijp1j = (rjp1_rjp1 + ri_rj - rj_rjp1 - rjp1_ri) / (
+                normDrjp1i * normDrjjp1
+            )
+            if cos_thetajijp1 < 0:
+                semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
+                Atot += (
+                    np.sqrt(
+                        semiP
+                        * (semiP - normDrij)
+                        * (semiP - normDrjjp1)
+                        * (semiP - normDrjp1i)
+                    )
+                    / 2
+                )
+                # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 4
+            elif cos_thetajp1ji < 0 or cos_thetaijp1j < 0:
+                semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
+                Atot += (
+                    np.sqrt(
+                        semiP
+                        * (semiP - normDrij)
+                        * (semiP - normDrjjp1)
+                        * (semiP - normDrjp1i)
+                    )
+                    / 4
+                )
+                # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 8
+            else:
+                cot_thetaijp1j = cos_thetaijp1j / np.sqrt(1 - cos_thetaijp1j**2)
+                cot_thetajp1ji = cos_thetajp1ji / np.sqrt(1 - cos_thetajp1ji**2)
+                Atot += (
+                    normDrij**2 * cot_thetaijp1j / 8
+                    + normDrjp1i**2 * cot_thetajp1ji / 8
+                )
+
+            hij = hijp1
+            if hij == h_start:
+                break
+
+        return Atot
 
     def vorcell_area(self, v):
         """area of cell dual to vertex v"""
@@ -886,6 +1163,81 @@ class Brane:
                 if hij == h_start:
                     break
             lapY[vi] /= Atot
+
+        return lapY
+
+    def smoothed_laplacian(self, Y):
+        """computes the laplacian of Y at each vertex"""
+
+        Nv = len(self.V_pq)
+        lapY = np.zeros_like(Y)
+        for vi in range(Nv):
+            ri = self.V_pq[vi, :3]
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+            Ai = self.meyercell_area(vi)
+            h_start = self.V_hedge[vi]
+            hij = h_start
+            while True:
+                vj = self.H_vertex[hij]
+                hijm1 = self.H_next[self.H_twin[hij]]
+                hijp1 = self.H_twin[self.H_prev[hij]]
+                vjm1 = self.H_vertex[hijm1]
+                vjp1 = self.H_vertex[hijp1]
+                rjm1 = self.V_pq[vjm1, :3]
+                rj = self.V_pq[vj, :3]
+                rjp1 = self.V_pq[vjp1, :3]
+                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+                vecAijjp1 = (
+                    jitcross(ri, rj) + jitcross(rj, rjp1) + jitcross(rjp1, ri)
+                ) / 2
+                vecAijm1j = (
+                    jitcross(ri, rjm1) + jitcross(rjm1, rj) + jitcross(rj, ri)
+                ) / 2
+                Aijjp1 = np.sqrt(
+                    vecAijjp1[0] ** 2 + vecAijjp1[1] ** 2 + vecAijjp1[2] ** 2
+                )
+                Aijm1j = np.sqrt(
+                    vecAijm1j[0] ** 2 + vecAijm1j[1] ** 2 + vecAijm1j[2] ** 2
+                )
+                lapY[vi] += (
+                    (Aijjp1 + Aijm1j)
+                    * np.exp(-(ri_ri - 2 * ri_rj + rj_rj) / (4 * Ai))
+                    * (Y[vj] - Y[vi])
+                    / (12 * np.pi * Ai**2)
+                )
+                hij = hijp1
+                if hij == h_start:
+                    break
+        return lapY
+
+    def slow_smoothed_laplacian(self, Y):
+        """computes the laplacian of Y at each vertex"""
+
+        Nv = len(self.V_pq)
+        Nf = len(self.faces)
+        lapY = np.zeros_like(Y)
+        for vi in range(Nv):
+            ri = self.V_pq[vi, :3]
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+            Ai = self.meyercell_area(vi)
+            for f in range(Nf):
+                vj, vk, vl = self.faces[f]
+                rj = self.V_pq[vj, :3]
+                rk = self.V_pq[vk, :3]
+                rl = self.V_pq[vl, :3]
+                vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
+                Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
+                for vm in self.faces[f]:
+                    rm = self.V_pq[vm, :3]
+                    rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
+                    ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
+                    Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
+                    lapY[vi] += (
+                        (Af / (12 * np.pi * Ai**2))
+                        * np.exp(-Drim_sqr / (4 * Ai))
+                        * (Y[vm] - Y[vi])
+                    )
 
         return lapY
 
@@ -1195,6 +1547,49 @@ class Brane:
             K[v] = defect / Atot
         return H, K
 
+    def get_gaussian_curvature_meyer(self):
+        """gaussian curvature using voroni cell areas"""
+        Nv = self.V_pq.shape[0]
+        K = np.zeros(Nv)
+
+        for v in range(Nv):
+            Atot = self.meyercell_area(v)
+            r = self.V_pq[v, :3]
+            r_r = r[0] ** 2 + r[1] ** 2 + r[2] ** 2
+            defect = 2 * np.pi
+            h_start = self.V_hedge[v]
+            h = h_start
+            while True:
+                v1 = self.H_vertex[h]
+                r1 = self.V_pq[v1, :3]
+                h = self.H_twin[self.H_prev[h]]
+                v2 = self.H_vertex[h]
+                r2 = self.V_pq[v2, :3]
+
+                r1_r1 = r1[0] ** 2 + r1[1] ** 2 + r1[2] ** 2
+                r2_r2 = r2[0] ** 2 + r2[1] ** 2 + r2[2] ** 2
+                r_r1 = r[0] * r1[0] + r[1] * r1[1] + r[2] * r1[2]
+                r1_r2 = r1[0] * r2[0] + r1[1] * r2[1] + r1[2] * r2[2]
+                r2_r = r2[0] * r[0] + r2[1] * r[1] + r2[2] * r[2]
+
+                normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
+                # normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
+                normu3 = np.sqrt(r_r - 2 * r2_r + r2_r2)  # jitnorm(u3)
+                # cos_alpha = (r1_r1 + r2_r - r_r1 - r1_r2) / (normu1 * normu2)
+                # cos_beta = (r2_r2 + r_r1 - r1_r2 - r2_r) / (normu2 * normu3)
+                cos_gamma = (r_r + r1_r2 - r_r1 - r2_r) / (normu1 * normu3)
+                # cot_alpha = cos_alpha / np.sqrt(1 - cos_alpha**2)
+                # cot_beta = cos_beta / np.sqrt(1 - cos_beta**2)
+                gamma = np.arccos(cos_gamma)
+                defect -= gamma
+                # Atot += normu3**2 * cot_alpha / 8 + normu1**2 * cot_beta / 8
+
+                if h == h_start:
+                    break
+
+            K[v] = defect / Atot
+        return K
+
     ###########################################################################
     # geometric computations #
     ##########################
@@ -1403,6 +1798,21 @@ class Brane:
     ###########################################################################
     # mesh mutation/regularization functions #
     ###############################
+    def orientation_check(self, h):
+        """checks if faces adjacent to an edge have consistent normals"""
+
+        fl = self.H_face[h]
+        fr = self.H_face[self.H_twin[h]]
+        il, jl, kl = self.faces[fl]
+        ir, jr, kr = self.faces[fr]
+        ril, rjl, rkl = self.V_pq[il, :3], self.V_pq[jl, :3], self.V_pq[kl, :3]
+        rir, rjr, rkr = self.V_pq[ir, :3], self.V_pq[jr, :3], self.V_pq[kr, :3]
+        Al = jitcross(ril, rjl) + jitcross(rjl, rkl) + jitcross(rkl, ril)
+        Ar = jitcross(rir, rjr) + jitcross(rjr, rkr) + jitcross(rkr, rir)
+        Al_Ar = Al[0] * Ar[0] + Al[1] * Ar[1] + Al[2] * Ar[2]
+        is_good = Al_Ar > 0
+        return is_good
+
     def volume_length_quality_metric(self, f):
         v0, v1, v2 = self.faces[f]
         r0 = self.V_pq[v0, :3]
@@ -1464,7 +1874,7 @@ class Brane:
         v3 = self.H_vertex[h2]
         v4 = self.H_vertex[h3]
         self.faces[f1] = np.array([v2, v3, v4], dtype=np.int32)
-        self.faces[f2] = np.array([v4, v1, v2])
+        self.faces[f2] = np.array([v4, v1, v2], dtype=np.int32)
         self.F_hedge[f1] = h2
         self.F_hedge[f2] = h4
         self.halfedges[h] = np.array([v4, v2], dtype=np.int32)
@@ -1474,7 +1884,7 @@ class Brane:
         self.H_next[h2] = h3
         self.H_prev[h3] = h2
         self.H_next[h3] = h
-        self.H_prev[h] = h3
+        self.H_prev[h] = h3  #
         self.H_next[ht] = h4
         self.H_prev[h4] = ht
         self.H_next[h4] = h1
@@ -1489,6 +1899,55 @@ class Brane:
         self.V_hedge[v1] = h1
         self.V_hedge[v2] = h2
         self.V_hedge[v4] = h4
+
+    def monte_wants_flip(self, h):
+        Ka = self.Karea
+        A0 = self.preferred_face_area
+        l0 = self.preferred_edge_length
+        ht = self.H_twin[h]
+        h1 = self.H_next[h]
+        h2 = self.H_prev[h]
+        h3 = self.H_next[ht]
+        h4 = self.H_prev[ht]
+
+        v1 = self.H_vertex[h4]
+        v2 = self.H_vertex[h1]
+        v3 = self.H_vertex[h2]
+        v4 = self.H_vertex[h3]
+        r1 = self.V_pq[v1, :3]
+        r2 = self.V_pq[v2, :3]
+        r3 = self.V_pq[v3, :3]
+        r4 = self.V_pq[v4, :3]
+        vecA123 = (jitcross(r1, r2) + jitcross(r2, r3) + jitcross(r3, r1)) / 2
+        vecA134 = (jitcross(r1, r3) + jitcross(r3, r4) + jitcross(r4, r1)) / 2
+        vecA234 = (jitcross(r2, r3) + jitcross(r3, r4) + jitcross(r4, r2)) / 2
+        vecA124 = (jitcross(r1, r2) + jitcross(r2, r4) + jitcross(r4, r1)) / 2
+        A123 = np.sqrt(vecA123[0] ** 2 + vecA123[1] ** 2 + vecA123[2] ** 2)
+        A134 = np.sqrt(vecA134[0] ** 2 + vecA134[1] ** 2 + vecA134[2] ** 2)
+        A234 = np.sqrt(vecA234[0] ** 2 + vecA234[1] ** 2 + vecA234[2] ** 2)
+        A124 = np.sqrt(vecA124[0] ** 2 + vecA124[1] ** 2 + vecA124[2] ** 2)
+
+        Upre = (Ka / (2 * A0)) * ((A123 - A0) ** 2 + (A134 - A0) ** 2)
+        Upos = (Ka / (2 * A0)) * ((A234 - A0) ** 2 + (A124 - A0) ** 2)
+
+        Dr13 = self.V_pq[v1, :3] - self.V_pq[v3, :3]
+        Dr24 = self.V_pq[v2, :3] - self.V_pq[v4, :3]
+        L13 = np.sqrt(Dr13[0] ** 2 + Dr13[1] ** 2 + Dr13[2] ** 2)
+        L24 = np.sqrt(Dr24[0] ** 2 + Dr24[1] ** 2 + Dr24[2] ** 2)
+        Upre += self.Utether(L13, l0)
+        Upos += self.Utether(L24, l0)
+        flip_it = Upos < Upre
+        return flip_it
+
+    def do_the_monte_flips(self):
+        Nflips = 0
+        Nh = len(self.halfedges)
+        for h in range(Nh):
+            flip_it = self.is_flippable(h) and self.monte_wants_flip(h)
+            if flip_it:
+                self.edge_flip(h)
+                Nflips += 1
+        return Nflips
 
     def flip_helps_valence(self, h):
         r"""
@@ -1524,6 +1983,7 @@ class Brane:
 
     def is_delaunay(self, h):
         r"""
+        checks if edge is locally delaunay
           v2
           /|\
         v3 | v1
