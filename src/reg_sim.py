@@ -871,6 +871,49 @@ mp.brane_plot(
 
 
 # %%
+def broke_del(self, h):
+    r"""
+    checks if edge is locally delaunay
+      vj
+      /|\
+    vk | vi
+      \|/
+       vl
+    """
+    vi = self.H_vertex[self.H_next[self.H_twin[h]]]
+    vj = self.H_vertex[h]
+    vk = self.H_vertex[self.H_next[h]]
+    vl = self.H_vertex[self.H_prev[h]]
+
+    # pij = self.V_pq[vj, :3] - self.V_pq[vi, :3]
+    # pil = self.V_pq[vl, :3] - self.V_pq[vi, :3]
+    # pkj = self.V_pq[vj, :3] - self.V_pq[vk, :3]
+    # pkl = self.V_pq[vl, :3] - self.V_pq[vk, :3]
+    #
+    # # pij_pil = pij[0] * pil[0] + pij[1] * pil[1] + pij[2] * pil[2]
+    # # pkl_pkj = pkl[0] * pkj[0] + pkl[1] * pkj[1] + pkl[2] * pkj[2]
+    # # normpij = np.sqrt(pij[0] ** 2 + pij[1] ** 2 + pij[2] ** 2)
+    # # normpil = np.sqrt(pil[0] ** 2 + pil[1] ** 2 + pil[2] ** 2)
+    # # normpkj = np.sqrt(pkj[0] ** 2 + pkj[1] ** 2 + pkj[2] ** 2)
+    # # normpkl = np.sqrt(pkl[0] ** 2 + pkl[1] ** 2 + pkl[2] ** 2)
+    if vi == vj:
+        print(f"oh no... h={h}, vi=vj={vi}")
+        bad = True
+    if vi == vl:
+        print(f"oh no... h={h}, vi=vl={vi}")
+        bad = True
+    if vk == vj:
+        print(f"oh no... h={h}, vk=vj={vk}")
+        bad = True
+    if vk == vl:
+        print(f"oh no... h={h}, vk=vl={vk}")
+        bad = True
+    if all([vi != vj, vi != vl, vk != vj, vk != vl]):
+        bad = False
+
+    return bad
+
+
 def make_bs():
     mesh_directory = "./data/halfedge_meshes/dumbbell_coarse"
     mesh_data = load_halfedge_mesh_data(mesh_directory)
@@ -886,95 +929,6 @@ def make_bs():
     b0 = m.Brane(**brane_kwargs)
     b1 = m.Brane(**brane_kwargs)
     b2 = m.Brane(**brane_kwargs)
-
-    # def is_delaunay(self, h):
-    #     r"""
-    #     checks if edge is locally delaunay
-    #       vj
-    #       /|\
-    #     vk | vi
-    #       \|/
-    #        vl
-    #     """
-    #     vi = self.H_vertex[self.H_next[self.H_twin[h]]]
-    #     vj = self.H_vertex[h]
-    #     vk = self.H_vertex[self.H_next[h]]
-    #     vl = self.H_vertex[self.H_prev[h]]
-    #
-    #     pij = self.V_pq[vj, :3] - self.V_pq[vi, :3]
-    #     pil = self.V_pq[vl, :3] - self.V_pq[vi, :3]
-    #     pkj = self.V_pq[vj, :3] - self.V_pq[vk, :3]
-    #     pkl = self.V_pq[vl, :3] - self.V_pq[vk, :3]
-    #
-    #     pij_pil = pij[0] * pil[0] + pij[1] * pil[1] + pij[2] * pil[2]
-    #     pkl_pkj = pkl[0] * pkj[0] + pkl[1] * pkj[1] + pkl[2] * pkj[2]
-    #     normpij = np.sqrt(pij[0] ** 2 + pij[1] ** 2 + pij[2] ** 2)
-    #     normpil = np.sqrt(pil[0] ** 2 + pil[1] ** 2 + pil[2] ** 2)
-    #     normpkj = np.sqrt(pkj[0] ** 2 + pkj[1] ** 2 + pkj[2] ** 2)
-    #     normpkl = np.sqrt(pkl[0] ** 2 + pkl[1] ** 2 + pkl[2] ** 2)
-    #     # if any([normpij == 0, normpil == 0, normpkj == 0, normpkl == 0]):
-    #     #     print(f"oh no... h={h}")
-    #     #     is_del = False
-    #     if vi == vj:
-    #         print(f"oh no... h={h}, vi=vj={vi}")
-    #         is_del = False
-    #     if vi == vl:
-    #         print(f"oh no... h={h}, vi=vl={vi}")
-    #         is_del = False
-    #     if vk == vj:
-    #         print(f"oh no... h={h}, vk=vj={vk}")
-    #         is_del = False
-    #     if vk == vl:
-    #         print(f"oh no... h={h}, vk=vl={vk}")
-    #         is_del = False
-    #     if all([normpij != 0, normpil != 0, normpkj != 0, normpkl != 0]):
-    #         alphai = np.arccos(pij_pil / (normpij * normpil))
-    #         alphak = np.arccos(pkl_pkj / (normpkl * normpkj))
-    #         is_del = alphai + alphak <= np.pi
-    #
-    #     return is_del
-
-    def broke_del(self, h):
-        r"""
-        checks if edge is locally delaunay
-          vj
-          /|\
-        vk | vi
-          \|/
-           vl
-        """
-        vi = self.H_vertex[self.H_next[self.H_twin[h]]]
-        vj = self.H_vertex[h]
-        vk = self.H_vertex[self.H_next[h]]
-        vl = self.H_vertex[self.H_prev[h]]
-
-        pij = self.V_pq[vj, :3] - self.V_pq[vi, :3]
-        pil = self.V_pq[vl, :3] - self.V_pq[vi, :3]
-        pkj = self.V_pq[vj, :3] - self.V_pq[vk, :3]
-        pkl = self.V_pq[vl, :3] - self.V_pq[vk, :3]
-
-        pij_pil = pij[0] * pil[0] + pij[1] * pil[1] + pij[2] * pil[2]
-        pkl_pkj = pkl[0] * pkj[0] + pkl[1] * pkj[1] + pkl[2] * pkj[2]
-        normpij = np.sqrt(pij[0] ** 2 + pij[1] ** 2 + pij[2] ** 2)
-        normpil = np.sqrt(pil[0] ** 2 + pil[1] ** 2 + pil[2] ** 2)
-        normpkj = np.sqrt(pkj[0] ** 2 + pkj[1] ** 2 + pkj[2] ** 2)
-        normpkl = np.sqrt(pkl[0] ** 2 + pkl[1] ** 2 + pkl[2] ** 2)
-        if vi == vj:
-            print(f"oh no... h={h}, vi=vj={vi}")
-            bad = True
-        if vi == vl:
-            print(f"oh no... h={h}, vi=vl={vi}")
-            bad = True
-        if vk == vj:
-            print(f"oh no... h={h}, vk=vj={vk}")
-            bad = True
-        if vk == vl:
-            print(f"oh no... h={h}, vk=vl={vk}")
-            bad = True
-        if all([vi != vj, vi != vl, vk != vj, vk != vl]):
-            bad = False
-
-        return bad
 
     Vflip = [0, 1, 2, 3]
     max_iters = 2
@@ -1044,6 +998,93 @@ def make_bs():
 
 b0, b1, b2 = make_bs()
 V_pq_OG = b0.V_pq.copy()
+
+
+# %%
+def make_bs0():
+    mesh_directory = "./data/halfedge_meshes/dumbbell_coarse"
+    mesh_data = load_halfedge_mesh_data(mesh_directory)
+    brane_kwargs = {
+        "length_reg_stiffness": 1e-1,
+        "area_reg_stiffness": 1e-1,
+        "volume_reg_stiffness": 1e1,
+        "bending_modulus": 1e0,
+        "splay_modulus": 1.0,
+        "spontaneous_curvature": 0.0,
+        "linear_drag_coeff": 1e1,
+    } | mesh_data
+    b0 = m.Brane(**brane_kwargs)
+    b1 = m.Brane(**brane_kwargs)
+    b2 = m.Brane(**brane_kwargs)
+
+    Vflip = [0, 1, 2, 3]
+    max_iters = 2
+    weight = 0.5
+    Nreg = 3
+    iters = 0
+    go = True
+    while go and (iters <= max_iters):
+        Nflips = 0
+        for vm in Vflip:
+            hm = b0.V_hedge[vm]
+            if b1.is_flippable(hm) and go:
+                b0.edge_flip(hm)
+                b1.edge_flip(hm)
+                b2.edge_flip(hm)
+                for ii in range(Nreg):
+                    b0.regularize_by_shifts(weight)
+                    b1.regularize_by_shifts(weight)
+                    b2.regularize_by_shifts(weight)
+                Nflips += 1
+                # for h, _ in enumerate(b1.halfedges):
+                #     bad = broke_del(b1, h)
+                #     if bad:
+                #         go = False
+
+        iters += 1
+    Vflip = [1, 2]
+    for vm in Vflip:
+        hm = b1.V_hedge[vm]
+        if b1.is_flippable(hm) and go:
+            v01, v02 = b1.halfedges[hm]
+            b1.edge_flip(hm)
+            b2.edge_flip(hm)
+            v11, v12 = b1.halfedges[hm]
+            print(f"b0->b1  ---  flip h={hm}, e={(v01,v02)}-->e={(v11,v12)}")
+            for ii in range(Nreg):
+                b0.regularize_by_shifts(weight)
+                b1.regularize_by_shifts(weight)
+                b2.regularize_by_shifts(weight)
+            Nflips += 1
+            # for h, _ in enumerate(b1.halfedges):
+            #     bad = broke_del(b1, h)
+            #     if bad:
+            #         go = False
+
+    Vflip = [2]
+    for vm in Vflip:
+        hm = b2.V_hedge[vm]
+        if b2.is_flippable(hm) and go:
+            v01, v02 = b2.halfedges[hm]
+            b2.edge_flip(hm)
+            v11, v12 = b2.halfedges[hm]
+            print(f"b1->b2  ---  flip h={hm}, e={(v01,v02)}-->e={(v11,v12)}")
+            for ii in range(Nreg):
+                b0.regularize_by_shifts(weight)
+                b1.regularize_by_shifts(weight)
+                b2.regularize_by_shifts(weight)
+            Nflips += 1
+            # print(f"iters={iters}, Nflips={Nflips}, hm={hm}, vm={vm}")
+            # for h, _ in enumerate(b2.halfedges):
+            #     bad = broke_del(b2, h)
+            #     if bad:
+            #         go = False
+            #         print(f"broke on flip vm={vm}, hm={hm}")
+        return b0, b1, b2  # ,V_pq_OG = b0.V_pq.copy()
+
+
+b0, b1, b2 = make_bs0()
+V_pq_OG = b0.V_pq.copy()
 # %%
 # black = plt_cmap["nipy_spectral"]
 # %%
@@ -1059,6 +1100,8 @@ orange = cm(0.8)
 red = cm(0.9)
 grey = cm(1)
 white = (1.0, 1.0, 1.0)
+
+
 # colors = [black, purple, darkblue, lightblue, green, yellow, orange, red, grey, white]
 # names = [
 #     "black",
@@ -1082,47 +1125,176 @@ white = (1.0, 1.0, 1.0)
 # plt.close()
 # plt_cmap["nipy_spectral"]
 # %%
-b = b0
-V_radius = np.zeros(len(b.V_pq))
-F_rgb = np.ones((len(b.faces), 3))
-H_rgb = np.ones((len(b.halfedges), 3))
-V_rgb = np.ones((len(b.V_pq), 3))
-F_alpha = 0.05 * np.ones(len(b.faces))
-H_alpha = 0.05 * np.ones(len(b.halfedges))
-V_alpha = 0.05 * np.ones(len(b.V_pq))
-hm1, hm2, hm3 = 290, 297, 34
-vm1, vm2, vm3, vm4, vm5 = 56, 16, 1, 2, 15
-vms = [vm1, vm2, vm3, vm4, vm5]
-for vv in vms:
-    V_radius[vv] = 0.0025
-    V_alpha[vv] = 1
+def show_before():
+    b0, b1, b2 = make_bs0()
+    V_pq_OG = b0.V_pq.copy()
+    b = b0
+    _cm = get_cmap(name="nipy_spectral")
+    cm = lambda x: _cm(x)[:3]
+    black = cm(0)
+    purple = cm(0.1)
+    darkblue = cm(0.2)
+    lightblue = cm(0.3125)
+    green = cm(0.45)
+    yellow = cm(0.7)
+    orange = cm(0.8)
+    red = cm(0.9)
+    grey = cm(1)
+    white = (1.0, 1.0, 1.0)
 
-r13 = (b.V_pq[vm1, :3] + b.V_pq[vm3, :3]) / 2
-view = {
-    "azimuth": 180,
-    "elevation": 90,
-    "distance": 0.25,
-    "focalpoint": r13,
-}
+    V_radius = np.zeros(len(b.V_pq))
+    F_rgb = np.ones((len(b.faces), 3))
+    H_rgb = np.ones((len(b.halfedges), 3))
+    V_rgb = np.ones((len(b.V_pq), 3))
+    F_alpha = 0.05 * np.ones(len(b.faces))
+    H_alpha = 0.05 * np.ones(len(b.halfedges))
+    V_alpha = 0.05 * np.ones(len(b.V_pq))
+    hm1, hm2, hm3 = 290, 297, 34
+    hms = [hm1, hm2, hm3]
+    vm1, vm2, vm3, vm4, vm5 = 56, 16, 1, 2, 15
+    vms = [vm1, vm2, vm3, vm4, vm5]
+    htm1, htm2, htm3 = [b.H_twin[hh] for hh in hms]
 
-b.V_radius = V_radius
-b.F_rgb = F_rgb
-b.H_rgb = H_rgb
-b.V_rgb = V_rgb
-b.F_alpha = F_alpha
-b.H_alpha = H_alpha
-b.V_alpha = V_alpha
-mp.brane_plot(
-    b,
-    # color_by_V_scalar=False,
-    # color_by_V_rgb=True,
-    show_halfedges=True,
-    show_vertices=True,
-    # show_normals=False,
-    # show_V_vector_data=True,
-    view=view,
-)
+    h = hm1
+    ht = b.H_twin[h]
+    h1 = b.H_next[h]
+    h2 = b.H_prev[h]
+    h3 = b.H_next[ht]
+    h4 = b.H_prev[ht]
+    f1 = b.H_face[h]
+    f2 = b.H_face[ht]
+    v1 = b.H_vertex[h4]
+    v2 = b.H_vertex[h1]
+    v3 = b.H_vertex[h2]
+    v4 = b.H_vertex[h3]
+    ##
+    ht1 = b.H_twin[h1]
+    ht2 = b.H_twin[h2]
+    ht3 = b.H_twin[h3]
+    ht4 = b.H_twin[h4]
+    v12 = b.H_vertex[b.H_next[ht1]]
+    v23 = b.H_vertex[b.H_next[ht2]]
+    v34 = b.H_vertex[b.H_next[ht3]]
+    v41 = b.H_vertex[b.H_next[ht4]]
+    print(f"{(v12,v23, v34,v41)}")
+    f12 = b.H_face[ht1]
+    f23 = b.H_face[ht2]
+    f34 = b.H_face[ht3]
+    f41 = b.H_face[ht4]
+
+    for vv in vms:
+        V_radius[vv] = 0.0025
+        V_alpha[vv] = 1
+    V_rgb[vm1], V_rgb[vm3] = black, purple
+    V_rgb[vm2], V_rgb[vm4] = darkblue, lightblue
+    V_rgb[vm5] = grey
+    H_alpha[hm1] = 0.8
+    H_rgb[hm1] = red
+
+    F_alpha[f1] = 0.8
+    F_rgb[f1] = green
+    F_alpha[f2] = 0.8
+    F_rgb[f2] = green
+
+    F_alpha[f1] = 0.8
+    F_rgb[f1] = green
+    F_alpha[f2] = 0.8
+    F_rgb[f2] = green
+
+    # b.V_pq[vm2, :3] = V_pq_OG[vm2, :3] + .5*(V_pq_OG[vm1, :3]-V_pq_OG[vm2, :3])
+    r13 = (b.V_pq[vm1, :3] + b.V_pq[vm3, :3]) / 2
+    view = {
+        "azimuth": 180,
+        "elevation": 90,
+        "distance": 0.25,
+        "focalpoint": r13,
+    }
+
+    b.V_radius = V_radius
+    b.F_rgb = F_rgb
+    b.H_rgb = H_rgb
+    b.V_rgb = V_rgb
+    b.F_alpha = F_alpha
+    b.H_alpha = H_alpha
+    b.V_alpha = V_alpha
+    mp.brane_plot(
+        b,
+        # color_by_V_scalar=False,
+        # color_by_V_rgb=True,
+        show_halfedges=True,
+        show_vertices=True,
+        # show_normals=False,
+        # show_V_vector_data=True,
+        view=view,
+    )
+
+
+def show_after1():
+    b0, b1, b2 = make_bs0()
+    V_pq_OG = b0.V_pq.copy()
+    _cm = get_cmap(name="nipy_spectral")
+    cm = lambda x: _cm(x)[:3]
+    black = cm(0)
+    purple = cm(0.1)
+    darkblue = cm(0.2)
+    lightblue = cm(0.3125)
+    green = cm(0.45)
+    yellow = cm(0.7)
+    orange = cm(0.8)
+    red = cm(0.9)
+    grey = cm(1)
+    white = (1.0, 1.0, 1.0)
+    b = b0
+    V_radius = np.zeros(len(b.V_pq))
+    F_rgb = np.ones((len(b.faces), 3))
+    H_rgb = np.ones((len(b.halfedges), 3))
+    V_rgb = np.ones((len(b.V_pq), 3))
+    F_alpha = 0.05 * np.ones(len(b.faces))
+    H_alpha = 0.05 * np.ones(len(b.halfedges))
+    V_alpha = 0.05 * np.ones(len(b.V_pq))
+    hm1, hm2, hm3 = 290, 297, 34
+    vm1, vm2, vm3, vm4, vm5 = 56, 16, 1, 2, 15
+    vms = [vm1, vm2, vm3, vm4, vm5]
+    for vv in vms:
+        V_radius[vv] = 0.0025
+        V_alpha[vv] = 1
+    V_rgb[vm1], V_rgb[vm3] = black, black
+    V_rgb[vm2], V_rgb[vm4] = purple, purple
+    V_rgb[vm5] = grey
+    H_alpha[hm1] = 0.8
+    H_rgb[hm1] = red
+    r13 = (b.V_pq[vm1, :3] + b.V_pq[vm3, :3]) / 2
+    view = {
+        "azimuth": 180,
+        "elevation": 90,
+        "distance": 0.25,
+        "focalpoint": r13,
+    }
+
+    b.V_radius = V_radius
+    b.F_rgb = F_rgb
+    b.H_rgb = H_rgb
+    b.V_rgb = V_rgb
+    b.F_alpha = F_alpha
+    b.H_alpha = H_alpha
+    b.V_alpha = V_alpha
+    mp.brane_plot(
+        b,
+        # color_by_V_scalar=False,
+        # color_by_V_rgb=True,
+        show_halfedges=True,
+        show_vertices=True,
+        # show_normals=False,
+        # show_V_vector_data=True,
+        view=view,
+    )
+
+
+show_before()
 # %%
+b0, b1, b2 = make_bs0()
+V_pq_OG = b0.V_pq.copy()
+b = b0
 # b.edge_flip(h)
 h = 290
 ht = b.H_twin[h]
