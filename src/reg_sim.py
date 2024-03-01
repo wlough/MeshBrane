@@ -999,6 +999,15 @@ def make_bs():
 b0, b1, b2 = make_bs()
 V_pq_OG = b0.V_pq.copy()
 
+b0.is_flippable_new(290)
+for h in range(len(b0.H_alpha)):
+    flip0 = b0.is_flippable_new(h)
+    flip1 = b0.is_flippable(h)
+    if flip0 and not flip1:
+        print(f"h={h} flip allowed by new but not old")
+    if flip1 and not flip0:
+        print(f"h={h} flip allowed by old but not new")
+
 
 # %%
 def make_bs0():
@@ -1124,6 +1133,10 @@ white = (1.0, 1.0, 1.0)
 # plt.show()
 # plt.close()
 # plt_cmap["nipy_spectral"]
+b.prev(13)
+b.H_prev[13]
+
+
 # %%
 def show_before():
     b0, b1, b2 = make_bs0()
@@ -1176,11 +1189,14 @@ def show_before():
     v23 = b.H_vertex[b.H_next[ht2]]
     v34 = b.H_vertex[b.H_next[ht3]]
     v41 = b.H_vertex[b.H_next[ht4]]
-    print(f"{(v12,v23, v34,v41)}")
+    # print(f"{(v12,v23, v34,v41)}")
     f12 = b.H_face[ht1]
     f23 = b.H_face[ht2]
     f34 = b.H_face[ht3]
     f41 = b.H_face[ht4]
+    for ff in [f12, f23, f34, f41]:
+        F_rgb[ff] = yellow
+        F_alpha[ff] = 0.6
 
     for vv in vms:
         V_radius[vv] = 0.0025

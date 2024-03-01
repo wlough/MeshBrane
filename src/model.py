@@ -23,6 +23,9 @@ from src.numdiff import (
 
 Brane_spec = [
     ###########################
+    # Sim data
+    ("V", float64[:, :, :]),
+    ###########################
     # mesh data
     ("vertices", float64[:, :]),
     ("V_pq", float64[:, :]),
@@ -162,6 +165,9 @@ class Brane:
             self.H_twin,
             self.F_hedge,
         )
+        Nv = len(self.V_pq)
+        self.V = np.zeros((3, Nv, 3))
+        self.V[0] = self.V_pq[:, :3]
         ###########################
         # physical parameters
         self.bending_modulus = bending_modulus
@@ -660,7 +666,7 @@ class Brane:
 
     ###########################################################################
     # mesh navigation functions
-    # using only H_twin/next/vertex/face, V_hedge, F_hedge
+    # using only H_twin/H_next/H_vertex/H_face, V_hedge, F_hedge
     ############################
     def face(self, f):
         """consistent with initial face assignment"""
@@ -681,7 +687,37 @@ class Brane:
         return hedge
 
     def prev(self, h):
-        return self.H_twin[self.H_next[self.H_twin[h]]]
+        h_next = h
+        while True:
+            h_prev = h_next
+            h_next = self.H_next[h_prev]
+            if h_next == h:
+                break
+        return h_prev
+
+    ###########################################################################
+    # helper functions
+    ############################
+    def V_one_ring_neighbors(self, i):
+        """"""
+        Vi = []
+        h_start = self.V_hedge[i]
+        hij = h_start
+        while True:
+            Vi.append(self.H_vertex[hij])
+            hij = self.H_twin[self.H_prev[hij]]
+            if hij == h_start:
+                break
+        return Vi
+
+    ###########################################################################
+    # timestepping
+    ############################
+    def timestep(self):
+        Nv = len(self.V_pq)
+        A = np.zeros(Nv)
+        for v in range(Nv):
+            A[v] = self.meyercell_area(v)
 
     ###########################################################################
     # Forces
@@ -779,7 +815,7 @@ class Brane:
         U = Urep + Uatt
         return U
 
-    def Ftether(self, _a=None):
+    def Ftether_OG(self, _a=None):
         Nv = len(self.V_pq)
         Fl = np.zeros((Nv, 3))
         l0 = self.preferred_edge_length
@@ -813,6 +849,45 @@ class Brane:
                     )
                 else:
                     pass
+                ############
+                hk = self.H_twin[self.H_prev[hk]]
+                if hk == h_start:
+                    break
+        return Fl
+
+    def Ftether(self, _a=None):
+        Nv = len(self.V_pq)
+        Fl = np.zeros((Nv, 3))
+        l0 = self.preferred_edge_length
+        Kl = self.Klength
+        if _a is None:
+            a = l0
+        else:
+            a = _a
+        Dl = 0.8 * l0
+
+        for i in range(Nv):
+            ri = self.V_pq[i, :3]
+            h_start = self.V_hedge[i]
+            hk = h_start
+            while True:
+                vk = self.H_vertex[hk]
+                rk = self.V_pq[vk, :3]
+                Drki = ri - rk
+                s = np.sqrt(Drki[0] ** 2 + Drki[1] ** 2 + Drki[2] ** 2)
+                Ds = s - l0
+                normDs = np.abs(Ds)
+                if normDs <= Dl / 4:
+                    pass
+                else:
+                    U = Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
+                    Fl[i] += -(
+                        (1 / (Dl / 2 - normDs) + a / (normDs - Dl / 4) ** 2)
+                        * U
+                        * (Ds / normDs)
+                        * Drki
+                        / s
+                    )
                 ############
                 hk = self.H_twin[self.H_prev[hk]]
                 if hk == h_start:
@@ -2012,7 +2087,7 @@ class Brane:
 
         return alphai + alphak <= np.pi
 
-    def is_flippable(self, h):
+    def is_flippable_old(self, h):
         r"""
           vj
           /|\
@@ -2039,6 +2114,36 @@ class Brane:
         fil = self.H_face[hil]
 
         flippable = (fkj != fji) and (flk != fil)
+
+        return flippable
+
+    def is_flippable(self, h):
+        """
+        edge flip hlj-->hki is allowed unless vi and vk are already neighbors
+          vj
+          /|\
+        vk | vi
+          \|/
+           vl
+        """
+        hlj = h
+        hjk = self.H_next[hlj]
+        hjl = self.H_twin[hlj]
+        hli = self.H_next[hjl]
+        flippable = True
+
+        vj = self.H_vertex[hlj]
+        vk = self.H_vertex[hjk]
+
+        him = self.H_twin[hli]
+        while True:
+            him = self.H_twin[self.H_prev[him]]
+            vm = self.H_vertex[him]
+            if vm == vk:
+                flippable = False
+                break
+            if vm == vj:
+                break
 
         return flippable
 
@@ -2760,3 +2865,33 @@ class Brane:
     ###########################################################################
     # framed brane functions #
     ##########################
+
+
+# def slow_smoothed_laplacian(vi, Y, V, F, A):
+#     """computes the laplacian of Y at vertex vi"""
+#
+#     lapY = 0.0
+#     Nf = len(F)
+#     lapY = np.zeros_like(Y)
+#     ri = V[vi]
+#     ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+#     Ai = A[vi]
+#     for f in range(Nf):
+#         vj, vk, vl = F[f]
+#         rj = V[vj]
+#         rk = V[vk]
+#         rl = V[vl]
+#         vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
+#         Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
+#         for vm in F[f]:
+#             rm = V[vm]
+#             rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
+#             ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
+#             Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
+#             lapY += (
+#                 (Af / (12 * np.pi * Ai**2))
+#                 * np.exp(-Drim_sqr / (4 * Ai))
+#                 * (Y[vm] - Y[vi])
+#             )
+#
+#     return lapY

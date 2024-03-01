@@ -14,6 +14,82 @@ from scipy.linalg import expm, logm, inv
 # from copy import deepcopy
 from matplotlib import colormaps as plt_cmap
 import matplotlib.pyplot as plt
+import multiprocessing as mu
+
+x = np.linspace(0, 1, 50)
+
+
+def slow_smoothed_laplacian(self, Y):
+    """computes the laplacian of Y at each vertex"""
+
+    Nv = len(self.V_pq)
+    Nf = len(self.faces)
+    lapY = np.zeros_like(Y)
+    for vi in range(Nv):
+        ri = self.V_pq[vi, :3]
+        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+        Ai = self.meyercell_area(vi)
+        for f in range(Nf):
+            vj, vk, vl = self.faces[f]
+            rj = self.V_pq[vj, :3]
+            rk = self.V_pq[vk, :3]
+            rl = self.V_pq[vl, :3]
+            vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
+            Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
+            for vm in self.faces[f]:
+                rm = self.V_pq[vm, :3]
+                rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
+                ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
+                Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
+                lapY[vi] += (
+                    (Af / (12 * np.pi * Ai**2))
+                    * np.exp(-Drim_sqr / (4 * Ai))
+                    * (Y[vm] - Y[vi])
+                )
+
+    return lapY
+
+
+def laplacian_at_vertex(vi, Y, V, F, A):
+    """computes the laplacian of Y at vertex vi"""
+    lapY = 0.0
+    Nf = len(F)
+    ri = V[vi]
+    ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+    Ai = A[vi]
+    for f in range(Nf):
+        vj, vk, vl = F[f]
+        rj = V[vj]
+        rk = V[vk]
+        rl = V[vl]
+        vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
+        Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
+        for vm in F[f]:
+            rm = V[vm]
+            rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
+            ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
+            Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
+            lapY += (
+                (Af / (12 * np.pi * Ai**2))
+                * np.exp(-Drim_sqr / (4 * Ai))
+                * (Y[vm] - Y[vi])
+            )
+    return lapY
+
+
+# @njit
+def get_halfedges_from_triangle(face):
+    return np.array(
+        [[face[0], face[1]], [face[1], face[2]], [face[2], face[0]]], dtype=np.int32
+    )
+
+
+def get_halfedges_from_triangles_parallel(F):
+    N_cpu = mu.cpu_count()
+    with mu.Pool(processes=N_cpu) as p:
+        H = np.concatenate(p.map(get_halfedges_from_triangle, F))
+    H_label = np.array([h for h, _ in enumerate(H)], dtype=np.int32)
+    return H, H_label
 
 
 def save_brane_state(brane, output_directory):
@@ -296,7 +372,8 @@ def run(sim_state, Trun, make_plots=True):
             view=view,
         )
     image_count += 1
-
+    for iii in range(10):
+        Nflips = b.regularize_by_flips()
     while Trun - t > 0.5 * dt and success:
         while tstop - t > 0.5 * dt and success:
             try:
@@ -306,33 +383,19 @@ def run(sim_state, Trun, make_plots=True):
                 Fl = b.Ftether()
                 Fa, Fv = b.Fa_Fv()
                 Fb = b.Fbend_mixed()
-                # #############################
-                # #############################
-                # smooth_length = b.preferred_edge_length
-                # Nvertexsmooth = 1
-                # Ncurvaturesmooth = 150
-                # Nbendingforcesmooth = 50
-                # b.V_pq[:, :3] = b.gaussian_smooth_samples(
-                #     b.V_pq[:, :3], Nvertexsmooth, smooth_length
-                # )
-                # H, K = b.get_angle_weighted_arc_curvatures()
-                # K = b.gaussian_smooth_samples(K, Ncurvaturesmooth, smooth_length)
-                # H = b.gaussian_smooth_samples(H, Ncurvaturesmooth, smooth_length)
-                # lapH = b.cotan_laplacian(H)
-                # Fn = -2 * b.bending_modulus * (lapH + 2 * H * (H**2 - K))
-                # Fn = b.gaussian_smooth_samples(Fn, Nbendingforcesmooth, smooth_length)
-                # # n = np.array([b.other_weighted_vertex_normal(v) for v, fn in enumerate(Fn)])
-                # Fb = np.array(
-                #     [fn * b.other_weighted_vertex_normal(v) for v, fn in enumerate(Fn)]
-                # )
-                #############################
-                #############################
                 F = Fb + Fl + Fa + Fv
                 success = True
             except Exception:
                 success = False
             if success:
+                Vold = b.V_pq[:, :3].copy()
                 b.V_pq[:, :3] += dt * F / b.linear_drag_coeff
+                Fl = b.Ftether()
+                Fa, Fv = b.Fa_Fv()
+                Fb = b.Fbend_mixed()
+                F = Fb + Fl + Fa + Fv
+                b.V_pq[:, :3] = Vold + dt * F / b.linear_drag_coeff
+
                 t += dt
 
             else:
@@ -428,22 +491,25 @@ brane_kwargs = {
 sim_kwargs = {
     "Tplot": 5e-2,
     "Tsave": 5e-1,
-    "dt": 1e-4,
+    "dt": 1e-3,
     "output_directory": "./output/monte_output",
 } | brane_kwargs
 sim_state = initialize_sim(**sim_kwargs)
 
-Trun = 50
-# sim_state = run(
-#     sim_state,
-#     Trun,
-#     make_plots=True,
-# )
+Trun = 3
+sim_state = run(
+    sim_state,
+    Trun,
+    make_plots=True,
+)
 #
 # movie_dir = sim_state["output_directory"] + "/temp_images"
 # mp.movie(movie_dir)
 
 b = sim_state["b"]
+Nflips = b.regularize_by_flips()
+Nflips
+# %%
 U = color_by_tether(b)
 b.H_rgb = scalars_to_rgbs(U)
 sim_state1 = initialize_sim(**sim_kwargs)
