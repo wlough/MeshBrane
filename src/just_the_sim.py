@@ -372,13 +372,14 @@ def run(sim_state, Trun, make_plots=True):
             view=view,
         )
     image_count += 1
-    for iii in range(10):
-        Nflips = b.regularize_by_flips()
+    # for iii in range(10):
+    #     Nflips = b.regularize_by_flips()
     while Trun - t > 0.5 * dt and success:
         while tstop - t > 0.5 * dt and success:
             try:
                 # b.delaunay_regularize_by_flips()
-                Nflips = b.do_the_monte_flips()
+                # Nflips = b.do_the_monte_flips()
+                Nflips = 111
                 # Fl = b.Flength()
                 Fl = b.Ftether()
                 Fa, Fv = b.Fa_Fv()
@@ -388,13 +389,16 @@ def run(sim_state, Trun, make_plots=True):
             except Exception:
                 success = False
             if success:
+                # Vold = b.V_pq[:, :3].copy()
+                # b.V_pq[:, :3] += dt * F / b.linear_drag_coeff
+                # Fl = b.Ftether()
+                # Fa, Fv = b.Fa_Fv()
+                # Fb = b.Fbend_mixed()
+                # F = Fb + Fl + Fa + Fv
+                # b.V_pq[:, :3] = Vold + dt * F / b.linear_drag_coeff
                 Vold = b.V_pq[:, :3].copy()
-                b.V_pq[:, :3] += dt * F / b.linear_drag_coeff
-                Fl = b.Ftether()
-                Fa, Fv = b.Fa_Fv()
-                Fb = b.Fbend_mixed()
-                F = Fb + Fl + Fa + Fv
-                b.V_pq[:, :3] = Vold + dt * F / b.linear_drag_coeff
+                b.V_pq[:, :3] += b.weighted_drag_coeffs_step(dt)
+                b.V_pq[:, :3] = Vold + b.weighted_drag_coeffs_step(dt)
 
                 t += dt
 
@@ -473,20 +477,65 @@ def color_by_tether(b, _a=None):
     return U
 
 
+def log_log_fit(X, Y, Xlabel="X", Ylabel="Y", title=""):
+    x, y = np.log(X), np.log(Y)
+    a11 = x @ x
+    a12 = sum(x)
+    a21 = a12
+    a22 = len(x)
+    u1 = x @ y
+    u2 = sum(y)
+    u = np.array([u1, u2])
+    detA = a11 * a22 - a12 * a21
+    Ainv = np.array([[a22, -a12], [-a21, a11]]) / detA
+    p, c = Ainv @ u
+    f = p * x + c
+    fit_label = (
+        f"${Ylabel}={round_to(c,n=3)}{Xlabel}" "^{" + f"{round_to(p,n=3)}" + "}$"
+    )
+    plt.plot(
+        x,
+        f,
+        # label=f"log({Ylabel})={round_to(p,n=3)}log({Xlabel})+{round_to(c,n=3)}",
+        label=fit_label,
+        linewidth=2,
+    )
+    plt.plot(x, y, "*")
+    plt.title(title, fontsize=16)
+    plt.xlabel(f"log({Xlabel})", fontsize=16)
+    plt.ylabel(f"log({Ylabel})", fontsize=16)
+    plt.legend()
+    plt.show()
+    plt.close()
+
+
+def round_to(x, n=3):
+    if x == 0:
+        return 0.0
+    else:
+        sgn_x = np.sign(x)
+        abs_x = abs(x)
+        return round(x, -int(np.floor(np.log10(abs_x))) + (n - 1))
+
+
+def round_sci(x, n=3):
+    return np.format_float_scientific(x, precision=n)
+
+
 # %%
 # ply_path = "./data/ply_files/oblate.ply"
 # vertices, faces = load_mesh_from_ply(ply_path)
 # mesh_directory = "./data/halfedge_meshes/dumbbell"
-mesh_directory = "./data/halfedge_meshes/dumbbell_coarse"
+mesh_directory = "./data/halfedge_meshes/dumbbell_fine"
 mesh_data = load_halfedge_mesh_data(mesh_directory)
 brane_kwargs = {
-    "length_reg_stiffness": 1e-6,
+    "length_reg_stiffness": 1e-9,
     "area_reg_stiffness": 1e-3,
     "volume_reg_stiffness": 1e1,
-    "bending_modulus": 1e0,
+    "bending_modulus": 1e-1,
     "splay_modulus": 1.0,
     "spontaneous_curvature": 0.0,
-    "linear_drag_coeff": 1e1,
+    "linear_drag_coeff": 1e3,
 } | mesh_data
 sim_kwargs = {
     "Tplot": 5e-2,
@@ -495,94 +544,162 @@ sim_kwargs = {
     "output_directory": "./output/monte_output",
 } | brane_kwargs
 sim_state = initialize_sim(**sim_kwargs)
-
-Trun = 3
+# %%
+Trun = 1
 sim_state = run(
     sim_state,
     Trun,
     make_plots=True,
 )
-#
+# %%
 # movie_dir = sim_state["output_directory"] + "/temp_images"
-# mp.movie(movie_dir)
+movie_dir = sim_kwargs["output_directory"] + "/temp_images"
+mp.movie(movie_dir)
+# %%
 
 b = sim_state["b"]
-Nflips = b.regularize_by_flips()
-Nflips
-# %%
-U = color_by_tether(b)
-b.H_rgb = scalars_to_rgbs(U)
-sim_state1 = initialize_sim(**sim_kwargs)
-b1 = sim_state1["b"]
-# %%
-b1.do_the_monte_flips()
-U1 = color_by_tether(b1)
-b1.H_rgb = scalars_to_rgbs(U1)
-# max(U1)
-# plt.plot(U)
-# # U = color_by_tether(b)
-# # max(U)
-# l0=b.preferred_edge_length
-# s0 = np.linspace(b.preferred_edge_length*.6,b.preferred_edge_length*1.4, 500)
-# s = np.linspace(b.preferred_edge_length*.4,b.preferred_edge_length*1.6, 500)
-# U1 = np.array([b.Utether1(si, 1.0*l0) for si in s[1:-1]])
-# U_OG = np.array([b.Utether_OG(si, 1.0*l0) for si in s[1:-1]])
-# U = np.array([b.Utether(si, 1.0*l0) for si in s[1:-1]])
-# plt.plot(U_OG)
-# plt.plot(np.abs(U1))
-# plt.plot(U)
-# s[140:150]
 mp.brane_plot(
-    b1,
+    b,
     # color_by_V_scalar=False,
     # color_by_V_rgb=True,
     show_halfedges=True,
     # show_normals=False,
     # show_V_vector_data=True,
 )
+# %%
+from numba import njit, prange
+
+
+@njit()
+def unparallel_smoothed_laplacian(self, Y):
+    """computes the laplacian of Y at each vertex"""
+
+    Nv = len(self.V_pq)
+    Nf = len(self.faces)
+    lapY = np.zeros_like(Y)
+    for vi in range(Nv):
+        ri = self.V_pq[vi, :3]
+        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+        Ai = self.meyercell_area(vi)
+        for f in range(Nf):
+            vj, vk, vl = self.faces[f]
+            rj = self.V_pq[vj, :3]
+            rk = self.V_pq[vk, :3]
+            rl = self.V_pq[vl, :3]
+            vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
+            Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
+            for vm in self.faces[f]:
+                rm = self.V_pq[vm, :3]
+                rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
+                ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
+                Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
+                lapY[vi] += (
+                    (Af / (12 * np.pi * Ai**2))
+                    * np.exp(-Drim_sqr / (4 * Ai))
+                    * (Y[vm] - Y[vi])
+                )
+
+    return lapY
+
+
+@njit(parallel=True)
+def parallel_smoothed_laplacian(self, Y):
+    """computes the laplacian of Y at each vertex"""
+
+    Nv = len(self.V_pq)
+    Nf = len(self.faces)
+    lapY = np.zeros_like(Y)
+    for vi in prange(Nv):
+        ri = self.V_pq[vi, :3]
+        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+        Ai = self.meyercell_area(vi)
+        for f in prange(Nf):
+            vj, vk, vl = self.faces[f]
+            rj = self.V_pq[vj, :3]
+            rk = self.V_pq[vk, :3]
+            rl = self.V_pq[vl, :3]
+            vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
+            Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
+            for vm in self.faces[f]:
+                rm = self.V_pq[vm, :3]
+                rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
+                ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
+                Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
+                lapY[vi] += (
+                    (Af / (12 * np.pi * Ai**2))
+                    * np.exp(-Drim_sqr / (4 * Ai))
+                    * (Y[vm] - Y[vi])
+                )
+
+    return lapY
 
 
 # %%
-def monte_wants_flip(self, h):
-    Ka = self.Karea
-    A0 = self.preferred_face_area
-    ht = self.H_twin[h]
-    h1 = self.H_next[h]
-    h2 = self.H_prev[h]
-    h3 = self.H_next[ht]
-    h4 = self.H_prev[ht]
+mesh_directories = [
+    "./data/halfedge_meshes/dumbbell_coarse",
+    "./data/halfedge_meshes/dumbbell",
+    "./data/halfedge_meshes/dumbbell_fine",
+]
+B = []
+for mesh_directory in mesh_directories:
+    mesh_data = load_halfedge_mesh_data(mesh_directory)
+    brane_kwargs = {
+        "length_reg_stiffness": 1e-9,
+        "area_reg_stiffness": 1e-3,
+        "volume_reg_stiffness": 1e1,
+        "bending_modulus": 1e-1,
+        "splay_modulus": 1.0,
+        "spontaneous_curvature": 0.0,
+        "linear_drag_coeff": 1e3,
+    } | mesh_data
+    sim_kwargs = {
+        "Tplot": 5e-2,
+        "Tsave": 5e-1,
+        "dt": 1e-3,
+        "output_directory": "./output/monte_output",
+    } | brane_kwargs
+    sim_state = initialize_sim(**sim_kwargs)
+    b = sim_state["b"]
+    B.append(b)
+# %%
+from time import time
 
-    v1 = self.H_vertex[h4]
-    v2 = self.H_vertex[h1]
-    v3 = self.H_vertex[h2]
-    v4 = self.H_vertex[h3]
-    r1 = self.V_pq[v1, :3]
-    r2 = self.V_pq[v2, :3]
-    r3 = self.V_pq[v3, :3]
-    r4 = self.V_pq[v4, :3]
-    vecA123 = (jitcross(r1, r2) + jitcross(r2, r3) + jitcross(r3, r1)) / 2
-    vecA134 = (jitcross(r1, r3) + jitcross(r3, r4) + jitcross(r4, r1)) / 2
-    vecA234 = (jitcross(r2, r3) + jitcross(r3, r4) + jitcross(r4, r2)) / 2
-    vecA124 = (jitcross(r1, r2) + jitcross(r2, r4) + jitcross(r4, r1)) / 2
-    A123 = np.sqrt(vecA123[0] ** 2 + vecA123[1] ** 2 + vecA123[2] ** 2)
-    A134 = np.sqrt(vecA134[0] ** 2 + vecA134[1] ** 2 + vecA134[2] ** 2)
-    A234 = np.sqrt(vecA234[0] ** 2 + vecA234[1] ** 2 + vecA234[2] ** 2)
-    A124 = np.sqrt(vecA124[0] ** 2 + vecA124[1] ** 2 + vecA124[2] ** 2)
+Nverts = np.array([b.V_pq.shape[0] for b in B])
+slow_times = np.zeros(len(Nverts))
+para_times = np.zeros(len(Nverts))
+unpa_times = np.zeros(len(Nverts))
+slowLapYs = []
+paraLapYs = []
+unpaLapYs = []
+for i in range(len(B)):
+    b = B[i]
+    print(f"Nv={b.V_pq.shape[0]} running to compile     ")
+    Y = b.V_pq[:, :3]
+    slowLapY = b.slow_smoothed_laplacian(Y)
+    paraLapY = parallel_smoothed_laplacian(b, Y)
+    unpaLapY = unparallel_smoothed_laplacian(b, Y)
+    slowLapY = b.slow_smoothed_laplacian(Y)
+    paraLapY = parallel_smoothed_laplacian(b, Y)
+    unpaLapY = unparallel_smoothed_laplacian(b, Y)
+    print(f"Nv={b.V_pq.shape[0]} running to compile -done     ")
+    print(f"Nv={b.V_pq.shape[0]} computing runtimes           ")
+    slow_times[i] = -time()
+    slowLapY = b.slow_smoothed_laplacian(Y)
+    slow_times[i] += time()
+    para_times[i] = -time()
+    paraLapY = parallel_smoothed_laplacian(b, Y)
+    para_times[i] += time()
+    unpa_times[i] = -time()
+    unpaLapY = unparallel_smoothed_laplacian(b, Y)
+    unpa_times[i] += time()
+    slowLapYs.append(slowLapY)
+    paraLapYs.append(paraLapY)
+    unpaLapYs.append(unpaLapY)
 
-    Upre = (Ka / (2 * A0)) * ((A123 - A0) ** 2 + (A134 - A0) ** 2)
-    Upos = (Ka / (2 * A0)) * ((A234 - A0) ** 2 + (A124 - A0) ** 2)
 
-    Dr13 = self.V_pq[v1, :3] - self.V_pq[v3, :3]
-    Dr24 = self.V_pq[v2, :3] - self.V_pq[v4, :3]
-    L13 = np.sqrt(Dr13[0] ** 2 + Dr13[1] ** 2 + Dr13[2] ** 2)
-    L24 = np.sqrt(Dr24[0] ** 2 + Dr24[1] ** 2 + Dr24[2] ** 2)
-    Upre += self.Utether(L13)
-    Upos += self.Utether(L24)
-    flip_it = Upos < Upre
-    return flip_it, Upre, Upos
-
-
-for h in range(len(b.halfedges)):
-    flip_it, Upre, Upos = monte_wants_flip(b, h)
-    if flip_it:
-        print(f"h={h}, Upre={Upre}, Upos={Upos}")
+log_log_fit(Nverts, slow_times, Xlabel="N", Ylabel="T", title="slow")
+log_log_fit(Nverts, para_times, Xlabel="N", Ylabel="T", title="paralell")
+log_log_fit(Nverts, unpa_times, Xlabel="N", Ylabel="T", title="unparallel")
+# b=B[0]
+# Y=b.V_pq
+# unparallel_smoothed_laplacian(b, Y)

@@ -815,7 +815,7 @@ def color_by_tether(b, _a=None):
 # ply_path = "./data/ply_files/oblate.ply"
 # vertices, faces = load_mesh_from_ply(ply_path)
 # mesh_directory = "./data/halfedge_meshes/dumbbell"
-mesh_directory = "./data/halfedge_meshes/dumbbell_coarse"
+mesh_directory = "./data/halfedge_meshes/dumbbell_fine"
 mesh_data = load_halfedge_mesh_data(mesh_directory)
 brane_kwargs = {
     # "length_reg_stiffness": 1e-6,
@@ -860,14 +860,15 @@ b = sim_state["b"]
 #
 b = m.Brane(**brane_kwargs)
 
-mp.brane_plot(
-    b,
-    # color_by_V_scalar=False,
-    # color_by_V_rgb=True,
-    show_halfedges=True,
-    # show_normals=False,
-    # show_V_vector_data=True,
-)
+# mp.brane_plot(
+#     b,
+#     # color_by_V_scalar=False,
+#     # color_by_V_rgb=True,
+#     show_halfedges=True,
+#     # show_normals=False,
+#     # show_V_vector_data=True,
+# )
+len(b.faces)
 
 
 # %%
