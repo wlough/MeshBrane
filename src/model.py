@@ -1,4 +1,4 @@
-from numba import float64, int32, boolean
+from numba import njit, float64, int32, boolean, prange
 from numba.experimental import jitclass
 import numpy as np
 from src.numdiff import (
@@ -719,6 +719,21 @@ class Brane:
         for v in range(Nv):
             A[v] = self.meyercell_area(v)
 
+    def weighted_drag_coeffs_step(self, dt):
+        Nv = len(self.V_pq)
+        dVp = np.zeros((Nv, 3))
+        Fl = self.Ftether()
+        Fa, Fv = self.Fa_Fv()
+        Fb = self.Fbend_mixed()
+        F = Fb + Fl + Fa + Fv
+        gamma = self.linear_drag_coeff
+        for v in range(Nv):
+            A = self.meyercell_area(v)
+            drag_coeff = gamma * A
+            dVp[v] = dt * F[v] / drag_coeff
+
+        return dVp
+
     ###########################################################################
     # Forces
     ############################
@@ -1314,6 +1329,12 @@ class Brane:
                         * (Y[vm] - Y[vi])
                     )
 
+        return lapY
+
+    def call_parallel_smoothed_laplacian(self, Y):
+        """computes the laplacian of Y at each vertex"""
+
+        lapY = parallel_smoothed_laplacian(self, Y)
         return lapY
 
     def mean_curvature_vector_cot(self, v):
@@ -2895,3 +2916,33 @@ class Brane:
 #             )
 #
 #     return lapY
+@njit(paralell=True)
+def parallel_smoothed_laplacian(self, Y):
+    """computes the laplacian of Y at each vertex"""
+
+    Nv = len(self.V_pq)
+    Nf = len(self.faces)
+    lapY = np.zeros_like(Y)
+    for vi in prange(Nv):
+        ri = self.V_pq[vi, :3]
+        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+        Ai = self.meyercell_area(vi)
+        for f in prange(Nf):
+            vj, vk, vl = self.faces[f]
+            rj = self.V_pq[vj, :3]
+            rk = self.V_pq[vk, :3]
+            rl = self.V_pq[vl, :3]
+            vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
+            Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
+            for vm in self.faces[f]:
+                rm = self.V_pq[vm, :3]
+                rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
+                ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
+                Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
+                lapY[vi] += (
+                    (Af / (12 * np.pi * Ai**2))
+                    * np.exp(-Drim_sqr / (4 * Ai))
+                    * (Y[vm] - Y[vi])
+                )
+
+    return lapY
