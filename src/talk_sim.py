@@ -1,3 +1,4 @@
+from time import time
 import mayavi.mlab as mlab
 from numba import njit
 import numpy as np
@@ -15,91 +16,6 @@ from scipy.linalg import expm, logm, inv
 from matplotlib import colormaps as plt_cmap
 import matplotlib.pyplot as plt
 import multiprocessing as mu
-
-x = np.linspace(0, 1, 50)
-
-
-def slow_smoothed_laplacian(self, Y):
-    """computes the laplacian of Y at each vertex"""
-
-    Nv = len(self.V_pq)
-    Nf = len(self.faces)
-    lapY = np.zeros_like(Y)
-    for vi in range(Nv):
-        ri = self.V_pq[vi, :3]
-        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-        Ai = self.meyercell_area(vi)
-        for f in range(Nf):
-            vj, vk, vl = self.faces[f]
-            rj = self.V_pq[vj, :3]
-            rk = self.V_pq[vk, :3]
-            rl = self.V_pq[vl, :3]
-            vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
-            Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
-            for vm in self.faces[f]:
-                rm = self.V_pq[vm, :3]
-                rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
-                ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
-                Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
-                lapY[vi] += (Af / (12 * np.pi * Ai**2)) * np.exp(-Drim_sqr / (4 * Ai)) * (Y[vm] - Y[vi])
-
-    return lapY
-
-
-def laplacian_at_vertex(vi, Y, V, F, A):
-    """computes the laplacian of Y at vertex vi"""
-    lapY = 0.0
-    Nf = len(F)
-    ri = V[vi]
-    ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-    Ai = A[vi]
-    for f in range(Nf):
-        vj, vk, vl = F[f]
-        rj = V[vj]
-        rk = V[vk]
-        rl = V[vl]
-        vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
-        Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
-        for vm in F[f]:
-            rm = V[vm]
-            rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
-            ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
-            Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
-            lapY += (Af / (12 * np.pi * Ai**2)) * np.exp(-Drim_sqr / (4 * Ai)) * (Y[vm] - Y[vi])
-    return lapY
-
-
-# @njit
-def get_halfedges_from_triangle(face):
-    return np.array([[face[0], face[1]], [face[1], face[2]], [face[2], face[0]]], dtype=np.int32)
-
-
-def get_halfedges_from_triangles_parallel(F):
-    N_cpu = mu.cpu_count()
-    with mu.Pool(processes=N_cpu) as p:
-        H = np.concatenate(p.map(get_halfedges_from_triangle, F))
-    H_label = np.array([h for h, _ in enumerate(H)], dtype=np.int32)
-    return H, H_label
-
-
-def save_brane_state(brane, output_directory):
-    vertices = brane.V_pq[:, :3]
-    faces = brane.faces
-    length_reg_stiffness = brane.length_reg_stiffness
-    area_reg_stiffness = brane.area_reg_stiffness
-    volume_reg_stiffness = brane.volume_reg_stiffness
-    bending_modulus = brane.bending_modulus
-    splay_modulus = brane.splay_modulus
-    spontaneous_curvature = brane.spontaneous_curvature
-    linear_drag_coeff = brane.linear_drag_coeff
-    V_hedge = brane.V_hedge
-    halfedges = brane.halfedges
-    H_vertex = brane.H_vertex
-    H_face = brane.H_face
-    H_next = brane.H_next
-    H_prev = brane.H_prev
-    H_twin = brane.H_twin
-    F_hedge = brane.F_hedge
 
 
 def get_crange(samps, Nstd=2):
@@ -310,6 +226,7 @@ def initialize_sim(
 
 
 def run(sim_state, Trun, make_plots=True):
+    Dtdict = {"Fbend_mixed": 0, "Ftether": 0, "Fa_Fv": 0, "brane_plot": 0}
     view = {
         "azimuth": 0,
         "elevation": 55,
@@ -336,10 +253,18 @@ def run(sim_state, Trun, make_plots=True):
     # fig_kwargs = save_fig_data(sim_state)
     fig_path = f"{output_directory}/temp_images/fig_{image_count:0>4}.png"
     if make_plots:
+        Dt = time()
         Fb = b.Fbend_mixed()
-        # Fl = b.Flength()
+        Dtdict["Fbend_mixed"] += time() - Dt
+
+        Dt = time()
         Fl = b.Ftether()
+        Dtdict["Ftether"] += time() - Dt
+
+        Dt = time()
         Fa, Fv = b.Fa_Fv()
+        Dtdict["Fa_Fv"] += time() - Dt
+
         F = Fb + Fl + Fa + Fv
         b.F_opacity = 0.8
         Fplot = 0.1 * F
@@ -347,6 +272,8 @@ def run(sim_state, Trun, make_plots=True):
         if Fmax > 0.25:
             Fplot *= 0.25 / Fmax
         b.V_vector_data = Fplot
+
+        Dt = time()
         mp.brane_plot(
             b,
             # color_by_V_scalar=False,
@@ -361,20 +288,49 @@ def run(sim_state, Trun, make_plots=True):
             fig_path=fig_path,
             view=view,
         )
+        Dtdict["brane_plot"] += time() - Dt
     image_count += 1
-    # for iii in range(10):
-    #     Nflips = b.regularize_by_flips()
     while Trun - t > 0.5 * dt and success:
         while tstop - t > 0.5 * dt and success:
             try:
                 # b.delaunay_regularize_by_flips()
                 # Nflips = b.do_the_monte_flips()
                 Nflips = 111
-                # Fl = b.Flength()
-                Fl = b.Ftether()
-                Fa, Fv = b.Fa_Fv()
+                # Fl = b.Ftether()
+                # Fa, Fv = b.Fa_Fv()
+                # Fb = b.Fbend_mixed()
+                Dt = time()
                 Fb = b.Fbend_mixed()
+                Dtdict["Fbend_mixed"] += time() - Dt
+
+                Dt = time()
+                Fl = b.Ftether()
+                Dtdict["Ftether"] += time() - Dt
+
+                Dt = time()
+                Fa, Fv = b.Fa_Fv()
+                Dtdict["Fa_Fv"] += time() - Dt
+
                 F = Fb + Fl + Fa + Fv
+
+                Vold = b.V_pq[:, :3].copy()
+                b.V_pq[:, :3] += dt * F / b.linear_drag_coeff
+
+                Dt = time()
+                Fb = b.Fbend_mixed()
+                Dtdict["Fbend_mixed"] += time() - Dt
+
+                Dt = time()
+                Fl = b.Ftether()
+                Dtdict["Ftether"] += time() - Dt
+
+                Dt = time()
+                Fa, Fv = b.Fa_Fv()
+                Dtdict["Fa_Fv"] += time() - Dt
+
+                F = Fb + Fl + Fa + Fv
+                b.V_pq[:, :3] = Vold + dt * F / b.linear_drag_coeff
+
                 success = True
             except Exception:
                 success = False
@@ -386,9 +342,12 @@ def run(sim_state, Trun, make_plots=True):
                 # Fb = b.Fbend_mixed()
                 # F = Fb + Fl + Fa + Fv
                 # b.V_pq[:, :3] = Vold + dt * F / b.linear_drag_coeff
-                Vold = b.V_pq[:, :3].copy()
-                b.V_pq[:, :3] += b.weighted_drag_coeffs_step(dt)
-                b.V_pq[:, :3] = Vold + b.weighted_drag_coeffs_step(dt)
+                #
+                #
+                #
+                # Vold = b.V_pq[:, :3].copy()
+                # b.V_pq[:, :3] += b.weighted_drag_coeffs_step(dt)
+                # b.V_pq[:, :3] = Vold + b.weighted_drag_coeffs_step(dt)
 
                 t += dt
 
@@ -404,10 +363,17 @@ def run(sim_state, Trun, make_plots=True):
             Flmax = np.round(np.max(np.linalg.norm(Fl, np.inf, axis=0)), 3)
             Famax = np.round(np.max(np.linalg.norm(Fa, np.inf, axis=0)), 3)
             Fvmax = np.round(np.max(np.linalg.norm(Fv, np.inf, axis=0)), 3)
-            print(
-                f"t={tt}, Fb={Fbmax},Fl={Flmax},Fa={Famax},Fv={Fvmax},Nflips={Nflips}              ",
-                end="\r",
-            )
+            # print(
+            #     f"t={tt}, Fb={Fbmax},Fl={Flmax},Fa={Famax},Fv={Fvmax},Nflips={Nflips}              ",
+            #     end="\r",
+            # )
+            Ttot = Dtdict["Fbend_mixed"] + Dtdict["Ftether"] + Dtdict["Fa_Fv"] + Dtdict["brane_plot"]
+            T_Fbend_mixed = np.round(np.max(Dtdict["Fbend_mixed"] / Ttot), 3)
+            T_Ftether = np.round(np.max(Dtdict["Ftether"] / Ttot), 3)
+            T_Fa_Fv = np.round(np.max(Dtdict["Fa_Fv"] / Ttot), 3)
+            T_brane_plot = np.round(np.max(Dtdict["brane_plot"] / Ttot), 3)
+            log_str = f"t={tt}, Fb={Fbmax},Fl={Flmax},Fa={Famax},Fv={Fvmax},T_Fbend_mixed={T_Fbend_mixed},T_Ftether={T_Ftether},T_Fa_Fv={T_Fa_Fv},T_brane_plot={T_brane_plot}             "
+            print(log_str, end="\r")
 
             sim_state["success"] = success
             sim_state["t"] = t
@@ -426,6 +392,7 @@ def run(sim_state, Trun, make_plots=True):
                     print("\nFmax\n")
                     Fplot *= 0.25 / Fmax
                 b.V_vector_data = Fplot
+                Dt = time()
                 mp.brane_plot(
                     b,
                     color_by_V_scalar=False,
@@ -440,6 +407,7 @@ def run(sim_state, Trun, make_plots=True):
                     fig_path=fig_path,
                     view=view,
                 )
+                Dtdict["brane_plot"] += time() - Dt
             image_count += 1
 
             if t2save <= 0:
@@ -455,48 +423,6 @@ def run(sim_state, Trun, make_plots=True):
     return sim_state
 
 
-def color_by_tether(b, _a=None):
-    Nh = len(b.halfedges)
-    U = np.zeros(Nh)
-    for h in range(Nh):
-        i, j = b.halfedges[h]
-        ri, rj = b.V_pq[i, :3], b.V_pq[j, :3]
-        Drij = rj - ri
-        s = np.sqrt(Drij @ Drij)
-        U[h] = b.Utether(s, 1.0)
-    return U
-
-
-def log_log_fit(X, Y, Xlabel="X", Ylabel="Y", title=""):
-    x, y = np.log(X), np.log(Y)
-    a11 = x @ x
-    a12 = sum(x)
-    a21 = a12
-    a22 = len(x)
-    u1 = x @ y
-    u2 = sum(y)
-    u = np.array([u1, u2])
-    detA = a11 * a22 - a12 * a21
-    Ainv = np.array([[a22, -a12], [-a21, a11]]) / detA
-    p, c = Ainv @ u
-    f = p * x + c
-    fit_label = f"${Ylabel}={round_to(c,n=3)}{Xlabel}" "^{" + f"{round_to(p,n=3)}" + "}$"
-    plt.plot(
-        x,
-        f,
-        # label=f"log({Ylabel})={round_to(p,n=3)}log({Xlabel})+{round_to(c,n=3)}",
-        label=fit_label,
-        linewidth=2,
-    )
-    plt.plot(x, y, "*")
-    plt.title(title, fontsize=16)
-    plt.xlabel(f"log({Xlabel})", fontsize=16)
-    plt.ylabel(f"log({Ylabel})", fontsize=16)
-    plt.legend()
-    plt.show()
-    plt.close()
-
-
 def round_to(x, n=3):
     if x == 0:
         return 0.0
@@ -510,11 +436,11 @@ def round_sci(x, n=3):
     return np.format_float_scientific(x, precision=n)
 
 
+##########################################################
+##########################################################
+# Disretization fig
 # %%
-# ply_path = "./data/ply_files/oblate.ply"
-# vertices, faces = load_mesh_from_ply(ply_path)
-# mesh_directory = "./data/halfedge_meshes/dumbbell"
-mesh_directory = "./data/halfedge_meshes/dumbbell"
+mesh_directory = "./data/halfedge_meshes/dumbbell_coarse"
 mesh_data = load_halfedge_mesh_data(mesh_directory)
 brane_kwargs = {
     "length_reg_stiffness": 1e-9,
@@ -523,7 +449,118 @@ brane_kwargs = {
     "bending_modulus": 1e-1,
     "splay_modulus": 1.0,
     "spontaneous_curvature": 0.0,
-    "linear_drag_coeff": 1e3,
+    "linear_drag_coeff": 1e0,
+} | mesh_data
+
+b = m.Brane(**brane_kwargs)
+# %%
+_cm = get_cmap(name="nipy_spectral")
+cm = lambda x: _cm(x)[:3]
+black = cm(0)
+purple = cm(0.1)
+darkblue = cm(0.2)
+lightblue = cm(0.3125)
+green = cm(0.45)
+yellow = cm(0.7)
+orange = cm(0.8)
+red = cm(0.9)
+grey = cm(1)
+white = (1.0, 1.0, 1.0)
+
+b.V_radius = 0 * b.V_radius + 0.0125
+b.F_alpha = 0 * b.F_alpha + 1.0
+
+view = {
+    "azimuth": 0,
+    "elevation": 55,
+    "distance": 3,
+    "focalpoint": (0, 0, 0),
+}
+#
+fig_path = "../helfrich_talk/images/dumbbell_smooth.png"
+mp.brane_plot(
+    b,
+    show=False,
+    save=True,
+    fig_path=fig_path,
+    figsize=(720, 720),
+    show_surface=True,
+    show_halfedges=False,
+    show_edges=False,
+    show_vertices=False,
+    show_normals=False,
+    show_tangent1=False,
+    show_tangent2=False,
+    show_plot_axes=False,
+    color_by_V_rgb=False,
+    color_by_V_scalar=False,
+    color_by_F_scalar=False,
+    show_V_vector_data=False,
+    frame_scale=0.07,
+    view=view,
+)
+#
+fig_path = "../helfrich_talk/images/dumbbell_edges.png"
+mp.brane_plot(
+    b,
+    show=False,
+    save=True,
+    fig_path=fig_path,
+    figsize=(720, 720),
+    show_surface=True,
+    show_halfedges=False,
+    show_edges=False,
+    show_vertices=True,
+    show_normals=False,
+    show_tangent1=False,
+    show_tangent2=False,
+    show_plot_axes=False,
+    color_by_V_rgb=False,
+    color_by_V_scalar=False,
+    color_by_F_scalar=False,
+    show_V_vector_data=False,
+    frame_scale=0.07,
+    view=view,
+)
+#
+fig_path = "../helfrich_talk/images/dumbbell_halfedges.png"
+mp.brane_plot(
+    b,
+    show=False,
+    save=True,
+    fig_path=fig_path,
+    figsize=(2180, 2180),
+    show_surface=True,
+    show_halfedges=True,
+    show_edges=False,
+    show_vertices=True,
+    show_normals=False,
+    show_tangent1=False,
+    show_tangent2=False,
+    show_plot_axes=False,
+    color_by_V_rgb=False,
+    color_by_V_scalar=False,
+    color_by_F_scalar=False,
+    show_V_vector_data=False,
+    frame_scale=0.07,
+    view=view,
+)
+##########################################################
+##########################################################
+# %%
+# ply_path = "./data/ply_files/oblate.ply"
+# vertices, faces = load_mesh_from_ply(ply_path)
+# mesh_directory = "./data/halfedge_meshes/dumbbell"
+mesh_directory = "./data/halfedge_meshes/dumbbell_coarse"
+mesh_data = load_halfedge_mesh_data(mesh_directory)
+brane_kwargs = {
+    "length_reg_stiffness": 1e-9,
+    "area_reg_stiffness": 1e-3,
+    "volume_reg_stiffness": 1e1,
+    "bending_modulus": 1e-1,
+    "splay_modulus": 1.0,
+    "spontaneous_curvature": 0.0,
+    "linear_drag_coeff": 1e0,
 } | mesh_data
 sim_kwargs = {
     "Tplot": 5e-2,
@@ -555,131 +592,39 @@ mp.brane_plot(
     # show_V_vector_data=True,
 )
 # %%
-from numba import njit, prange
+mesh_directory = "./data/halfedge_meshes/dumbbell_coarse"
+mesh_data = load_halfedge_mesh_data(mesh_directory)
+brane_kwargs = {
+    "length_reg_stiffness": 1e-9,
+    "area_reg_stiffness": 1e-3,
+    "volume_reg_stiffness": 1e1,
+    "bending_modulus": 1e-1,
+    "splay_modulus": 1.0,
+    "spontaneous_curvature": 0.0,
+    "linear_drag_coeff": 1e0,
+} | mesh_data
+
+b = m.Brane(**brane_kwargs)
 
 
-@njit()
-def unparallel_smoothed_laplacian(self, Y):
-    """computes the laplacian of Y at each vertex"""
-
-    Nv = len(self.V_pq)
-    Nf = len(self.faces)
-    lapY = np.zeros_like(Y)
-    for vi in range(Nv):
-        ri = self.V_pq[vi, :3]
-        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-        Ai = self.meyercell_area(vi)
-        for f in range(Nf):
-            vj, vk, vl = self.faces[f]
-            rj = self.V_pq[vj, :3]
-            rk = self.V_pq[vk, :3]
-            rl = self.V_pq[vl, :3]
-            vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
-            Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
-            for vm in self.faces[f]:
-                rm = self.V_pq[vm, :3]
-                rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
-                ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
-                Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
-                lapY[vi] += (Af / (12 * np.pi * Ai**2)) * np.exp(-Drim_sqr / (4 * Ai)) * (Y[vm] - Y[vi])
-
-    return lapY
-
-
-@njit(parallel=True)
-def parallel_smoothed_laplacian(self, Y):
-    """computes the laplacian of Y at each vertex"""
-
-    Nv = len(self.V_pq)
-    Nf = len(self.faces)
-    lapY = np.zeros_like(Y)
-    for vi in prange(Nv):
-        ri = self.V_pq[vi, :3]
-        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-        Ai = self.meyercell_area(vi)
-        for f in prange(Nf):
-            vj, vk, vl = self.faces[f]
-            rj = self.V_pq[vj, :3]
-            rk = self.V_pq[vk, :3]
-            rl = self.V_pq[vl, :3]
-            vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
-            Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
-            for vm in self.faces[f]:
-                rm = self.V_pq[vm, :3]
-                rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
-                ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
-                Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
-                lapY[vi] += (Af / (12 * np.pi * Ai**2)) * np.exp(-Drim_sqr / (4 * Ai)) * (Y[vm] - Y[vi])
-
-    return lapY
-
-
-# %%
-mesh_directories = [
-    "./data/halfedge_meshes/dumbbell_coarse",
-    "./data/halfedge_meshes/dumbbell",
-    "./data/halfedge_meshes/dumbbell_fine",
-]
-B = []
-for mesh_directory in mesh_directories:
-    mesh_data = load_halfedge_mesh_data(mesh_directory)
-    brane_kwargs = {
-        "length_reg_stiffness": 1e-9,
-        "area_reg_stiffness": 1e-3,
-        "volume_reg_stiffness": 1e1,
-        "bending_modulus": 1e-1,
-        "splay_modulus": 1.0,
-        "spontaneous_curvature": 0.0,
-        "linear_drag_coeff": 1e3,
-    } | mesh_data
-    sim_kwargs = {
-        "Tplot": 5e-2,
-        "Tsave": 5e-1,
-        "dt": 1e-3,
-        "output_directory": "./output/monte_output",
-    } | brane_kwargs
-    sim_state = initialize_sim(**sim_kwargs)
-    b = sim_state["b"]
-    B.append(b)
-# %%
-from time import time
-
-Nverts = np.array([b.V_pq.shape[0] for b in B])
-slow_times = np.zeros(len(Nverts))
-para_times = np.zeros(len(Nverts))
-unpa_times = np.zeros(len(Nverts))
-slowLapYs = []
-paraLapYs = []
-unpaLapYs = []
-for i in range(len(B)):
-    b = B[i]
-    print(f"Nv={b.V_pq.shape[0]} running to compile     ")
-    Y = b.V_pq[:, :3]
-    slowLapY = b.slow_smoothed_laplacian(Y)
-    paraLapY = parallel_smoothed_laplacian(b, Y)
-    unpaLapY = unparallel_smoothed_laplacian(b, Y)
-    slowLapY = b.slow_smoothed_laplacian(Y)
-    paraLapY = parallel_smoothed_laplacian(b, Y)
-    unpaLapY = unparallel_smoothed_laplacian(b, Y)
-    print(f"Nv={b.V_pq.shape[0]} running to compile -done     ")
-    print(f"Nv={b.V_pq.shape[0]} computing runtimes           ")
-    slow_times[i] = -time()
-    slowLapY = b.slow_smoothed_laplacian(Y)
-    slow_times[i] += time()
-    para_times[i] = -time()
-    paraLapY = parallel_smoothed_laplacian(b, Y)
-    para_times[i] += time()
-    unpa_times[i] = -time()
-    unpaLapY = unparallel_smoothed_laplacian(b, Y)
-    unpa_times[i] += time()
-    slowLapYs.append(slowLapY)
-    paraLapYs.append(paraLapY)
-    unpaLapYs.append(unpaLapY)
-
-
-log_log_fit(Nverts, slow_times, Xlabel="N", Ylabel="T", title="slow")
-log_log_fit(Nverts, para_times, Xlabel="N", Ylabel="T", title="paralell")
-log_log_fit(Nverts, unpa_times, Xlabel="N", Ylabel="T", title="unparallel")
-# b=B[0]
-# Y=b.V_pq
-# unparallel_smoothed_laplacian(b, Y)
+mp.brane_plot(
+    b,
+    show=True,
+    save=False,
+    fig_path=None,
+    figsize=(2180, 2180),
+    show_surface=True,
+    show_halfedges=False,
+    show_edges=False,
+    show_vertices=False,
+    show_normals=False,
+    show_tangent1=False,
+    show_tangent2=False,
+    show_plot_axes=False,
+    color_by_V_rgb=False,
+    color_by_V_scalar=False,
+    color_by_F_scalar=False,
+    show_V_vector_data=False,
+    frame_scale=0.07,
+    view=None,
+)
