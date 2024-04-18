@@ -15,6 +15,7 @@ from scipy.linalg import expm, logm, inv
 from matplotlib import colormaps as plt_cmap
 import matplotlib.pyplot as plt
 import multiprocessing as mu
+from scipy.sparse import csr_matrix
 
 x = np.linspace(0, 1, 50)
 
@@ -43,29 +44,6 @@ def slow_smoothed_laplacian(self, Y):
                 Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
                 lapY[vi] += (Af / (12 * np.pi * Ai**2)) * np.exp(-Drim_sqr / (4 * Ai)) * (Y[vm] - Y[vi])
 
-    return lapY
-
-
-def laplacian_at_vertex(vi, Y, V, F, A):
-    """computes the laplacian of Y at vertex vi"""
-    lapY = 0.0
-    Nf = len(F)
-    ri = V[vi]
-    ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-    Ai = A[vi]
-    for f in range(Nf):
-        vj, vk, vl = F[f]
-        rj = V[vj]
-        rk = V[vk]
-        rl = V[vl]
-        vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
-        Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
-        for vm in F[f]:
-            rm = V[vm]
-            rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
-            ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
-            Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
-            lapY += (Af / (12 * np.pi * Ai**2)) * np.exp(-Drim_sqr / (4 * Ai)) * (Y[vm] - Y[vi])
     return lapY
 
 
@@ -529,11 +507,11 @@ sim_kwargs = {
     "Tplot": 5e-2,
     "Tsave": 5e-1,
     "dt": 1e-3,
-    "output_directory": "./output/monte_output",
+    "output_directory": "./output/heat_kernel_tests",
 } | brane_kwargs
 sim_state = initialize_sim(**sim_kwargs)
 # %%
-Trun = 1
+Trun = 0.1
 sim_state = run(
     sim_state,
     Trun,
@@ -555,131 +533,40 @@ mp.brane_plot(
     # show_V_vector_data=True,
 )
 # %%
-from numba import njit, prange
+b = m.Brane(**brane_kwargs)  # uses mean area for h
+b.L_elements, b.L_indices = b.get_meyer_weighted_heat_laplacian()
+b.P = b.get_TM_projection()
+b.N = b.get_heat_unit_normals()
+# bN = b.N.copy()
+# b.N=N
+b.flip_normals()
+b.B = b.get_curvature_matrix()
+H = 0.5 * np.einsum("xii->x", b.B)
 
-
-@njit()
-def unparallel_smoothed_laplacian(self, Y):
-    """computes the laplacian of Y at each vertex"""
-
-    Nv = len(self.V_pq)
-    Nf = len(self.faces)
-    lapY = np.zeros_like(Y)
-    for vi in range(Nv):
-        ri = self.V_pq[vi, :3]
-        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-        Ai = self.meyercell_area(vi)
-        for f in range(Nf):
-            vj, vk, vl = self.faces[f]
-            rj = self.V_pq[vj, :3]
-            rk = self.V_pq[vk, :3]
-            rl = self.V_pq[vl, :3]
-            vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
-            Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
-            for vm in self.faces[f]:
-                rm = self.V_pq[vm, :3]
-                rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
-                ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
-                Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
-                lapY[vi] += (Af / (12 * np.pi * Ai**2)) * np.exp(-Drim_sqr / (4 * Ai)) * (Y[vm] - Y[vi])
-
-    return lapY
-
-
-@njit(parallel=True)
-def parallel_smoothed_laplacian(self, Y):
-    """computes the laplacian of Y at each vertex"""
-
-    Nv = len(self.V_pq)
-    Nf = len(self.faces)
-    lapY = np.zeros_like(Y)
-    for vi in prange(Nv):
-        ri = self.V_pq[vi, :3]
-        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-        Ai = self.meyercell_area(vi)
-        for f in prange(Nf):
-            vj, vk, vl = self.faces[f]
-            rj = self.V_pq[vj, :3]
-            rk = self.V_pq[vk, :3]
-            rl = self.V_pq[vl, :3]
-            vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
-            Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
-            for vm in self.faces[f]:
-                rm = self.V_pq[vm, :3]
-                rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
-                ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
-                Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
-                lapY[vi] += (Af / (12 * np.pi * Ai**2)) * np.exp(-Drim_sqr / (4 * Ai)) * (Y[vm] - Y[vi])
-
-    return lapY
-
-
+b.V_vector_data = 0.1 * b.N
+# b.V_rgb = scalars_to_rgbs(H)
+mp.brane_plot(
+    b,
+    color_by_V_scalar=False,
+    color_by_V_rgb=False,
+    show_halfedges=True,
+    # show_normals=False,
+    show_V_vector_data=True,
+)
 # %%
-mesh_directories = [
-    "./data/halfedge_meshes/dumbbell_coarse",
-    "./data/halfedge_meshes/dumbbell",
-    "./data/halfedge_meshes/dumbbell_fine",
-]
-B = []
-for mesh_directory in mesh_directories:
-    mesh_data = load_halfedge_mesh_data(mesh_directory)
-    brane_kwargs = {
-        "length_reg_stiffness": 1e-9,
-        "area_reg_stiffness": 1e-3,
-        "volume_reg_stiffness": 1e1,
-        "bending_modulus": 1e-1,
-        "splay_modulus": 1.0,
-        "spontaneous_curvature": 0.0,
-        "linear_drag_coeff": 1e3,
-    } | mesh_data
-    sim_kwargs = {
-        "Tplot": 5e-2,
-        "Tsave": 5e-1,
-        "dt": 1e-3,
-        "output_directory": "./output/monte_output",
-    } | brane_kwargs
-    sim_state = initialize_sim(**sim_kwargs)
-    b = sim_state["b"]
-    B.append(b)
-# %%
-from time import time
 
-Nverts = np.array([b.V_pq.shape[0] for b in B])
-slow_times = np.zeros(len(Nverts))
-para_times = np.zeros(len(Nverts))
-unpa_times = np.zeros(len(Nverts))
-slowLapYs = []
-paraLapYs = []
-unpaLapYs = []
-for i in range(len(B)):
-    b = B[i]
-    print(f"Nv={b.V_pq.shape[0]} running to compile     ")
-    Y = b.V_pq[:, :3]
-    slowLapY = b.slow_smoothed_laplacian(Y)
-    paraLapY = parallel_smoothed_laplacian(b, Y)
-    unpaLapY = unparallel_smoothed_laplacian(b, Y)
-    slowLapY = b.slow_smoothed_laplacian(Y)
-    paraLapY = parallel_smoothed_laplacian(b, Y)
-    unpaLapY = unparallel_smoothed_laplacian(b, Y)
-    print(f"Nv={b.V_pq.shape[0]} running to compile -done     ")
-    print(f"Nv={b.V_pq.shape[0]} computing runtimes           ")
-    slow_times[i] = -time()
-    slowLapY = b.slow_smoothed_laplacian(Y)
-    slow_times[i] += time()
-    para_times[i] = -time()
-    paraLapY = parallel_smoothed_laplacian(b, Y)
-    para_times[i] += time()
-    unpa_times[i] = -time()
-    unpaLapY = unparallel_smoothed_laplacian(b, Y)
-    unpa_times[i] += time()
-    slowLapYs.append(slowLapY)
-    paraLapYs.append(paraLapY)
-    unpaLapYs.append(unpaLapY)
+vals = np.zeros((len(b.V_pq), 3))
+vecs = np.zeros((len(b.V_pq), 3, 3))
+N = np.zeros((len(b.V_pq), 3))
+H1 = np.zeros(len(b.V_pq))
+
+for x in range(len(b.V_pq)):
+    B = 0.5 * (b.B[x] + b.B[x].T)
+    vals[x], vecs[x] = np.linalg.eigh(B)
+    vals_list = list(np.abs(vals[x]))
+    x_N = vals_list.index(min(vals_list))
+    N[x] = vecs[x, :, x_N]
+    H1[x] = (sum(vals[x]) - vals[x, x_N]) / 2
 
 
-log_log_fit(Nverts, slow_times, Xlabel="N", Ylabel="T", title="slow")
-log_log_fit(Nverts, para_times, Xlabel="N", Ylabel="T", title="paralell")
-log_log_fit(Nverts, unpa_times, Xlabel="N", Ylabel="T", title="unparallel")
-# b=B[0]
-# Y=b.V_pq
-# unparallel_smoothed_laplacian(b, Y)
+np.min(H1)

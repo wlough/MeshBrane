@@ -58,6 +58,11 @@ Brane_spec = [
     ("preferred_face_area", float64),
     ("preferred_cell_volume", float64),
     ("preferred_edge_length", float64),
+    ("L_elements", float64[:]),
+    ("L_indices", int32[:, :]),
+    ("P", float64[:, :, :]),
+    ("B", float64[:, :, :]),
+    ("N", float64[:, :]),
     ###########################
     # visualization stuff
     ("V_vector_data", float64[:, :]),
@@ -227,6 +232,12 @@ class Brane:
         self.V_alpha = self.V_opacity * np.ones(len(self.V_pq))
         #############################################################
         Nflips = self.delaunay_regularize_by_flips()
+
+        tol = 1e-9
+        self.L_elements, self.L_indices = self.get_meyer_weighted_heat_laplacian(tol)
+        self.P = np.zeros((Nv, 3, 3))
+        self.B = np.zeros((Nv, 3, 3))
+        self.N = np.zeros((Nv, 3))
 
     ###########################################################################
     ###########################################################################
@@ -710,18 +721,6 @@ class Brane:
                 break
         return Vi
 
-    def V_one_ring_neighbors(self, i):
-        """"""
-        Vi = []
-        h_start = self.V_hedge[i]
-        hij = h_start
-        while True:
-            Vi.append(self.H_vertex[hij])
-            hij = self.H_twin[self.H_prev[hij]]
-            if hij == h_start:
-                break
-        return Vi
-
     ###########################################################################
     # timestepping
     ############################
@@ -1075,6 +1074,111 @@ class Brane:
 
         return kappa
 
+    def get_meyer_masses(self):
+        Nv = len(self.vertices)
+        M = np.zeros(Nv)
+        for v in range(Nv):
+            M[v] = self.meyercell_area(v)
+        return M
+
+    def heat_laplacian_weight(self, x, y, h):
+        X = self.V_pq[x, :3]
+        Y = self.V_pq[y, :3]
+        dxy = jitnorm(Y - X)
+        Wxy = np.exp(-(dxy**2) / (4 * h)) / (4 * np.pi * h**2)
+        return Wxy
+
+    def get_meyer_weighted_heat_laplacian(self, tol=1e-9):
+
+        index_list = []
+        matrix_element_list = []
+        Nv = len(self.V_pq)
+        for x in range(Nv):
+            Mx = self.meyercell_area(x)
+            for y in range(Nv):
+                My = self.meyercell_area(y)
+                Wxy = self.heat_laplacian_weight(x, y, Mx)
+                Lxy = Wxy * My
+                if Lxy > tol:
+                    index_list.append([x, y])
+                    matrix_element_list.append(Lxy)
+
+        return np.array(matrix_element_list), np.array(index_list, dtype=np.int32)
+
+    def get_heat_laplacian(self, h, tol=1e-9):
+
+        index_list = []
+        matrix_element_list = []
+        Nv = len(self.V_pq)
+        for x in range(Nv):
+            for y in range(Nv):
+                My = self.meyercell_area(y)
+                Wxy = self.heat_laplacian_weight(x, y, h)
+                Lxy = Wxy * My
+                if Lxy > tol:
+                    index_list.append([x, y])
+                    matrix_element_list.append(Lxy)
+
+        return np.array(matrix_element_list), np.array(index_list, dtype=np.int32)
+
+    def get_TM_projection(self):
+        Nv = len(self.V_pq)
+
+        P = np.zeros((Nv, 3, 3))
+        for _ in range(len(self.L_elements)):
+            x, y = self.L_indices[_]
+            Lxy = self.L_elements[_]
+            rx, ry = self.V_pq[x, :3], self.V_pq[y, :3]
+            P[x] += 0.5 * Lxy * np.outer(ry - rx, ry - rx)
+        return P
+
+    def get_other_weighted_vertex_normals(self):
+        """Weights for Computing Vertex Normals from Facet Normals Max99"""
+        Nvertices = len(self.V_pq)
+        N = np.zeros((Nvertices, 3))
+        for x in range(Nvertices):
+            N[x] = self.other_weighted_vertex_normal(x)
+        return N
+
+    def get_heat_unit_normals(self):
+        Nvertices = len(self.V_pq)
+        N = np.zeros((Nvertices, 3))
+        P = self.P
+        for x in range(Nvertices):
+            D, U = np.linalg.eigh(P[x])
+            N[x] = U[:, 0]
+        return N
+
+    def get_curvature_matrix(self):
+        Nv = len(self.V_pq)
+
+        B = np.zeros((Nv, 3, 3))
+        for _ in range(len(self.L_elements)):
+            x, y = self.L_indices[_]
+            Lxy = self.L_elements[_]
+            rx, ry = self.V_pq[x, :3], self.V_pq[y, :3]
+            nx, ny = self.N[x], self.N[y]
+            B[x] += -0.5 * Lxy * np.outer(ry - rx, ny - nx)
+        return B
+
+    def flip_normals(self):
+        Nv = len(self.V_pq)
+
+        for x in range(Nv):
+            rx = self.V_pq[x, :3]
+            nx = self.N[x]
+            # nx_dot_stuff = 0.0
+            hxy1 = self.V_hedge[x]
+            hxy2 = self.H_twin[self.H_prev[hxy1]]
+            y1 = self.H_vertex[hxy1]
+            y2 = self.H_vertex[hxy2]
+            ry1 = self.V_pq[y1, :3]
+            ry2 = self.V_pq[y2, :3]
+            n_approx = jitcross(rx, ry1) + jitcross(ry1, ry2) + jitcross(ry2, rx)
+            nx_dot_n_approx = jitdot(nx, n_approx)
+            if nx_dot_n_approx < 0:
+                self.N[x] *= -1
+
     ###########################################################################
     # cotan stuff #
     ##########################
@@ -1278,12 +1382,6 @@ class Brane:
                     Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
                     lapY[vi] += (Af / (12 * np.pi * Ai**2)) * np.exp(-Drim_sqr / (4 * Ai)) * (Y[vm] - Y[vi])
 
-        return lapY
-
-    def call_parallel_smoothed_laplacian(self, Y):
-        """computes the laplacian of Y at each vertex"""
-
-        lapY = parallel_smoothed_laplacian(self, Y)
         return lapY
 
     def mean_curvature_vector_cot(self, v):
@@ -2876,59 +2974,3 @@ class Brane:
     ###########################################################################
     # framed brane functions #
     ##########################
-
-
-# def slow_smoothed_laplacian(vi, Y, V, F, A):
-#     """computes the laplacian of Y at vertex vi"""
-#
-#     lapY = 0.0
-#     Nf = len(F)
-#     lapY = np.zeros_like(Y)
-#     ri = V[vi]
-#     ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-#     Ai = A[vi]
-#     for f in range(Nf):
-#         vj, vk, vl = F[f]
-#         rj = V[vj]
-#         rk = V[vk]
-#         rl = V[vl]
-#         vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
-#         Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
-#         for vm in F[f]:
-#             rm = V[vm]
-#             rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
-#             ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
-#             Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
-#             lapY += (
-#                 (Af / (12 * np.pi * Ai**2))
-#                 * np.exp(-Drim_sqr / (4 * Ai))
-#                 * (Y[vm] - Y[vi])
-#             )
-#
-#     return lapY
-@njit(paralell=True)
-def parallel_smoothed_laplacian(self, Y):
-    """computes the laplacian of Y at each vertex"""
-
-    Nv = len(self.V_pq)
-    Nf = len(self.faces)
-    lapY = np.zeros_like(Y)
-    for vi in prange(Nv):
-        ri = self.V_pq[vi, :3]
-        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-        Ai = self.meyercell_area(vi)
-        for f in prange(Nf):
-            vj, vk, vl = self.faces[f]
-            rj = self.V_pq[vj, :3]
-            rk = self.V_pq[vk, :3]
-            rl = self.V_pq[vl, :3]
-            vecAf = (jitcross(rj, rk) + jitcross(rk, rl) + jitcross(rl, rj)) / 2
-            Af = np.sqrt(vecAf[0] ** 2 + vecAf[1] ** 2 + vecAf[2] ** 2)
-            for vm in self.faces[f]:
-                rm = self.V_pq[vm, :3]
-                rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
-                ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
-                Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
-                lapY[vi] += (Af / (12 * np.pi * Ai**2)) * np.exp(-Drim_sqr / (4 * Ai)) * (Y[vm] - Y[vi])
-
-    return lapY
