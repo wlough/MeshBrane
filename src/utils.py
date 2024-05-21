@@ -32,12 +32,10 @@ def get_halfedges(vertices, faces):
     contained in the boundary of the mesh."""
     halfedges = []
     H_isboundary = []
-    # H_lab = []
     ####################
     # save and label halfedges
     h = 0
     for face in faces:
-        # face = faces[f]
         N_v_of_f = len(face)
         for _ in range(N_v_of_f):
             # index shift to get next
@@ -47,7 +45,6 @@ def get_halfedges(vertices, faces):
             hedge = [v0, v1]
             halfedges.append(hedge)
             H_isboundary.append(False)
-            # H_lab.append(h)
             h += 1
 
     for hedge in halfedges:
@@ -58,12 +55,10 @@ def get_halfedges(vertices, faces):
         except Exception:
             halfedges.append(hedge_twin)
             H_isboundary.append(True)
-            # H_lab.append(h)
             h += 1
 
     return (
         np.array(halfedges, dtype=np.int32),
-        # np.array(H_lab, dtype=np.int32),
         np.array(H_isboundary),
     )
 
@@ -467,23 +462,21 @@ def make_sample_mesh(surface_name, Nxyz=None, xyz_minmax=None):
         # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         # Nxyz = [60j, 60j, 60j]
         # Nxyz = [30j, 30j, 30j]
-        implicit_fun_str = "(144*y**2 + 144*z**2 + (12*x - 8)**2 - 1)*(144*y**2 + 144*z**2 + (12*x + 8)**2 - 1) - 4200"
+        implicit_fun_str = (
+            "(144*y**2 + 144*z**2 + (12*x - 8)**2 - 1)*(144*y**2 + 144*z**2 + (12*x + 8)**2 - 1) - 4200"
+        )
     elif surface_name == "torus":
         # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         # Nxyz = [60j, 60j, 60j]
         # Nxyz = [20j, 20j, 20j]
         R = 0.7  # big radius
         r = 0.7 / 3.0  # small radius
-        implicit_fun_str = (
-            f"(x**2 + y**2 + z**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * (x**2 + y**2)"
-        )
+        implicit_fun_str = f"(x**2 + y**2 + z**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * (x**2 + y**2)"
     elif surface_name == "double_torus":
         # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         # Nxyz = [30j, 30j, 30j]
         # implicit_fun_str = "z**2 + (x**2*(x - 1)*(x + 1) + y**2)**2 - 0.01"
-        implicit_fun_str = (
-            "(z/0.2)**2 + (x**2*(x - 0.7)*(x + 0.7)/0.05 + y**2/0.05)**2 - 1"
-        )
+        implicit_fun_str = "(z/0.2)**2 + (x**2*(x - 0.7)*(x + 0.7)/0.05 + y**2/0.05)**2 - 1"
     elif surface_name == "triple_torus":
         # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         # Nxyz = [40j, 40j, 40j]
@@ -492,7 +485,9 @@ def make_sample_mesh(surface_name, Nxyz=None, xyz_minmax=None):
     elif surface_name == "neovius":
         # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         # Nxyz = [20j, 20j, 20j]
-        implicit_fun_str = "4*cos(3*x + 3)*cos(3*y + 3)*cos(3*z + 3) + 3*cos(3*x + 3) + 3*cos(3*y + 3) + 3*cos(3*z + 3)"
+        implicit_fun_str = (
+            "4*cos(3*x + 3)*cos(3*y + 3)*cos(3*z + 3) + 3*cos(3*x + 3) + 3*cos(3*y + 3) + 3*cos(3*z + 3)"
+        )
     elif surface_name == "sphere":
         # xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         # Nxyz = [20j, 20j, 20j]
@@ -526,9 +521,15 @@ def make_sample_mesh(surface_name, Nxyz=None, xyz_minmax=None):
         # F1 = f"(x**2 + y**2 + z**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * (x**2 + y**2)"
         # F2 = f"(x**2 + y**2 + z**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * (y**2 + z**2)"
         # F3 = f"(x**2 + y**2 + z**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * (z**2 + x**2)"
-        F1 = f"((x/.7)**2 + (y/.7)**2 + (z/.7)**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * ((x/.7)**2 + (y/.7)**2)"
-        F2 = f"((x/.7)**2 + (y/.7)**2 + (z/.7)**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * ((y/.7)**2 + (z/.7)**2)"
-        F3 = f"((x/.7)**2 + (y/.7)**2 + (z/.7)**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * ((z/.7)**2 + (x/.7)**2)"
+        F1 = (
+            f"((x/.7)**2 + (y/.7)**2 + (z/.7)**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * ((x/.7)**2 + (y/.7)**2)"
+        )
+        F2 = (
+            f"((x/.7)**2 + (y/.7)**2 + (z/.7)**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * ((y/.7)**2 + (z/.7)**2)"
+        )
+        F3 = (
+            f"((x/.7)**2 + (y/.7)**2 + (z/.7)**2 + {R}**2 - {r}**2) ** 2 - 4 * {R}**2 * ((z/.7)**2 + (x/.7)**2)"
+        )
         implicit_fun_str = f"({F1})*({F2})*({F3})-{b}"
     elif surface_name == "pyramid3":
         implicit_fun_str = None
@@ -578,16 +579,12 @@ def make_sample_mesh(surface_name, Nxyz=None, xyz_minmax=None):
         verts[v_base2] = xyz_base2
         verts[v_base3] = xyz_base3
         verts[v_base4] = xyz_base4
-        faces = np.array(
-            [f_base1, f_base2, f_side1, f_side2, f_side3, f_side4], dtype=np.int32
-        )
+        faces = np.array([f_base1, f_base2, f_side1, f_side2, f_side3, f_side4], dtype=np.int32)
         verts *= 0.9
     if implicit_fun_str is None:
         pass
     else:
-        verts, faces, normals = make_implicit_surface_mesh(
-            implicit_fun_str, xyz_minmax, Nxyz
-        )
+        verts, faces, normals = make_implicit_surface_mesh(implicit_fun_str, xyz_minmax, Nxyz)
     # normal_norms = np.linalg.norm(normals, axis=1)
     # normals = np.array([n / np.linalg.norm(n) for n in normals])
 
@@ -601,9 +598,7 @@ def make_sample_mesh(surface_name, Nxyz=None, xyz_minmax=None):
 def save_mesh_to_ply(vertices, faces, file_path):
     """saves vertex+face list to a .ply file"""
     # Create the vertex data
-    vertex_data = np.array(
-        [tuple(v) for v in vertices], dtype=[("x", "f8"), ("y", "f8"), ("z", "f8")]
-    )
+    vertex_data = np.array([tuple(v) for v in vertices], dtype=[("x", "f8"), ("y", "f8"), ("z", "f8")])
 
     # Create the face data
     face_data = np.empty(len(faces), dtype=[("vertex_indices", "i4", (3,))])
@@ -623,9 +618,7 @@ def load_mesh_from_ply(file_path):
     plydata = PlyData.read(file_path)
 
     # Extract the vertex and face data
-    vertices = np.vstack(
-        [plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]]
-    ).T
+    vertices = np.vstack([plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]]).T
     faces = np.vstack(plydata["face"]["vertex_indices"])
 
     if not isinstance(vertices[0], np.float64):
@@ -669,9 +662,7 @@ def save_all_sample_meshes():
         xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         file_path = f"./data/ply_files/{surface_name}.ply"
         print(file_path + 15 * " ", end="\r")
-        save_sample_mesh_to_ply(
-            surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax
-        )
+        save_sample_mesh_to_ply(surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax)
         print(file_path + " -done" + 9 * " ", end="\n")
     for _ in surface_names:
         surface_name = _
@@ -679,9 +670,7 @@ def save_all_sample_meshes():
         xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         file_path = f"./data/ply_files/{surface_name}_fine.ply"
         print(file_path + 15 * " ", end="\r")
-        save_sample_mesh_to_ply(
-            surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax
-        )
+        save_sample_mesh_to_ply(surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax)
         print(file_path + " -done" + 9 * " ", end="\n")
     for _ in surface_names:
         surface_name = _
@@ -689,9 +678,7 @@ def save_all_sample_meshes():
         xyz_minmax = [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
         print(file_path + 15 * " ", end="\r")
         file_path = f"./data/ply_files/{surface_name}_coarse.ply"
-        save_sample_mesh_to_ply(
-            surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax
-        )
+        save_sample_mesh_to_ply(surface_name, file_path=file_path, Nxyz=Nxyz, xyz_minmax=xyz_minmax)
         print(file_path + " -done" + 9 * " ", end="\n")
     print("\ndone")
 
@@ -704,9 +691,7 @@ def save_halfedge_mesh_from_ply(ply_path, output_directory):
     plydata = PlyData.read(ply_path)
 
     # Extract the vertex and face data
-    vertices = np.vstack(
-        [plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]]
-    ).T
+    vertices = np.vstack([plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]]).T
     faces = np.vstack(plydata["face"]["vertex_indices"])
 
     if not isinstance(vertices[0], np.float64):
@@ -855,9 +840,7 @@ def regularize_halfedge_mesh_data(
     )
 
 
-def sphere_oblate_torus_dumbbell_mesh_inputs(
-    reg=True, coarse=False, fine=False, ultrafine=False
-):
+def sphere_oblate_torus_dumbbell_mesh_inputs(reg=True, coarse=False, fine=False, ultrafine=False):
     """Gets list of inputs required to make .ply files and halfedge mesh
     data for sphere, oblate spheroid, torus, and dumbbell
 
@@ -933,9 +916,7 @@ def sphere_oblate_torus_dumbbell_mesh_inputs(
     return surfaces
 
 
-def generate_regularize_save_mesh(
-    implicit_fun_str, Nxyz, xyz_minmax, ply_path, mesh_directory
-):
+def generate_regularize_save_mesh(implicit_fun_str, Nxyz, xyz_minmax, ply_path, mesh_directory):
     """Uses marching cubes to generate vertex/face list for the
     zero level set 'implicit_fun_str', builds halfedge mesh data, and regularizes
     mesh. Saves vertex/face list .ply file to 'ply_path' and saves
@@ -947,9 +928,7 @@ def generate_regularize_save_mesh(
     os.system(f"rm -r {mesh_directory}")
     os.system(f"mkdir {mesh_directory}")
     print(" generating .ply file", end="\r")
-    vertices_in, faces_in, normals = make_implicit_surface_mesh(
-        implicit_fun_str, xyz_minmax, Nxyz
-    )
+    vertices_in, faces_in, normals = make_implicit_surface_mesh(implicit_fun_str, xyz_minmax, Nxyz)
     save_mesh_to_ply(vertices_in, faces_in, ply_path)
     print(" generating .ply file -done")
     print(" generating halfedge mesh data", end="\r")
@@ -1007,12 +986,8 @@ def generate_regularize_save_mesh(
     print(" saving -done")
 
 
-def generate_sphere_oblate_torus_dumbbell(
-    reg=True, coarse=False, fine=False, ultrafine=False
-):
-    surfaces = sphere_oblate_torus_dumbbell_mesh_inputs(
-        reg=reg, coarse=coarse, fine=fine, ultrafine=ultrafine
-    )
+def generate_sphere_oblate_torus_dumbbell(reg=True, coarse=False, fine=False, ultrafine=False):
+    surfaces = sphere_oblate_torus_dumbbell_mesh_inputs(reg=reg, coarse=coarse, fine=fine, ultrafine=ultrafine)
     for surf in surfaces:
         print(55 * "-")
         generate_regularize_save_mesh(**surf)
@@ -1070,9 +1045,7 @@ def time_mesh_inputs():
     return surfaces
 
 
-def time_generate_regularize_save_mesh(
-    implicit_fun_str, Nxyz, xyz_minmax, ply_path, mesh_directory
-):
+def time_generate_regularize_save_mesh(implicit_fun_str, Nxyz, xyz_minmax, ply_path, mesh_directory):
     """Uses marching cubes to generate vertex/face list for the
     zero level set 'implicit_fun_str', builds halfedge mesh data, and regularizes
     mesh. Saves vertex/face list .ply file to 'ply_path' and saves
@@ -1089,9 +1062,7 @@ def time_generate_regularize_save_mesh(
     os.system(f"mkdir {mesh_directory}")
     print(" generating .ply file", end="\r")
     tdict["make_implicit_surface_mesh"] = time()
-    vertices_in, faces_in, normals = make_implicit_surface_mesh(
-        implicit_fun_str, xyz_minmax, Nxyz
-    )
+    vertices_in, faces_in, normals = make_implicit_surface_mesh(implicit_fun_str, xyz_minmax, Nxyz)
     tdict["make_implicit_surface_mesh"] = time() - tdict["make_implicit_surface_mesh"]
     tdict["save_mesh_to_ply0"] = time()
     save_mesh_to_ply(vertices_in, faces_in, ply_path)
@@ -1138,9 +1109,7 @@ def time_generate_regularize_save_mesh(
         faces,
         F_hedge,
     )
-    tdict["regularize_halfedge_mesh_data"] = (
-        time() - tdict["regularize_halfedge_mesh_data"]
-    )
+    tdict["regularize_halfedge_mesh_data"] = time() - tdict["regularize_halfedge_mesh_data"]
     print(" regularizing halfedge mesh data -done" + 15 * " ")
     print(" saving", end="\r")
     tdict["save_halfedge_mesh_data"] = time()

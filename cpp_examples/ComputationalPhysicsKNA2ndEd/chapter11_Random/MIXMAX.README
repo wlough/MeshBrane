@@ -1,0 +1,2 @@
+g++ -Wformat=0 -std=c++11 MIXMAX/mixmax.cpp MIXMAX/example.cpp
+g++ -c -Wformat=0 -std=c++11 MIXMAX/mixmax.cpp
