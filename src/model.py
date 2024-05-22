@@ -248,17 +248,14 @@ class Brane:
     ###########################################################################
 
     def _get_halfedges(self, vertices, faces):
-        """Builds halfedges from vertices and faces, assigns an integer-valued
-        label/index to each halfedge, and determines whether the halfedge is
+        """Builds halfedges from vertices and faces and determines whether the halfedge is
         contained in the boundary of the mesh."""
         halfedges = []
         H_isboundary = []
-        # H_lab = []
         ####################
         # save and label halfedges
         h = 0
         for face in faces:
-            # face = faces[f]
             N_v_of_f = len(face)
             for _ in range(N_v_of_f):
                 # index shift to get next
@@ -268,7 +265,6 @@ class Brane:
                 hedge = [v0, v1]
                 halfedges.append(hedge)
                 H_isboundary.append(False)
-                # H_lab.append(h)
                 h += 1
 
         for hedge in halfedges:
@@ -279,12 +275,10 @@ class Brane:
             except Exception:
                 halfedges.append(hedge_twin)
                 H_isboundary.append(True)
-                # H_lab.append(h)
                 h += 1
 
         return (
             np.array(halfedges, dtype=np.int32),
-            # np.array(H_lab, dtype=np.int32),
             np.array(H_isboundary),
         )
 

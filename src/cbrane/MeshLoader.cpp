@@ -1,28 +1,39 @@
 // MeshLoader.cpp
-
 #include "MeshLoader.hpp"
-#include "tinyply.h"
-#include <fstream>
-#include <stdexcept>
 
-std::pair<std::vector<double3>, std::vector<int3>> MeshLoader::load_mesh_from_ply(const std::string& filename)
-{
-    std::ifstream ss(filename, std::ios::binary);
-    if (ss.fail()) throw std::runtime_error("failed to open " + filename);
+// Constructor stores the file path.
+MeshLoader::MeshLoader(const std::string& filepath) : filepath_(filepath) {
+    // Set the combinatorial mesh data.
+    set_combinatorial_mesh_data();
+}
 
-    tinyply::PlyFile file(ss);
+std::vector<double3> MeshLoader::get_vertex_positions() {
+    return V;
+}
 
-    std::vector<double3> vertices;
-    std::vector<int3> faces;
+// Load calls load_face_vertex_list_from_ply with the stored file path.
+FaceVertexList MeshLoader::load() {
+    // Use the function from brane_utils to load the mesh from the PLY file.
+    return load_face_vertex_list_from_ply(filepath_);
+}
 
-    const size_t numVerticesBytes = file.request_properties_from_element("vertex", { "x", "y", "z" }, vertices);
-    const size_t numFacesBytes = file.request_properties_from_element("face", { "vertex_indices" }, faces, 3);
+void MeshLoader::set_combinatorial_mesh_data() {
+    // Set the combinatorial mesh data.
+    FaceVertexList face_vertex_list = load_face_vertex_list_from_ply(filepath_);
+    faceVertexList = face_vertex_list;
+    V = face_vertex_list.vertices;
+    F = face_vertex_list.faces;
+    H = get_halfedge_vertex_indices();
+}
 
-    file.read(ss);
-
-    if (vertices.empty() || faces.empty()) {
-        throw std::runtime_error("file " + filename + " does not contain valid ply data");
+std::vector<uint2> MeshLoader::get_halfedge_vertex_indices() {
+    std::vector<uint2> halfedge_vertex_indices;
+    for (size_t i = 0; i < F.size(); ++i) {
+        uint3 face = F[i];
+        for (size_t j = 0; j < 3; ++j) {
+            uint2 halfedge_vertex_index = {face[j], face[(j + 1) % 3]};
+            halfedge_vertex_indices.push_back(halfedge_vertex_index);
+        }
     }
-
-    return {vertices, faces};
+    return halfedge_vertex_indices;
 }
