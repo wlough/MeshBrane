@@ -7,45 +7,12 @@
 #define brane_utils_hpp
 
 #include <Eigen/Dense> // Eigen::Vector3d
-#include <cmath>       // std::sqrt
+// #include <cmath>       // std::sqrt
 #include <string>      // std::string
 #include <vector>
 
-// /**
-//  * @struct double3
-//  *
-//  * @brief Components of 3D vector with double precision.
-//  */
-// struct double3 {
-//   double x, y, z;
-// };
 
-// /**
-//  * @struct float4
-//  *
-//  * @brief rgba.
-//  */
-// struct float4 {
-//   float w, x, y, z;
-// };
 
-// /**
-//  * @struct uint2
-//  *
-//  * @brief Indices of vertices in (half-)edges.
-//  */
-// struct uint2 {
-//   uint32_t x, y;
-// };
-
-// /**
-//  * @struct uint3
-//  *
-//  * @brief Indices of vertices/edges in faces.
-//  */
-// struct uint3 {
-//   uint32_t x, y, z;
-// };
 
 /**
  * @struct VertexFaceList
@@ -66,47 +33,78 @@ struct HE_edge;
 struct HE_vertex;
 struct HE_face;
 
+class Chart;
+class Atlas;
+class Brane;
+class Chart;
+
+class Atlas {
+  std::vector<Chart*> charts;
+}
+
 struct HalfEdgeMesh {
   std::vector<HE_vertex *> vertices; // All vertices in the mesh
   std::vector<HE_edge *> halfedges;  // All half-edges in the mesh
   std::vector<HE_face *> faces;      // All faces in the mesh
 };
 
-/**
- * @struct HE_vertex
- * @brief Vertex in a half-edge mesh.
- */
-struct HE_vertex {
-  Eigen::Vector3d xyz; // position
-  HE_edge *edge;       // half-edge emanating from vertex
-};
+// /**
+//  * @struct HE_vertex
+//  * @brief Vertex in a half-edge mesh.
+//  */
+// struct HE_vertex {
+//   Eigen::Vector3d xyz; // position
+//   HE_edge *edge;       // half-edge emanating from vertex
+// };
+
+// /**
+//  * @struct HE_face
+//  * @brief Face in a half-edge mesh.
+//  */
+// struct HE_face {
+//   HE_edge *edge; // half-edge on the face
+// };
+
+// /**
+//  * @struct HalfEdge
+//  * @brief Half-edge in a half-edge mesh.
+//  */
+// struct HE_edge {
+//   HE_vertex *vertex; // vertex at the end of the half-edge
+//   HE_edge *twin;     // oppositely oriented adjacent half-edge
+//   HE_edge *next;     // next half-edge around the face
+//   HE_face *face;     // face the half-edge borders
+//   // Method to get the previous half-edge
+//   HE_edge *getPrev() {
+//     HE_edge *edge = this->next;
+//     while (edge->next != this) {
+//       edge = edge->next;
+//     }
+//     return edge;
+//   bool isBoundary() { return this->twin == nullptr; }
+//   }
+// };
 
 /**
- * @struct HE_face
- * @brief Face in a half-edge mesh.
+ * Mesh loading and processing utilities
  */
-struct HE_face {
-  HE_edge *edge; // half-edge on the face
-};
 
 /**
- * @struct HalfEdge
- * @brief Half-edge in a half-edge mesh.
+ * @brief Load a face-vertex mesh from a .ply file.
+ *
+ * @param filepath Path to the .ply file.
+ * @return FaceVertexList
  */
-struct HE_edge {
-  HE_vertex *vertex; // vertex at the end of the half-edge
-  HE_edge *twin;     // oppositely oriented adjacent half-edge
-  HE_edge *next;     // next half-edge around the face
-  HE_face *face;     // face the half-edge borders
-  // Method to get the previous half-edge
-  HE_edge *getPrev() {
-    HE_edge *edge = this->next;
-    while (edge->next != this) {
-      edge = edge->next;
-    }
-    return edge;
-  }
-};
+VertexFaceList load_face_vertex_list_from_ply(const std::string &filepath);
+
+std::pair<std::vector<std::array<double, 3>>,
+          std::vector<std::array<uint32_t, 3>>>
+load_vertex_face_list_from_ply(const std::string &filepath);
+
+#endif
+
+
+
 
 // /**
 //  * 3D vector operations.
@@ -148,21 +146,3 @@ struct HE_edge {
 // inline double triprod(const double3 &a, const double3 &b, const double3 &c) {
 //   return dot(a, cross(b, c));
 // }
-
-/**
- * Mesh loading and processing utilities
- */
-
-/**
- * @brief Load a face-vertex mesh from a .ply file.
- *
- * @param filepath Path to the .ply file.
- * @return FaceVertexList
- */
-VertexFaceList load_face_vertex_list_from_ply(const std::string &filepath);
-
-std::pair<std::vector<std::array<double, 3>>,
-          std::vector<std::array<uint32_t, 3>>>
-load_vertex_face_list_from_ply(const std::string &filepath);
-
-#endif
