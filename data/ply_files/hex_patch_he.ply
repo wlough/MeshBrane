@@ -1,0 +1,47 @@
+ply
+format ascii 1.0
+comment this is but a test
+element vertex 7
+property double x
+property double y
+property double z
+property uint e
+element face 6
+property uint e
+element edge 18
+property uint v
+property uint f
+property uint n
+property int t
+end_header
+0 0 0.1 15 
+0.883793 0 0.1 17 
+0.48111 0.833308 0.05 4 
+-0.397404 0.688324 -0.05 7 
+-0.847898 1.03838e-16 -0.1 10 
+-0.476657 -0.825594 -0.05 13 
+0.475166 -0.823011 0.05 16 
+2 
+5 
+8 
+11 
+14 
+17 
+1 0 1 17 
+2 0 2 -1 
+0 0 0 3 
+2 1 4 2 
+3 1 5 -1 
+0 1 3 6 
+3 2 7 5 
+4 2 8 -1 
+0 2 6 9 
+4 3 10 8 
+5 3 11 -1 
+0 3 9 12 
+5 4 13 11 
+6 4 14 -1 
+0 4 12 15 
+6 5 16 14 
+1 5 17 -1 
+0 5 15 0 
