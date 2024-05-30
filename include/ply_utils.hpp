@@ -87,7 +87,7 @@ public:
  */
 struct TriMeshData {
   std::vector<Eigen::Vector3d> vertices;
-  std::vector<std::array<uint32_t, 2>> edges;
+  // std::vector<std::array<uint32_t, 2>> edges;
   std::vector<std::array<uint32_t, 3>> faces;
 };
 

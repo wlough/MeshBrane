@@ -93,11 +93,11 @@ void test_ply_precision() {
 }
 
 int main() {
-  // test_load_tri_mesh_data_from_ply();
-  // test_load_write_to_ply();
-  // test_HalfEdgeMeshData();
-  // test_write_he_mesh_data_to_ply();
-  // test_ply_precision();
+  test_load_tri_mesh_data_from_ply();
+  test_load_write_to_ply();
+  test_HalfEdgeMeshData();
+  test_write_he_mesh_data_to_ply();
+  test_ply_precision();
   test_load_he_mesh_data_from_ply();
   return EXIT_SUCCESS;
 }

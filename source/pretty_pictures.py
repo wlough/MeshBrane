@@ -133,7 +133,7 @@ make_output_directory(output_directory)
 
 # %%
 file_path = "./data/ply_files/hex_patch.ply"
-
+file_path = "/home/wlough/git/MeshBrane/data/ply_files/dumbbell_nobinary.ply"
 ply_plot(
     file_path,
     show=True,
