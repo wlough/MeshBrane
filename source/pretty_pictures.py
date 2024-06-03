@@ -125,27 +125,27 @@ def load_he_mesh_from_ply(file_path):
     return V, V_edge, F_edge, E_vertex, E_face, E_next, E_twin
 
 
-he_path = "./data/ply_files/hex_patch_he.ply"
-V, V_edge, F_edge, E_vertex, E_face, E_next, E_twin = load_he_mesh_from_ply(he_path)
+# he_path = "./data/ply_files/hex_patch_he.ply"
+# V, V_edge, F_edge, E_vertex, E_face, E_next, E_twin = load_he_mesh_from_ply(he_path)
 # %%
-output_directory = "../output/test_output"
-make_output_directory(output_directory)
+# output_directory = "../output/test_output"
+# make_output_directory(output_directory)
 
 # %%
-file_path = "./data/ply_files/hex_patch.ply"
-file_path = "/home/wlough/git/MeshBrane/data/ply_files/dumbbell_nobinary.ply"
-ply_plot(
-    file_path,
-    show=True,
-    save=False,
-    fig_path=None,
-    plot_vertices=True,
-    plot_edges=True,
-    plot_faces=True,
-)
+# file_path = "./data/ply_files/hex_patch.ply"
+# file_path = "/home/wlough/git/MeshBrane/data/ply_files/dumbbell_nobinary.ply"
+# ply_plot(
+#     file_path,
+#     show=True,
+#     save=False,
+#     fig_path=None,
+#     plot_vertices=True,
+#     plot_edges=True,
+#     plot_faces=True,
+# )
 
 # %%
-from src.utils import save_mesh_to_ply, load_mesh_from_ply, make_trisurface_patch
+# from src.utils import save_mesh_to_ply, load_mesh_from_ply, make_trisurface_patch
 
 # theta = np.linspace(0, 2 * np.pi, 6, endpoint=False)
 
@@ -167,8 +167,8 @@ from src.utils import save_mesh_to_ply, load_mesh_from_ply, make_trisurface_patc
 #     faces = np.array([*faces, [0, N, 1]], dtype=np.int32)
 #     return vertices, faces
 #
-
-file_path = "./data/ply_files/hex_patch.ply"
-V, F = make_trisurface_patch(6)
-save_mesh_to_ply(V, F, file_path)
+#
+# file_path = "./data/ply_files/hex_patch.ply"
+# V, F = make_trisurface_patch(6)
+# save_mesh_to_ply(V, F, file_path)
 # %%
