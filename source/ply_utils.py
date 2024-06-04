@@ -5,7 +5,8 @@ import os
 
 
 def generate_half_edge_mesh_ply(vf_ply_dir, he_ply_dir, use_binary=True):
-
+    """Generates a half edge mesh ply in he_ply_dir for each vertex-face list
+    ply in vf_ply_dir"""
     vf_ply_files = glob.glob(vf_ply_dir + "/*.ply")
     print("Generating half edge mesh data for:")
     for vf_ply in vf_ply_files:
@@ -50,6 +51,8 @@ class TriMeshData:
 
 
 class HalfEdgeMeshData:
+    """E_twin[e]=-1 if half-edge e is on the boundary (i.e. it has no twin half-edge)"""
+
     def __init__(self, V, V_edge, E_vertex, E_face, E_next, E_twin, F_edge):
         self.V = np.copy(V)
         self.V_edge = np.copy(V_edge)
@@ -186,12 +189,3 @@ class HalfEdgeMeshData:
 
         vf_mesh = TriMeshData(V, F)
         vf_mesh.to_ply(ply_path, use_binary=use_binary)
-
-
-def ply_test():
-
-    ply_in = "./convergence_tests/data/vf_ply_files/dumbbell.ply"
-    ply_out = "./convergence_tests/data/vf_ply_files/dumbbell_test.ply"
-
-    mesh = HalfEdgeMeshData.from_vertex_face_ply(ply_in)
-    mesh.to_vertex_face_ply(ply_out, use_binary=False)
