@@ -4,6 +4,41 @@ from scipy.sparse import coo_matrix
 
 
 class Brane:
+    """A Helfrich membrane represented by array based half-edge mesh data structure.
+
+    Attributes:
+        V: 2D numpy array of vertex positions
+        V_edge: 1D numpy array of half-edge indices for each vertex
+        E_vertex: 1D numpy array of vertex indices for each half-edge
+        E_face: 1D numpy array of face indices for each half-edge
+        E_next: 1D numpy array of next half-edge indices for each half-edge
+        E_twin: 1D numpy array of twin half-edge indices for each half-edge
+        F_edge: 1D numpy array of half-edge indices for each face
+        V_rgba: 2D numpy array of vertex color values
+        V_normal_rgba: 2D numpy array of vertex normal color values
+        V_radius: 1D numpy array of vertex radii
+        E_rgba: 2D numpy array of edge color values
+        F_rgba: 2D numpy array of face color values
+
+        # mesh navigation #
+        get_face(f): Returns the vertex indices of a face
+        get_faces(): Returns the vertex indices of all faces
+        get_edge(e): Returns the vertex indices of an edge
+        prev(e): Returns the previous half-edge index
+        next(e): Returns the next half-edge index
+        twin(e): Returns the twin half-edge index
+        e_of_v(v): Returns the half-edge index of a vertex
+        e_of_f(f): Returns the half-edge index of a face
+        v_of_e(e): Returns the vertex index of a half-edge
+        f_of_e(e): Returns the face index of a half-edge
+        get_V_one_ring_neighbors(i): Returns the vertex indices of the one-ring neighbors of a vertex
+        get_E_one_ring_neighbors(v): Returns the half-edge indices of the one-ring neighbors of a vertex
+        get_order_n_plus_one_edges(E_inner): Returns the half-edge indices of the (n+1)th-order neighbors of a vertex
+        valence(v): Returns the valence of a vertex
+        shifted_hedge_vectors(): Returns the shifted half-edge vectors for visualization
+
+    """
+
     def __init__(self, V, V_edge, E_vertex, E_face, E_next, E_twin, F_edge):
         self.V = np.copy(V)
         self.V_edge = np.copy(V_edge)
@@ -173,7 +208,9 @@ class Brane:
     def visual_defaults(self):
         face_rgba = np.array([0.0, 0.63335, 0.05295, 0.8])
         edge_rgba = np.array([1.0, 0.498, 0.0, 1.0])
-        vertex_rgba = np.array([1.0, 0.498, 0.0, 1.0])  # np.array([0.7057, 0.0156, 0.1502])
+        vertex_rgba = np.array(
+            [1.0, 0.498, 0.0, 1.0]
+        )  # np.array([0.7057, 0.0156, 0.1502])
         vertex_radius = 0.025
         normal_rgba = np.array([0.0, 0.0, 0.0, 1.0])  # (1.0, 0.0, 0.0)
 
@@ -238,8 +275,12 @@ class Brane:
             h = self.E_twin[h]
             v2 = self.E_vertex[h]
             r2 = self.V[v2]
-            A_face_vec = np.cross(r, r1) / 2 + np.cross(r1, r2) / 2 + np.cross(r2, r) / 2
-            A_face = np.sqrt(A_face_vec[0] ** 2 + A_face_vec[1] ** 2 + A_face_vec[2] ** 2)
+            A_face_vec = (
+                np.cross(r, r1) / 2 + np.cross(r1, r2) / 2 + np.cross(r2, r) / 2
+            )
+            A_face = np.sqrt(
+                A_face_vec[0] ** 2 + A_face_vec[1] ** 2 + A_face_vec[2] ** 2
+            )
             A += A_face / 3
 
             if h == h_start:
@@ -271,21 +312,46 @@ class Brane:
             normDrjjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
             # normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # np.crossnp.linalg.norm(u2)
             normDrjp1i = np.sqrt(rjp1_rjp1 - 2 * rjp1_ri + ri_ri)
-            cos_thetajijp1 = (ri_ri + rj_rjp1 - ri_rj - rjp1_ri) / (normDrij * normDrjp1i)
-            cos_thetajp1ji = (rj_rj + rjp1_ri - rj_rjp1 - ri_rj) / (normDrij * normDrjjp1)
-            cos_thetaijp1j = (rjp1_rjp1 + ri_rj - rj_rjp1 - rjp1_ri) / (normDrjp1i * normDrjjp1)
+            cos_thetajijp1 = (ri_ri + rj_rjp1 - ri_rj - rjp1_ri) / (
+                normDrij * normDrjp1i
+            )
+            cos_thetajp1ji = (rj_rj + rjp1_ri - rj_rjp1 - ri_rj) / (
+                normDrij * normDrjjp1
+            )
+            cos_thetaijp1j = (rjp1_rjp1 + ri_rj - rj_rjp1 - rjp1_ri) / (
+                normDrjp1i * normDrjjp1
+            )
             if cos_thetajijp1 < 0:
                 semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
-                Atot += np.sqrt(semiP * (semiP - normDrij) * (semiP - normDrjjp1) * (semiP - normDrjp1i)) / 2
+                Atot += (
+                    np.sqrt(
+                        semiP
+                        * (semiP - normDrij)
+                        * (semiP - normDrjjp1)
+                        * (semiP - normDrjp1i)
+                    )
+                    / 2
+                )
                 # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 4
             elif cos_thetajp1ji < 0 or cos_thetaijp1j < 0:
                 semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
-                Atot += np.sqrt(semiP * (semiP - normDrij) * (semiP - normDrjjp1) * (semiP - normDrjp1i)) / 4
+                Atot += (
+                    np.sqrt(
+                        semiP
+                        * (semiP - normDrij)
+                        * (semiP - normDrjjp1)
+                        * (semiP - normDrjp1i)
+                    )
+                    / 4
+                )
                 # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 8
             else:
                 cot_thetaijp1j = cos_thetaijp1j / np.sqrt(1 - cos_thetaijp1j**2)
                 cot_thetajp1ji = cos_thetajp1ji / np.sqrt(1 - cos_thetajp1ji**2)
-                Atot += normDrij**2 * cot_thetaijp1j / 8 + normDrjp1i**2 * cot_thetajp1ji / 8
+                Atot += (
+                    normDrij**2 * cot_thetaijp1j / 8
+                    + normDrjp1i**2 * cot_thetajp1ji / 8
+                )
 
             hij = hijp1
             if hij == h_start:
@@ -455,9 +521,13 @@ class Brane:
                 len_jjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
                 len_ij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
 
-                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (len_ijm1 * len_jjm1)
+                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (
+                    len_ijm1 * len_jjm1
+                )
 
-                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (len_ijp1 * len_jjp1)
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (
+                    len_ijp1 * len_jjp1
+                )
 
                 cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
                 cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
@@ -515,9 +585,13 @@ class Brane:
                 len_jjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
                 len_ij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
 
-                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (len_ijm1 * len_jjm1)
+                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (
+                    len_ijm1 * len_jjm1
+                )
 
-                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (len_ijp1 * len_jjp1)
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (
+                    len_ijp1 * len_jjp1
+                )
 
                 cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
                 cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)

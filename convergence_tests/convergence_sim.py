@@ -9,7 +9,8 @@ import shutil
 # from source.pretty_pictures import ply_plot
 from time import time
 
-
+a = [1, 2].copy()
+a
 # from src.pretty_pictures import mayavi_plots as mp
 # from matplotlib import colormaps as plt_cmap
 # import matplotlib.pyplot as plt
