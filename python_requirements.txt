@@ -1,0 +1,9 @@
+ipykernel
+matplotlib
+mayavi
+numpy
+plyfile
+PyQt5
+scipy
+sympy
+scikit-image

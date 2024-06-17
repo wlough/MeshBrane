@@ -1,5 +1,6 @@
 ply
 format ascii 1.0
+comment this is a comment about hex_patch.ply
 element vertex 7
 property double x
 property double y

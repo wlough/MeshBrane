@@ -1,3 +1,13 @@
+###########################################################################################
+# Finite groups
+# -------------
+# A bag of tricks for working with permutations, group actions, and group representations.
+###########################################################################################
+
+###################################################
+# Symmetric group on Zn=[0,...,n-1]
+
+
 def compose(P, Q):
     """
     Compose two permutations P*Q
@@ -143,7 +153,6 @@ def compute_nontrivial_cycles(P):
     return cycles, parity  # cycle_num - cycle_len % 2 == 0
 
 
-##########################################
 def relative_parity(P, Q):
     """
     Equivalence relation on the set of lists of integers. Two lists are equivalent if they are related by an even permutation
@@ -163,95 +172,14 @@ def relative_parity(P, Q):
     return parity(compose(P, Q))
 
 
-##########################################
-def argsort(U):
-    """
-    Returns permutation of the indices of U, that sorts U.
-
-    sorted(U)= [U[i] for i in argsort(U)]
-
-    Parameters
-    ----------
-    U : list of objects which have __lt__() method
-
-    Returns
-    -------
-    list of int : list of indices
-    """
-    return sorted(range(len(U)), key=U.__getitem__)
-
-
-def parity_of_argsort(U):
-    """
-    Determine parity of a permutation of U which sorts the
-
-    Parameters
-    ----------
-    U : list of objects which have __lt__() method
-
-    Returns
-    -------
-    bool : True for even permutation, False for odd for false
-    """
-    return parity(argsort(U))
-
-
-def relative_permutation(Xsource, Xtarget):
-    """
-    Returns permutation of the indices of Xsource that maps Xsource to Xtarget.
-
-    relative_permutation(Xsource, Xtarget) = [Xsource.index(x) for x in Xtarget]
-                                           = [Xsource.index(Xtarget[i]) for i in Zn]
-
-    Parameters
-    ----------
-    Xsource : list
-        each element of Xsource must be unique (no duplicates)
-    Xtarget : list
-        permutation of Xsource
-
-    Returns
-    -------
-    list of int : list of indices
-
-    Notes
-    -----
-    The lists can be seen as bijections,
-    Fs:Zn->V
-    Fs(i)=Xsource[i]
-    Ft:Zn->V
-    Ft(i)=Xtarget[i],
-    from Zn=[0,...,n-1] into their shared codomain V=set(Xsource)=set(Xtarget). This function returns the permutation Pst = (Fs^-1)*Ft satisfying Ft = Fs*Pst.
-
-    Fs^-1:V->Zn
-    Fs^-1(x) = Xsource.index(x)
-
-    Ft:Zn->V
-    Ft(i)=Xtarget[i]
-    Ft^-1:V->Zn
-    Ft^-1(y) = Xtarget.index(y)
-
-    Xtarget = [Xsource[i] for i in P]
-    xt_{i} = xs_{P(i)}
-
-    Xsource=[x0,x1,x2,x3]->[0,1,2,3]
-    Xtarget=[x1,x0,x3,x2]->[1,0,3,2]=[Xsource.index(x) for x in Xtarget]
-    """
-    return [Xsource.index(x) for x in Xtarget]
-
-
-##########################################
-# Permutation group on Zn=[0,...,n-1]
-
-
 class PermutationBase:
     """
-    An element of the symmetric group Sn on n elements, represented as a permutation of the list [0,...,n-1].
+    An element of the symmetric group on [0,...,n-1].
 
     Attributes
     ----------
     P : list of int
-        permutation [0,...,N-1]
+        permutation [0,...,n-1]
     cycles : set of tuples
         cycle decomposition
     parity : bool
@@ -370,6 +298,129 @@ class PermutationBase:
 
     def __repr__(self):
         return str(self.P)
+
+
+##########################################
+# Symmetric group on [...list of objects...]
+def right_action(P, X):
+    """
+    Right action of a permutation P on a list X.
+
+    Parameters
+    ----------
+    P : list of int
+        Permutation [0,...,N-1]
+    X : list of objects with len(X)=N
+
+    Returns
+    -------
+    permutation of X
+    """
+    return [X[P[i]] for i in range(len(P))]
+
+
+def left_action(P, X):
+    """
+    Left action of a permutation P on a list X. Equivalent to right_action(inverse(P), X).
+
+    Parameters
+    ----------
+    P : list of int
+        Permutation [0,...,N-1]
+    X : list of objects with len(X)=N
+
+    Returns
+    -------
+    permutation of X
+    """
+    return [X[P.index(i)] for i in range(len(P))]
+
+
+def arg_right_action(Xsource, Xtarget):
+    """
+    Return permutation P that maps Xsource to Xtarget by right action:
+
+        Xtarget[i] = (P*Xsource)[i]=Xsource[P[i]].
+
+    Parameters
+    ----------
+    Xsource : list
+        each element of Xsource must be unique (no duplicates)
+    Xtarget : list
+        permutation of Xsource
+
+    Returns
+    -------
+    list of int : list of source indices in the order they appear in target
+
+    Example
+    -------
+    Xsource=[a, b, c, d], Xtarget=[b, a, d, c]
+            [0, 1, 2, 3]        P=[1, 0, 3, 2]
+
+    Notes
+    -----
+    arg_right_action(Xsource, Xtarget) = [Xsource.index(x) for x in Xtarget]
+                                       = [Xsource.index(Xtarget[i]) for i in Zn]
+    """
+    return [Xsource.index(x) for x in Xtarget]
+
+
+def arg_left_action(Xsource, Xtarget):
+    """
+    Return permutation P that maps Xsource to Xtarget by left action (inverse right action):
+
+        Xtarget[i] = (P*Xsource)[i]=Xsource[P^-1[i]].
+
+    Parameters
+    ----------
+    Xsource : list
+        each element of Xsource must be unique (no duplicates)
+    Xtarget : list
+        permutation of Xsource
+
+    Returns
+    -------
+    list of int : list of target indices in the order they appear in source
+
+    """
+    return [Xtarget.index(x) for x in Xsource]
+
+
+def argsort(X):
+    """
+    Returns permutation of the indices of X, that sorts X. Equivalent to arg_right_action(Xsource, Xtarget) with Xsource=X and Xtarget=sorted(X).
+
+    sorted(X)= [X[i] for i in argsort(X)]
+
+    Parameters
+    ----------
+    X : list of objects which have __lt__() method
+
+    Returns
+    -------
+    list of int : list of indices
+    """
+    return sorted(range(len(X)), key=X.__getitem__)
+
+
+def parity_of_argsort(X):
+    """
+    Determine parity of a permutation of U which sorts the
+
+    Parameters
+    ----------
+    X : list of objects which have __lt__() method
+
+    Returns
+    -------
+    bool : True for even permutation, False for odd for false
+    """
+    return parity(argsort(X))
+
+
+##########################################
+# Permutation group on Zn=[0,...,n-1]
 
 
 class CombinatorialSimplex:
@@ -511,21 +562,6 @@ def parity0(P):
 
 
 def parity_of_argsort0(U):
-    """
-    Determine parity of a permutation of U which sorts the
-
-    Parameters
-    ----------
-    U : list of objects which have __lt__() method
-
-    Returns
-    -------
-    bool : True for even permutation, False for odd for false
-    """
-    return parity(sorted(range(len(U)), key=U.__getitem__))
-
-
-def parity_of_argsort1(U):
     """
     Determine parity of a permutation which sorts the list U using a cycle detection algorithm.
 

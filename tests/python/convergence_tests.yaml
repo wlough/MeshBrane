@@ -1,0 +1,25 @@
+run_name: convergence_test
+n_dim: 3
+run_time: 1.0
+dt: 0.005
+movie_flag: true
+movie_data_flag: true
+dt_movie: 0.01
+checkpoint_flag: false
+dt_checkpoint: 0.01
+output_directory: output
+brane:
+  - name: brane0
+    insert_file: brain0.yaml
+    length_reg_stiffness: 1e-9
+    area_reg_stiffness: 1e-3
+    volume_reg_stiffness: 1e1
+    bending_modulus: 1e-1
+    splay_modulus: 1.0
+    spontaneous_curvature: 0.0
+    linear_drag_coeff: 1e3
+centrosome:
+  - name: spb0
+    insert_file: spb0.yaml
+  - name: spb1
+    insert_file: spb1.yaml

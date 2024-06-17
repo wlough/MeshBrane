@@ -1,0 +1,11 @@
+ply_file: ./data/ply/ascii/dumbbell.ply
+transformation:
+  - name: translation
+    type: translation
+    vector: [0.0, 0.0, 0.0]
+  - name: rotation
+    type: rotation
+    quaternion: [1.0, 0.0, 0.0, 0.0]
+  - name: scale
+    type: scale
+    factor: 1.0
