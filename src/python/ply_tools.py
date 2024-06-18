@@ -581,6 +581,12 @@ class VertTri2HalfEdgeConverter:
         ply_data = PlyData.read(file_path)
         return cls(ply_data)
 
+    @classmethod
+    def from_source_samples(cls, source_samples):
+        (V, F) = source_samples
+        source_ply_data = self.source_schema.samples_to_ply_data(*source_samples)
+        return cls(ply_data)
+
     def get_index_of_twin(self, E, e):
         Nedges = len(E)
         v0 = E[e][0]
@@ -634,6 +640,10 @@ class VertTri2HalfEdgeConverter:
     def write_target_ply(self, target_path=None, use_ascii=False):
         self.target_ply_data.text = use_ascii
         self.target_ply_data.write(target_path)
+
+    @property
+    def target_samples(self):
+        return self.target_schema.ply_data_to_samples(self.target_ply_data)
 
 
 class StandardTetrahedron:

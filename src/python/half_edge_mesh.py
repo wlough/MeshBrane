@@ -1,4 +1,5 @@
 from plyfile import PlyData, PlyElement
+from src.python.ply_tools import VertTri2HalfEdgeConverter
 
 # import numpy as np
 # import glob
@@ -19,13 +20,13 @@ class HalfEdgeMesh:
         _h_out_V[i] = some outgoing half-edge incident on vertex i
     _v_origin_H : list of int
         _v_origin_H[j] = vertex at the origin of half-edge j
-    _f_left_H : list of int
-        _f_left_H[j] = face to the left of half-edge j
     _h_next_H : list of int
         _h_next_H[j] next half-edge after half-edge j in the face cycle
     _h_twin_H : list of int
         _h_twin_H[j] = half-edge antiparalel to half-edge j
         _h_twin_H[j] = -1 if half-edge j is on a boundary of the mesh
+    _f_left_H : list of int
+        _f_left_H[j] = face to the left of half-edge j
     _h_bound_F : list of int
         _h_bound_F[k] = some half-edge on the boudary of face k
 
@@ -36,9 +37,9 @@ class HalfEdgeMesh:
         HalfEdgeMesh(xyz_coordinates_V,
                      h_out_V,
                      v_origin_H,
-                     f_left_H,
                      h_next_H,
                      h_twin_H,
+                     f_left_H,
                      h_bound_F)
     - From a list of vertex positions and a list of face vertices:
         HalfEdgeMesh.from_vert_face_list(xyz_coordinates_V, vvv_of_F)
@@ -58,18 +59,18 @@ class HalfEdgeMesh:
         xyz_coordinates_V,
         h_out_V,
         v_origin_H,
-        f_left_H,
         h_next_H,
         h_twin_H,
+        f_left_H,
         h_bound_F,
     ):
         self._xyz_coord_V = xyz_coordinates_V
         self._h_out_V = h_out_V
         self._v_origin_H = v_origin_H
-        self._f_left_H = f_left_H
         self._h_next_H = h_next_H
         self._h_twin_H = h_twin_H
         self._h_bound_F = h_bound_F
+        self._f_left_H = f_left_H
 
     @classmethod
     def from_vert_face_list(cls, xyz_coordinates_V, vvv_of_F):
@@ -87,10 +88,8 @@ class HalfEdgeMesh:
         -------
             HalfEdgeMesh: An instance of the HalfEdgeMesh class with the given vertices and faces.
         """
-        mb = HalfEdgeMeshBuilder.from_vert_face_list(xyz_coordinates_V, vvv_of_F)
-        return cls(
-            mb.V, mb.V_edge, mb.E_vertex, mb.E_face, mb.E_next, mb.E_twin, mb.F_edge
-        )
+        v2h = VertTri2HalfEdgeConverter.from_source_samples(xyz_coordinates_V, vvv_of_F)
+        return cls(*v2h.target_samples)
 
     @classmethod
     def from_vertex_face_ply(cls, ply_path):
@@ -102,10 +101,8 @@ class HalfEdgeMesh:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class with data from the ply file.
         """
-        mb = HalfEdgeMeshBuilder.from_vertex_face_ply(ply_path)
-        return cls(
-            mb.V, mb.V_edge, mb.E_vertex, mb.E_face, mb.E_next, mb.E_twin, mb.F_edge
-        )
+        v2h = VertTri2HalfEdgeConverter.from_ply_file(ply_path)
+        return cls(*v2h.target_samples)
 
     @classmethod
     def from_half_edge_ply(cls, ply_path):
