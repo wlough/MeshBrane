@@ -323,7 +323,9 @@ class HalfEdgeMesh:
         Lij = Aj * np.exp(-(dist_xi_xj**2) / (4 * Ai)) / (4 * np.pi * Ai**2)
         return Lij
 
-    def laplacian_propogate(self, vi, Y, tol_rel=1e-6, tol_abs=1e-6):
+    def laplacian_propogate_to_tol(
+        self, vi, Y, tol_rel=1e-6, tol_abs=1e-6, max_iter=100
+    ):
         Yi = Y[vi]
         LYi = 0
         _rel = 1
@@ -333,7 +335,8 @@ class HalfEdgeMesh:
             vj = self.v_origin_H(hj)
             Yj = Y[vj]
             LYi += self.laplacian_interact(vi, vj) * (Yj - Yi)
-        while _rel > tol_rel and _abs > tol_abs:
+        # while _rel > tol_rel and _abs > tol_abs:
+        while True:
             labels = self.expand_boundary_safe(**labels)
             LYibdry = 0.0
             for hj in labels["boundary_edges"]:

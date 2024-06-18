@@ -11,7 +11,11 @@ mv = [MeshViewer(*_.data_lists) for _ in m]
 
 mb = m[2]
 Y = [xyz[1] for xyz in mb.data_lists[0]]
-LYi, labels = mb.laplacian_propogate(3,Y)
+LYi, labels = mb.laplacian_propogate(
+    3,
+    Y,
+)
+print(len(labels["vertices"]))
 # %%
 # ply_path = "./ply_files_vf/dumbbell.ply"
 ply_path = "./data/ply/binary/torus.ply"
