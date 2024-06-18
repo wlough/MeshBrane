@@ -1,9 +1,6 @@
 from plyfile import PlyData, PlyElement
 from src.python.ply_tools import VertTri2HalfEdgeConverter
-
-# import numpy as np
-# import glob
-# import os
+import numpy as np
 
 
 class HalfEdgeMesh:
@@ -101,7 +98,7 @@ class HalfEdgeMesh:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class with data from the ply file.
         """
-        v2h = VertTri2HalfEdgeConverter.from_ply_file(ply_path)
+        v2h = VertTri2HalfEdgeConverter.from_source_ply(ply_path)
         return cls(*v2h.target_samples)
 
     @classmethod
@@ -114,13 +111,23 @@ class HalfEdgeMesh:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
         """
-        mb = HalfEdgeMeshBuilder.from_half_edge_ply(ply_path)
-        return cls(
-            mb.V, mb.V_edge, mb.E_vertex, mb.E_face, mb.E_next, mb.E_twin, mb.F_edge
-        )
+        v2h = VertTri2HalfEdgeConverter.from_target_ply(ply_path)
+        return cls(*v2h.target_samples)
+
+    @property
+    def num_vertices(self):
+        return len(self._xyz_coord_V)
+
+    @property
+    def num_half_edges(self):
+        return len(self._v_origin_H)
+
+    @property
+    def num_faces(self):
+        return len(self._h_bound_F)
 
     #######################################################
-    # getters
+    @property
     def data_lists(self):
         """get lists of data required for basic getters.vertex positions and vertex/half-edge/face indices mesh connectivity data and required for basic getters
 
@@ -131,9 +138,9 @@ class HalfEdgeMesh:
             self._xyz_coord_V,
             self._h_out_V,
             self._v_origin_H,
-            self._f_left_H,
             self._h_next_H,
             self._h_twin_H,
+            self._f_left_H,
             self._h_bound_F,
         )
 
@@ -254,7 +261,7 @@ class HalfEdgeMesh:
         e_start = e
         while True:
             yield e
-            e = self.h_twin_H(self.h_pre_H(e))
+            e = self.h_twin_H(self.h_prev_H(e))
             if e == e_start:
                 break
 
@@ -287,6 +294,57 @@ class HalfEdgeMesh:
                 break
 
     ######################################################
+
+    def barcell_area(self, v):
+        """area of cell dual to vertex v"""
+        r = self.xyz_coord_V(v)
+        A = 0.0
+        # h = self.h_out_V(v)
+        # h_start = h
+        for h in self.generate_H_out_v_clockwise(v):
+            r1 = self.xyz_coord_V(self.v_origin_H(self.h_next_H(h)))
+            r2 = self.xyz_coord_V(self.v_origin_H(self.h_next_H(self.h_next_H(h))))
+            A_face_vec = (
+                np.cross(r, r1) / 2 + np.cross(r1, r2) / 2 + np.cross(r2, r) / 2
+            )
+            A_face = np.sqrt(
+                A_face_vec[0] ** 2 + A_face_vec[1] ** 2 + A_face_vec[2] ** 2
+            )
+            A += A_face / 3
+
+        return A
+
+    def laplacian_interact(self, vi, vj):
+        xi = self.xyz_coord_V(vi)
+        xj = self.xyz_coord_V(vj)
+        Ai = self.barcell_area(vi)
+        Aj = self.barcell_area(vj)
+        dist_xi_xj = np.linalg.norm(xj - xi)
+        Lij = Aj * np.exp(-(dist_xi_xj**2) / (4 * Ai)) / (4 * np.pi * Ai**2)
+        return Lij
+
+    def laplacian_propogate(self, vi, Y, tol_rel=1e-6, tol_abs=1e-6):
+        Yi = Y[vi]
+        LYi = 0
+        _rel = 1
+        _abs = 1
+        labels = self.one_ring_vhf_sets_with_bdry(vi)
+        for hj in labels["boundary_edges"]:
+            vj = self.v_origin_H(hj)
+            Yj = Y[vj]
+            LYi += self.laplacian_interact(vi, vj) * (Yj - Yi)
+        while _rel > tol_rel and _abs > tol_abs:
+            labels = self.expand_boundary_safe(**labels)
+            LYibdry = 0.0
+            for hj in labels["boundary_edges"]:
+                vj = self.v_origin_H(hj)
+                Yj = Y[vj]
+                LYibdry += self.laplacian_interact(vi, vj) * (Yj - Yi)
+            LYi += LYibdry
+            _rel = abs(LYibdry / LYi)
+            _abs = abs(LYibdry)
+
+        return LYi, labels
 
     ######################################################
     def Cl(self, V, E, F):
@@ -443,159 +501,3 @@ class HalfEdgeMesh:
             "faces": faces,
             "boundary_edges": boundary_edges,
         }
-
-
-class HalfEdgeMeshBuilder:
-    """Constructs data to initialize a half-edge mesh from a vertex-face list
-
-    parameters
-    ----------
-    V: list
-        numpy arrays containing xyz coordinates of each vertex
-    V_edge: list
-        half-edge indices of a half-edge incident on each vertex
-    E_vertex: list
-        vertex indices for the origin of each half-edge
-    E_face: list
-        face indices of face to the left of each half-edge
-    E_next: list
-        half-edge indices for next half-edge
-    E_twin: list
-        half-edge indices for the twin of each half-edge
-    F_edge: list
-        half-edge indices of a half-edge on the boudary of each face
-    """
-
-    def __init__(self, V, V_edge, E_vertex, E_face, E_next, E_twin, F_edge):
-        self.V = [np.copy(xyz) for xyz in V]
-        self.V_edge = V_edge.copy()
-        self.E_vertex = E_vertex.copy()
-        self.E_face = E_face.copy()
-        self.E_next = E_next.copy()
-        self.E_twin = E_twin.copy()
-        self.F_edge = F_edge.copy()
-
-    @classmethod
-    def get_index_of_twin(self, E, e):
-        Nedges = len(E)
-        v0 = E[e][0]
-        v1 = E[e][1]
-        for e_twin in range(Nedges):
-            if E[e_twin][0] == v1 and E[e_twin][1] == v0:
-                return e_twin
-
-        return -1
-
-    @classmethod
-    def from_vert_face_list(cls, V, F):
-        Nfaces = len(F)
-        Nvertices = len(V)
-        Nedges = 3 * Nfaces
-
-        E = Nedges * [[0, 0]]
-
-        V_edge = Nvertices * [-1]
-        E_vertex = Nedges * [0]
-        E_face = Nedges * [0]
-        E_next = Nedges * [0]
-        E_twin = Nedges * [-2]
-        F_edge = Nfaces * [0]
-
-        for f in range(Nfaces):
-            F_edge[f] = 3 * f
-            for i in range(3):
-                e = 3 * f + i
-                e_next = 3 * f + (i + 1) % 3
-                v0 = F[f][i]
-                v1 = F[f][(i + 1) % 3]
-                E[e] = [v0, v1]
-                E_vertex[e] = v0
-                E_face[e] = f
-                E_next[e] = e_next
-                if V_edge[v0] == -1:
-                    V_edge[v0] = e
-
-        for e in range(Nedges):
-            if E_twin[e] == -2:
-                e_twin = cls.get_index_of_twin(E, e)
-                E_twin[e] = e_twin
-                if e_twin != -1:
-                    E_twin[e_twin] = e
-
-        return cls(V, V_edge, E_vertex, E_face, E_next, E_twin, F_edge)
-
-    @classmethod
-    def from_vertex_face_ply(cls, ply_path):
-        plydata = PlyData.read(ply_path)
-        V = [
-            np.array([x, y, z])
-            for x, y, z in zip(
-                plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]
-            )
-        ]
-        F = [verts.tolist() for verts in plydata["face"]["vertex_indices"]]
-        return cls.from_vert_face_list(V, F)
-
-    @classmethod
-    def from_half_edge_ply(cls, ply_path):
-        plydata = PlyData.read(ply_path)
-        V = [
-            np.array([x, y, z])
-            for x, y, z in zip(
-                plydata["he_vertex"]["x"],
-                plydata["he_vertex"]["y"],
-                plydata["he_vertex"]["z"],
-            )
-        ]
-        V_edge = plydata["he_vertex"]["e"].tolist()
-        F_edge = plydata["he_face"]["e"].tolist()
-        E_vertex = plydata["he_edge"]["v"].tolist()
-        E_face = plydata["he_edge"]["f"].tolist()
-        E_next = plydata["he_edge"]["n"].tolist()
-        E_twin = plydata["he_edge"]["t"].tolist()
-
-        return cls(V, V_edge, E_vertex, E_face, E_next, E_twin, F_edge)
-
-    def get_faces(self):
-        return [
-            [
-                self.E_vertex[e],
-                self.E_vertex[self.E_next[e]],
-                self.E_vertex[self.E_next[self.E_next[e]]],
-            ]
-            for e in self.F_edge
-        ]
-
-    def to_half_edge_ply(self, ply_path, use_binary=False):
-        V_data = np.array(
-            [
-                (vertex[0], vertex[1], vertex[2], e)
-                for vertex, e in zip(self.V, self.V_edge)
-            ],
-            dtype=[("x", "f8"), ("y", "f8"), ("z", "f8"), ("e", "uint32")],
-        )
-        F_data = np.array(self.F_edge, dtype=[("e", "uint32")])
-        E_data = np.array(
-            [
-                (v, f, n, t)
-                for v, f, n, t in zip(
-                    self.E_vertex, self.E_face, self.E_next, self.E_twin
-                )
-            ],
-            dtype=[("v", "uint32"), ("f", "uint32"), ("n", "uint32"), ("t", "i4")],
-        )
-        V_element = PlyElement.describe(V_data, "he_vertex")
-        E_element = PlyElement.describe(E_data, "he_edge")
-        F_element = PlyElement.describe(F_data, "he_face")
-        PlyData([V_element, E_element, F_element], text=not use_binary).write(ply_path)
-
-    def to_vertex_face_ply(self, ply_path, use_binary=False):
-        F = self.get_faces()
-        V_data = np.array(
-            [tuple(v) for v in self.V], dtype=[("x", "f8"), ("y", "f8"), ("z", "f8")]
-        )
-        F_data = np.empty(len(F), dtype=[("vertex_indices", "i4", (3,))])
-        F_data["vertex_indices"] = F
-        vertex_element = PlyElement.describe(V_data, "vertex")
-        face_element = PlyElement.describe(F_data, "face")
-        PlyData([vertex_element, face_element], text=not use_binary).write(ply_path)

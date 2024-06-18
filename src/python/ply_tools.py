@@ -1,8 +1,6 @@
 from plyfile import PlyData, PlyElement  # , PlyListProperty, PlyProperty
 import numpy as np
 
-# dtype_dict = {"signed 32-bit integer": {"numpy": "int32", "ply": "int"}, "unsigned 32-bit integer": {"numpy": "uint32", "ply": "uint"}, "double": {"numpy": "uint32", "ply": "int"}}
-
 
 class PlySchema:
     """
@@ -26,9 +24,10 @@ class PlySchema:
         Print the header for the ply file.
     _schema_from_ply_file(file_path, schema_name=None)
         Constructs a new PlySchema object by reading a ply file header.
-    build_data_from_ply(file_path)
-        Overridable method to construct a PlyData object/data lists from a ply file using the schema.
-
+    ply_data_to_samples(self, ply_data)
+        construct a lists of data from a PlyData object using the schema
+    samples_to_ply_data(self, *samples, use_binary=False)
+        Construct a PlyData object using the schema
     uchar=uint8
     double=float64
     """
@@ -240,66 +239,6 @@ class VertexTriListSchema(PlySchema):
         return PlyData([vertex_element, face_element], text=not use_binary)
 
 
-class CombinatorialMap2dSchema(PlySchema):
-    """
-    Schema for a ply file representing a 2d surface mesh by combinatorial maps.
-
-    Attributes
-    ----------
-    name : str
-        Name of the schema.
-    format : str
-        Format of the ply file (default="ascii 1.0").
-    identifier : str
-        Identifier for the ply file (default="ply").
-    elements : list of dicts
-        List of dicts containing info about ply elemtents and their properties
-
-
-
-    Nvertices = len(positions)
-    Ndarts = len(origin)
-    Nnext_cycles = len(next_cycle) #cycles=#faces
-    Ntwin_cycles = len(twin_cycle) #cycles=#2*edges-#boundary edges
-    """
-
-    def __init__(self):
-        comments = [
-            "Schema for a ply file representing a 2d surface mesh by combinatorial maps."
-        ]
-        elements = [
-            {
-                "name": "vertex",
-                "count": "Nvertex",
-                "properties": [("x", "double"), ("y", "double"), ("z", "double")],
-            },
-            {
-                "name": "dart",
-                "count": "Ndart",
-                "properties": [("origin_index", "int32")],
-            },
-            {
-                "name": "next_cycle",
-                "count": "Nnext_cycle",
-                "properties": [("dart_indices", "int32", (3,))],
-            },
-            {
-                "name": "twin_cycle",
-                "count": "twin_cycle",
-                "properties": [("dart_indices", "int32", (2,))],
-            },
-        ]
-
-        # super().__init__(name, format, elements)
-        super().__init__(
-            name="CombinatorialMap2d",
-            identifier="ply",
-            format="ascii 1.0",
-            comments=comments,
-            elements=elements,
-        )
-
-
 class HalfEdgeSchema(PlySchema):
     """
     Schema for a ply file representing HalfEdgeMesh
@@ -432,7 +371,7 @@ class HalfEdgeSchema(PlySchema):
         )
 
 
-class PlyLoader:
+class PlyConverter:
     """
     Reading/writing ply files
 
@@ -440,88 +379,131 @@ class PlyLoader:
     ----------
     source_ply_path : str
         Path to the source ply file.
+    source_ply_schema : str
+        PlySchema for the source ply file.
     source_ply_data : PlyData
         Data from the source ply file.
-    source_ply_header : list
-        Header of the source ply file.
-    target_ply_path : str
-        Path to the target ply file.
+    source_samples : list
+        List of lists of data from the source ply file.
+    target_ply_schema : str
+        PlySchema for the target ply file.
     target_ply_data : PlyData
-        Data to be written to the target ply file.
-
+        Data from the target ply file.
+    target_samples : list
+        List of lists of data from the target ply file.
 
     Methods
     -------
+    from_source_ply(cls, source_ply_schema, target_ply_schema, source_ply_path)
+        Construct a PlyConverter object from a source ply file.
+    write_target_ply(target_path=None, use_ascii=False)
+        Write the target ply file.
     read_ply_header(ply_path)
         Read the header of a ply file.
-    print_source_header()
-        Print the header of the source ply file.
-    print_target_header()
-        Print the header of target_ply_data
+    print_target_ply_data_header
+        Print the header of the target_ply_data
+    print_source_ply_data_header
+        Print the header of the source_ply_data
+    source_samples_to_target_samples(*source_samples)
+        Override to define how to convert source samples to target samples.
     """
 
-    def __init__(self, source_ply_path=None, target_ply_path=None):
-        self._source_ply_path = source_ply_path
-        if source_ply_path is not None:
-            self._source_ply_data = PlyData.read(source_ply_path)
-            self._source_ply_header = self.read_ply_header(source_ply_path)
+    # source_ply_schema = PlySchema()
+    # target_ply_schema
+
+    def __init__(
+        self,
+        source_ply_schema,
+        target_ply_schema,
+        source_ply_data=None,
+        source_ply_path=None,
+    ):
+        self._source_ply_schema = source_ply_schema
+        self._target_ply_schema = target_ply_schema
+        self._source_ply_data = source_ply_data
+        if source_ply_data is not None:
+            self._source_samples = self.source_ply_schema.ply_data_to_samples(
+                self.source_ply_data
+            )
+            self._target_samples = self.source_samples_to_target_samples(
+                *self._source_samples
+            )
+            self._target_ply_data = self.target_ply_schema.samples_to_ply_data(
+                *self._target_samples
+            )
         else:
-            self._source_ply_data = None
-            self._source_ply_header = None
-        self._target_ply_path = target_ply_path
-        self._target_ply_data = PlyData()
+            self._source_samples = None
+            self._target_samples = None
+            self._target_ply_data = None
+        self._source_ply_path = source_ply_path
 
     @property
-    def source_ply_path(self):
-        return self._source_ply_path
+    def source_ply_schema(self):
+        return self._source_ply_schema
+
+    @property
+    def target_ply_schema(self):
+        return self._target_ply_schema
 
     @property
     def source_ply_data(self):
         return self._source_ply_data
 
     @property
-    def target_ply_path(self):
-        return self._target_ply_path
+    def source_samples(self):
+        return self._source_samples
 
-    @target_ply_path.setter
-    def target_ply_path(self, path):
-        self._target_ply_path = path
+    @property
+    def target_samples(self):
+        return self._target_samples
 
     @property
     def target_ply_data(self):
         return self._target_ply_data
 
-    @target_ply_data.setter
-    def target_ply_data(self, ply_data):
-        assert isinstance(ply_data, PlyData), "ply_data must be an instance of PlyData"
-        self._target_ply_data = ply_data
-        """
-        Add property to an existing element in target_ply_data.
+    @property
+    def source_ply_path(self):
+        return self._source_ply_path
 
-        Parameters
-        ----------
-        element_name : str
-            Name of the element in target_ply_data.
-        property_data : structured array
-            dtype must be (name, type) or (name, type, shape)
-        """
-        try:
-            element = self.target_ply_data.elements[element_name]
-            property_name, property_type = property_data.dtype.fields.keys()
-            if len(property_data.dtype.fields[property_name]) == 2:
-                property = PlyProperty((property_name, property_type))
-            elif len(property_data.dtype.fields[property_name]) == 3:
-                property = PlyListProperty(
-                    (
-                        property_name,
-                        property_type,
-                        property_data.dtype.fields[property_name][0].shape[0],
-                    )
-                )
+    @classmethod
+    def from_source_ply(cls, source_ply_schema, target_ply_schema, source_ply_path):
+        source_ply_data = PlyData.read(source_ply_path)
+        return cls(source_ply_schema, target_ply_schema, source_ply_data)
 
-            element.properties.append(property)
-        except KeyError:
-            print(f"Element {element_name} not found in target_ply_data.")
+    @classmethod
+    def from_source_samples(cls, source_ply_schema, target_ply_schema, *source_samples):
+        source_ply_data = source_ply_schema.samples_to_ply_data(*source_samples)
+        return cls(source_ply_schema, target_ply_schema, source_ply_data)
+
+    @classmethod
+    def from_target_samples(cls, source_ply_schema, target_ply_schema, *target_samples):
+        pc = cls(
+            source_ply_schema,
+            target_ply_schema,
+            source_ply_data=None,
+            source_ply_path=None,
+        )
+        pc._target_samples = target_samples
+        pc._target_ply_data = target_ply_schema.samples_to_ply_data(*target_samples)
+        return pc
+
+    @classmethod
+    def from_target_ply(cls, source_ply_schema, target_ply_schema, target_ply_path):
+        pc = cls(
+            source_ply_schema,
+            target_ply_schema,
+            source_ply_data=None,
+            source_ply_path=None,
+        )
+        pc._target_ply_data = PlyData.read(target_ply_path)
+        pc._target_samples = pc.target_ply_schema.ply_data_to_samples(
+            pc.target_ply_data
+        )
+        return pc
+
+    def write_target_ply(self, target_path=None, use_ascii=False):
+        self.target_ply_data.text = use_ascii
+        self.target_ply_data.write(target_path)
 
     @classmethod
     def read_ply_header(cls, ply_path):
@@ -536,11 +518,7 @@ class PlyLoader:
                     break
         return lines
 
-    def print_source_header(self):
-        for line in self._source_ply_header:
-            print(line)
-
-    def print_target_header(self):
+    def print_target_ply_data_header(self):
         print("ply")
         if self.target_ply_data.byte_order == "=":
             print("format ascii 1.0")
@@ -558,16 +536,167 @@ class PlyLoader:
                     print(f"property {property.data_type} {property.name}")
         print("end_header")
 
-    def write_target_ply(self, path=None, use_ascii=False):
-        if path is None:
-            path = self.target_ply_path
-        if use_ascii:
-            self.target_ply_data.write(path, text=True)
+    def print_source_ply_data_header(self):
+        print("ply")
+        if self.source_ply_data.byte_order == "=":
+            print("format ascii 1.0")
+        elif self.source_ply_data.byte_order == "<":
+            print("format binary_little_endian 1.0")
         else:
-            self.target_ply_data.write(path, byte_order="=")
+            print("format binary_big_endian 1.0")
+
+        for element in self.source_ply_data.elements:
+            print(f"element {element.name} {len(element.data)}")
+            for property in element.properties:
+                if isinstance(property, PlyListProperty):
+                    print(f"property list {property.data_type} {property.name}")
+                else:
+                    print(f"property {property.data_type} {property.name}")
+        print("end_header")
+
+    def source_samples_to_target_samples(self, *source_samples):
+        target_samples = source_samples
+        return target_samples
 
 
-class VertTri2HalfEdgeConverter:
+class VertTri2HalfEdgeConverter(PlyConverter):
+    """
+    Reading/writing ply files
+
+    Attributes
+    ----------
+    source_ply_path : str
+        Path to the source ply file.
+    source_ply_schema : str
+        PlySchema for the source ply file.
+    source_ply_data : PlyData
+        Data from the source ply file.
+    source_samples : list
+        List of lists of data from the source ply file.
+    target_ply_schema : str
+        PlySchema for the target ply file.
+    target_ply_data : PlyData
+        Data from the target ply file.
+    target_samples : list
+        List of lists of data from the target ply file.
+
+    Methods
+    -------
+    from_source_ply(cls, source_ply_schema, target_ply_schema, source_ply_path)
+        Construct a PlyConverter object from a source ply file.
+    write_target_ply(target_path=None, use_ascii=False)
+        Write the target ply file.
+    read_ply_header(ply_path)
+        Read the header of a ply file.
+    print_target_ply_data_header
+        Print the header of the target_ply_data
+    print_source_ply_data_header
+        Print the header of the source_ply_data
+    source_samples_to_target_samples(*source_samples)
+        Override to define how to convert source samples to target samples.
+    """
+
+    def __init__(
+        self,
+        source_ply_data=None,
+        source_ply_path=None,
+    ):
+
+        source_ply_schema = VertexTriListSchema()
+        target_ply_schema = HalfEdgeSchema()
+        super().__init__(
+            source_ply_schema, target_ply_schema, source_ply_data, source_ply_path
+        )
+
+    @classmethod
+    def from_source_ply(cls, source_ply_path):
+        source_ply_data = PlyData.read(source_ply_path)
+        return cls(source_ply_data)
+
+    @classmethod
+    def from_source_samples(cls, *source_samples):
+        source_ply_schema = VertexTriListSchema()
+        source_ply_data = source_ply_schema.samples_to_ply_data(*source_samples)
+        return cls(source_ply_data)
+
+    @classmethod
+    def from_target_samples(cls, *target_samples):
+        target_ply_schema = HalfEdgeSchema()
+        pc = cls(
+            source_ply_data=None,
+            source_ply_path=None,
+        )
+        pc._target_samples = target_samples
+        pc._target_ply_data = target_ply_schema.samples_to_ply_data(*target_samples)
+        return pc
+
+    @classmethod
+    def from_target_ply(cls, target_ply_path):
+        target_ply_schema = HalfEdgeSchema()
+        pc = cls(
+            source_ply_data=None,
+            source_ply_path=None,
+        )
+        pc._target_ply_data = PlyData.read(target_ply_path)
+        pc._target_samples = pc.target_ply_schema.ply_data_to_samples(
+            pc.target_ply_data
+        )
+        return pc
+
+    def get_index_of_twin(self, E, e):
+        Nedges = len(E)
+        v0 = E[e][0]
+        v1 = E[e][1]
+        for e_twin in range(Nedges):
+            if E[e_twin][0] == v1 and E[e_twin][1] == v0:
+                return e_twin
+
+        return -1
+
+    def source_samples_to_target_samples(self, *source_samples):
+        (V, F) = source_samples
+        Nfaces = len(F)
+        Nvertices = len(V)
+        Nedges = 3 * Nfaces
+
+        E = Nedges * [[0, 0]]
+
+        V_edge = Nvertices * [-1]
+        E_vertex = Nedges * [0]
+        E_next = Nedges * [0]
+        E_twin = Nedges * [-2]
+        E_face = Nedges * [0]
+        F_edge = Nfaces * [0]
+
+        for f in range(Nfaces):
+            F_edge[f] = 3 * f
+            for i in range(3):
+                e = 3 * f + i
+                e_next = 3 * f + (i + 1) % 3
+                v0 = F[f][i]
+                v1 = F[f][(i + 1) % 3]
+                E[e] = [v0, v1]
+                E_vertex[e] = v0
+                E_face[e] = f
+                E_next[e] = e_next
+                if V_edge[v0] == -1:
+                    V_edge[v0] = e
+
+        for e in range(Nedges):
+            if E_twin[e] == -2:
+                e_twin = self.get_index_of_twin(E, e)
+                E_twin[e] = e_twin
+                if e_twin != -1:
+                    E_twin[e_twin] = e
+
+        target_samples = (V, V_edge, E_vertex, E_next, E_twin, E_face, F_edge)
+        return target_samples
+
+
+##################################################
+##################################################
+##################################################
+class VertTri2HalfEdgeConverter0:
     """ """
 
     def __init__(self, source_ply_data):
@@ -644,42 +773,6 @@ class VertTri2HalfEdgeConverter:
     @property
     def target_samples(self):
         return self.target_schema.ply_data_to_samples(self.target_ply_data)
-
-
-class StandardTetrahedron:
-    """
-    name : str
-        Name of the cell.
-    order : int
-        Number of vertices in the cell.
-    dimension : int
-        Dimension of the cell.
-    V : list
-        List of vertex coordinates.
-    E : list
-        List of vertex indices for edges.
-    F : list
-        List of vertex indices for faces (triangles).
-
-
-    Vertex A: (0, 0, 0)
-    Vertex B: (1, 0, 0)
-    Vertex C: (0.5, sqrt(3)/2, 0)
-    Vertex D: (0.5, sqrt(3)/6, sqrt(2/3))
-    """
-
-    def __init__(self):
-        self.name = "tetrahedron"
-        self.order = 4
-        self.dimension = 3
-        self.V = [
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.5, 0.86602540378, 0.0],
-            [0.5, 0.28867513459, 0.81649658092],
-        ]
-        self.E = [[0, 1], [1, 2], [2, 0], [0, 3], [1, 3], [2, 3]]
-        self.F = [[0, 1, 2], [0, 1, 3], [1, 2, 3], [2, 0, 3]]
 
 
 class HalfEdgeMeshBuilder:
@@ -876,4 +969,213 @@ class HalfEdgeMeshBuilder:
         return cls(V, V_edge, E_vertex, E_face, E_next, E_twin, F_edge)
 
 
-#
+class StandardTetrahedron:
+    """
+    name : str
+        Name of the cell.
+    order : int
+        Number of vertices in the cell.
+    dimension : int
+        Dimension of the cell.
+    V : list
+        List of vertex coordinates.
+    E : list
+        List of vertex indices for edges.
+    F : list
+        List of vertex indices for faces (triangles).
+
+
+    Vertex A: (0, 0, 0)
+    Vertex B: (1, 0, 0)
+    Vertex C: (0.5, sqrt(3)/2, 0)
+    Vertex D: (0.5, sqrt(3)/6, sqrt(2/3))
+    """
+
+    def __init__(self):
+        self.name = "tetrahedron"
+        self.order = 4
+        self.dimension = 3
+        self.V = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.5, 0.86602540378, 0.0],
+            [0.5, 0.28867513459, 0.81649658092],
+        ]
+        self.E = [[0, 1], [1, 2], [2, 0], [0, 3], [1, 3], [2, 3]]
+        self.F = [[0, 1, 2], [0, 1, 3], [1, 2, 3], [2, 0, 3]]
+
+
+class CombinatorialMap2dSchema(PlySchema):
+    """
+    Schema for a ply file representing a 2d surface mesh by combinatorial maps.
+
+    Attributes
+    ----------
+    name : str
+        Name of the schema.
+    format : str
+        Format of the ply file (default="ascii 1.0").
+    identifier : str
+        Identifier for the ply file (default="ply").
+    elements : list of dicts
+        List of dicts containing info about ply elemtents and their properties
+
+
+
+    Nvertices = len(positions)
+    Ndarts = len(origin)
+    Nnext_cycles = len(next_cycle) #cycles=#faces
+    Ntwin_cycles = len(twin_cycle) #cycles=#2*edges-#boundary edges
+    """
+
+    def __init__(self):
+        comments = [
+            "Schema for a ply file representing a 2d surface mesh by combinatorial maps."
+        ]
+        elements = [
+            {
+                "name": "vertex",
+                "count": "Nvertex",
+                "properties": [("x", "double"), ("y", "double"), ("z", "double")],
+            },
+            {
+                "name": "dart",
+                "count": "Ndart",
+                "properties": [("origin_index", "int32")],
+            },
+            {
+                "name": "next_cycle",
+                "count": "Nnext_cycle",
+                "properties": [("dart_indices", "int32", (3,))],
+            },
+            {
+                "name": "twin_cycle",
+                "count": "twin_cycle",
+                "properties": [("dart_indices", "int32", (2,))],
+            },
+        ]
+
+        # super().__init__(name, format, elements)
+        super().__init__(
+            name="CombinatorialMap2d",
+            identifier="ply",
+            format="ascii 1.0",
+            comments=comments,
+            elements=elements,
+        )
+
+
+class DataElement:
+    """ """
+
+    def __init__(self, name, samples, sample_dtypes):
+        self.name = name
+        self.samples = samples
+        self.sample_dtype = sample_dtype
+        self.count = len(samples)
+        self.structured_array = np.array(samples, dtype=sample_dtype)
+
+
+class DataSchema:
+    """
+    Schema for a custom binary data file representing a mesh with certain elements and properties.
+    Attributes
+    ----------
+    name : str
+        Name of the schema.
+    identifier : str
+        Identifier for the ply file.
+    format : str
+        Format of the ply file.
+    elements : list of dicts
+        List of dicts containing info about ply elemtents and their properties
+
+    Methods
+    -------
+    generate_header()
+        Generate the header for the ply file.
+    print_header()
+        Print the header for the ply file.
+    _schema_from_ply_file(file_path, schema_name=None)
+        Constructs a new PlySchema object by reading a ply file header.
+    build_data_from_ply(file_path)
+        Overridable method to construct a PlyData object/data lists from a ply file using the schema.
+
+    uchar=uint8
+    double=float64
+
+    pybit_flags = {
+    'int8': 0b0001,
+    'uint8': 0b0010,
+    'int16': 0b0100,
+    'uint16': 0b1000,
+    'int32': 0b00010000,
+    'uint32': 0b00100000,
+    'float32': 0b01000000,
+    'float64': 0b10000000,
+    }
+    py2cpp_dtype = {
+    'int8': 'char',
+    'uint8': 'unsigned char',
+    'int16': 'short',
+    'uint16': 'unsigned short',
+    'int32': 'int',
+    'uint32': 'unsigned int',
+    'float32': 'float',
+    'float64': 'double',
+    }
+
+    """
+
+    def __init__(
+        self,
+        name="DataSchema",
+        identifier="custom",
+        format="binary_little_endian 1.0",
+        comments=["this is the first line of a comment", "this is another line"],
+        elements=None,
+    ):
+        self.name = name
+        self.identifier = identifier
+        self.format = format
+        self.comments = comments
+        if elements is not None:
+            self.elements = elements
+        else:
+            # self.elements = [dict()]
+            self.elements = [
+                {
+                    "name": "elem0",
+                    "count": 3,
+                    "properties": [
+                        ("scalar_prop0", "double"),
+                        ("scalar_prop1", "int32"),
+                    ],
+                    "samples": [[0.0, 2.6, 1.5], [1, 3, 0]],
+                },
+                {
+                    "name": "elem1",
+                    "count": 4,
+                    "properties": [("list_prop", "int32", (3,))],
+                    "a": 1,
+                },
+            ]
+
+        self.header = self.generate_header()
+
+    def generate_header(self):
+        header = [self.identifier]
+        header.append(f"format {self.format}")
+        for element in self.elements:
+            header.append(f"element {element['name']} {element['count']}")
+            for prop in element["properties"]:
+                if len(prop) == 2:
+                    header.append(f"property {prop[1]} {prop[0]}")
+                elif len(prop) == 3:
+                    header.append(f"property list uint8 {prop[1]} {prop[0]}")
+        header.append("end_header")
+        return header
+
+    def print_header(self):
+        for line in self.header:
+            print(line)

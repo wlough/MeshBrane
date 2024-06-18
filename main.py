@@ -1,11 +1,10 @@
-from src.python.half_edge_mesh import *
-from src.python.ply_tools import VertTri2HalfEdgeConverter
-from plyfile import PlyData
+from src.python.half_edge_mesh import HalfEdgeMesh
+from src.python.mesh_viewer import MeshViewer
 
-source_ply = "./data/ply/ascii/dumbbell.ply"
-target_ply = "./data/ply/binary/dumbell.ply"
-v2h = VertTri2HalfEdgeConverter.from_ply_file(source_ply)
-v2h.write_target_ply(target_path=target_ply, use_ascii=True)
-
-pd = PlyData.read(source_ply)
-pd.text = False
+# source_path = "./data/ply/binary/sphere.ply"
+# m = HalfEdgeMesh.from_vertex_face_ply(source_path)
+source_paths = [
+    f"./data/ply/binary/sphere{_}.ply" for _ in ["_ultracoarse", "_coarse", "", "_fine", "_ultrafine"]
+]
+m = [HalfEdgeMesh.from_half_edge_ply(source_path) for source_path in source_paths[:-1]]
+mv = [MeshViewer(*_.data_lists) for _ in m]
