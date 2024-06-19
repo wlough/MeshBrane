@@ -2,31 +2,71 @@ from src.python.half_edge_mesh import HalfEdgeMesh, HalfEdgePatch
 from src.python.mesh_viewer import MeshViewer
 import numpy as np
 
-# source_path = "./data/ply/ascii/hex_sector.ply"
-# m = HalfEdgeMesh.from_vertex_face_ply(source_path)
+
 source_path = "./data/ply/binary/dumbbell.ply"
+viewer_kwargs = {
+    "image_dir": "./output/convergence_test/temp_images",
+    "view": {
+        "azimuth": 0,
+        "elevation": 55,
+        "distance": 4,
+        "focalpoint": (0, 0, 0),
+    },
+    "show_vertices": True,
+}
 m = HalfEdgeMesh.from_half_edge_ply(source_path)
+mv = MeshViewer(*m.data_lists, **viewer_kwargs)
 p = HalfEdgePatch.from_seed_vertex(3, m)
-sm = p.to_half_edge_mesh()
-
+need2visit = p.H.copy()
+Ne = 0
+need2visit.discard(13)
+while need2visit:
+    h = need2visit.pop()
+    ht = p.supermesh.h_twin_h(h)
+    need2visit.discard(ht)
+    Ne += 1
+Nf = len(p.F)
+Nv = len(p.V)
+chi = Nf - Ne + Nv
+print(f"chi={chi}")
 
 # %%
-p.expand_boundary()
-mv = MeshViewer(*p.data_lists, show_vertices=True)
-mv.plot()
+for iter in range(60):
+    print(f"iter={iter}")
+    V, F, H = list(p.V), list(p.F), list(p.H)
+    Hbdry = p.H_boundary_cycle
+    mv.set_F_rgba(f_rgba=mv.colors["green20"])
+    mv.set_E_rgba(e_rgba=mv.colors["orange20"])
+    mv.set_V_rgba(v_rgba=mv.colors["red10"])
+
+    mv.set_subset_E_rgba(rgba=mv.colors["blue"], indices=Hbdry)
+    mv.set_subset_F_rgba(rgba=mv.colors["green50"], indices=F)
+    mv.set_subset_V_rgba(rgba=mv.colors["red50"], indices=V)
+    mv.save_plot()
+
+    p.expand_boundary()
+    need2visit = p.H.copy()
+    Ne = 0
+    need2visit.discard(13)
+    while need2visit:
+        h = need2visit.pop()
+        ht = p.supermesh.h_twin_h(h)
+        need2visit.discard(ht)
+        Ne += 1
+    Nf = len(p.F)
+    Nv = len(p.V)
+    chi = Nf - Ne + Nv
+    print(f"chi={chi}")
+
+
+#
+#
+######################################################################
+######################################################################
+######################################################################
+######################################################################
 
 # %%
-
-#
-#
-#
-#
-######################################################################
-######################################################################
-######################################################################
-######################################################################
-
-
 from src.python.half_edge_mesh import HalfEdgeMesh
 from src.python.mesh_viewer import MeshViewer
 import numpy as np

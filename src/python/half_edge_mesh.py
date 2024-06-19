@@ -1188,7 +1188,7 @@ class HalfEdgePatch:
     def find_boundary_cycle(self, feasible_H_bdry_set=set()):
         H_boundary_cycle = []
         if len(feasible_H_bdry_set) == 0:  # find a boundary half-edge
-            feasible_H_bdry_set = self.H
+            feasible_H_bdry_set.update(self.H)
         for h_start in feasible_H_bdry_set:
             if self.h_on_boundary(h_start):
                 break
@@ -1288,33 +1288,7 @@ class HalfEdgePatch:
         )
 
     def expand_boundary(self):
-        """maybe_boundary_edges = set()
-
-        while boundary_edges:
-            e = boundary_edges.pop()
-            # get new face and its edges
-            e0 = self.h_twin_h(e)
-            e1 = self.h_next_h(e0)
-            e2 = self.h_next_h(e1)
-            f = self.f_left_h(e0)
-            faces.add(f)
-            edges.update({e0, e1, e2})
-            # add possible new boundary edges
-            maybe_boundary_edges.update({e1, e2})
-            # possibly a new vertex so add to vertices
-            v = self.v_origin_h(e)
-            vertices.add(v)
-        # remove edges that are not on the boundary
-        boundary_edges = {
-            e for e in maybe_boundary_edges if self.h_twin_h(e) not in edges
-        }
-
-        return {
-            "vertices": vertices,
-            "edges": edges,
-            "faces": faces,
-            "boundary_edges": boundary_edges,
-        }"""
+        """ """
         feasible_H_bdry_set = set()
         N_old_bdry = len(self.H_boundary_cycle)
         for i in range(N_old_bdry):
