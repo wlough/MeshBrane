@@ -147,7 +147,7 @@ class MeshViewer:
         # Size-dependent params
         ################################
 
-        self.set_V_radius(V_radius=V_radius)
+        self.set_V_radius(V_radius=V_radius, v_radius=v_radius)
         self.set_V_rgba(V_rgba=V_rgba)
         self.set_E_rgba(E_rgba=E_rgba, update_fancy_E_field=False)
         self.set_F_rgba(F_rgba=F_rgba)
@@ -307,7 +307,7 @@ class MeshViewer:
         else:
             self.F = F
 
-    def get_shifted_E_field(self):
+    def get_shifted_E_field_no_bdry_twin(self):
         """halfedge vector shifted toward face centroid for visualization"""
         shift_to_center = 0.15
         Ne = len(self.E_vertex)
@@ -338,6 +338,73 @@ class MeshViewer:
                         self.V[self.E_vertex[self.E_next[e]]] - self.V[self.E_vertex[e]]
                     ),
                 ]
+                for e in range(Ne)
+            ]
+        )
+        return (points_vecs[:, 0], points_vecs[:, 1])
+
+    def get_shifted_E_field(self):
+        """halfedge vector shifted toward face centroid for visualization"""
+        shift_to_center = 0.15
+        Ne = len(self.E_vertex)
+        # vecs = np.zeros((Ne, 3))
+        # points = np.zeros((Ne, 3))
+        # for e in range(Ne):
+        #     v0 = self.E_vertex[e]
+        #     v1 = self.E_vertex[self.E_next[e]]
+        #     V2 = self.E_vertex[self.E_next[self.E_next[e]]]
+        #     com = (self.V[v0] + self.V[v1] + self.V[v2]) / 3
+        #     points[e, :] = shift_to_center * com + (
+        #         1 - shift_to_center
+        #     ) * self.V[v0]
+        #     vecs[e, :] = (1 - shift_to_center) * (self.V[v1] - self.V[v0])
+        points_vecs = np.array(
+            [
+                (
+                    [
+                        shift_to_center
+                        * (
+                            self.V[self.E_vertex[e]]
+                            + self.V[self.E_vertex[self.E_next[e]]]
+                            + self.V[self.E_vertex[self.E_next[self.E_next[e]]]]
+                        )
+                        / 3
+                        + (1 - shift_to_center) * self.V[self.E_vertex[e]],
+                        ####################################################
+                        (1 - shift_to_center)
+                        * (
+                            self.V[self.E_vertex[self.E_next[e]]]
+                            - self.V[self.E_vertex[e]]
+                        ),
+                    ]
+                    if self.E_face[e] != -1  # if on the boundary
+                    else [
+                        shift_to_center  # shift AWAY from twin face centroid
+                        * (
+                            (
+                                self.V[self.E_vertex[e]]
+                                + self.V[self.E_vertex[self.E_twin[e]]]
+                            )
+                            - (
+                                self.V[self.E_vertex[self.E_twin[e]]]
+                                + self.V[self.E_vertex[self.E_next[self.E_twin[e]]]]
+                                + self.V[
+                                    self.E_vertex[
+                                        self.E_next[self.E_next[self.E_twin[e]]]
+                                    ]
+                                ]
+                            )
+                            / 3
+                        )
+                        + (1 - shift_to_center) * self.V[self.E_vertex[e]],
+                        ####################################################
+                        (1 - shift_to_center)
+                        * (
+                            self.V[self.E_vertex[self.E_next[e]]]
+                            - self.V[self.E_vertex[e]]
+                        ),
+                    ]
+                )
                 for e in range(Ne)
             ]
         )

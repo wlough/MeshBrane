@@ -308,6 +308,138 @@ class HalfEdgeSchema(PlySchema):
             _h_next_H[j] next half-edge after half-edge j in the face cycle
         _h_twin_H : list of int
             _h_twin_H[j] = half-edge antiparalel to half-edge j
+        _f_left_H : list of int
+            _f_left_H[j] = face to the left of half-edge j
+            _f_left_H[j] = -1 if half-edge j is on a boundary of the mesh
+
+        _h_bound_F : list of int
+            _h_bound_F[k] = some half-edge on the boudary of face k
+        """
+        # ply_data = PlyData.read(file_path)
+        _xyz_coord_V = [
+            np.array([x, y, z])
+            for x, y, z in zip(
+                plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]
+            )
+        ]
+        _h_out_V = plydata["vertex"]["h"].tolist()
+        _v_origin_H = plydata["half_edge"]["v"].tolist()
+        _h_next_H = plydata["half_edge"]["n"].tolist()
+        _h_twin_H = plydata["half_edge"]["t"].tolist()
+        _f_left_H = plydata["half_edge"]["f"].tolist()
+        _h_bound_F = plydata["face"]["h"].tolist()
+        samples = (
+            _xyz_coord_V,
+            _h_out_V,
+            _v_origin_H,
+            _h_next_H,
+            _h_twin_H,
+            _f_left_H,
+            _h_bound_F,
+        )
+        return samples
+
+    def samples_to_ply_data(self, *samples, use_binary=False):
+        """Constructs a PlyData object using the schema"""
+        (
+            _xyz_coord_V,
+            _h_out_V,
+            _v_origin_H,
+            _h_next_H,
+            _h_twin_H,
+            _f_left_H,
+            _h_bound_F,
+        ) = samples
+        V_data = np.array(
+            [(xyz[0], xyz[1], xyz[2], h) for xyz, h in zip(_xyz_coord_V, _h_out_V)],
+            dtype=[("x", "double"), ("y", "double"), ("z", "double"), ("h", "int32")],
+        )
+        H_data = np.array(
+            [
+                (v, n, t, f)
+                for v, n, t, f in zip(_v_origin_H, _h_next_H, _h_twin_H, _f_left_H)
+            ],
+            dtype=[("v", "int32"), ("n", "int32"), ("t", "int32"), ("f", "int32")],
+        )
+        F_data = np.array(_h_bound_F, dtype=[("h", "int32")])
+
+        vertex_element = PlyElement.describe(V_data, "vertex")
+        half_edge_element = PlyElement.describe(H_data, "half_edge")
+        face_element = PlyElement.describe(F_data, "face")
+        return PlyData(
+            [vertex_element, half_edge_element, face_element], text=not use_binary
+        )
+
+
+class HalfEdgeSchema_no_bdry_twin(PlySchema):
+    """
+    Schema for a ply file representing HalfEdgeMesh
+
+    Attributes
+    ----------
+    name : str
+        Name of the schema.
+    format : str
+        Format of the ply file (default="ascii 1.0").
+    identifier : str
+        Identifier for the ply file (default="ply").
+    elements : list of dicts
+        List of dicts containing info about ply elemtents and their properties
+    """
+
+    def __init__(self):
+        identify = "he_ply"
+        comments = ["Schema for HalfEdgeMesh ply."]
+        elements = [
+            {
+                "name": "vertex",
+                "count": "Nvertex",
+                "properties": [
+                    ("x", "double"),
+                    ("y", "double"),
+                    ("z", "double"),
+                    ("h", "int32"),
+                ],
+            },
+            {
+                "name": "half_edge",
+                "count": "Nhalf_edge",
+                "properties": [
+                    ("v", "int32"),
+                    ("f", "int32"),
+                    ("n", "int32"),
+                    ("t", "int32"),
+                ],
+            },
+            {
+                "name": "face",
+                "count": "Nface",
+                "properties": [("h", "int32")],
+            },
+        ]
+
+        # super().__init__(name, format, elements)
+        super().__init__(
+            name="CombinatorialMap2d",
+            identifier="ply",
+            format="ascii 1.0",
+            comments=comments,
+            elements=elements,
+        )
+
+    def ply_data_to_samples(self, plydata):
+        """Constructs a lists of data from a PlyData object using the schema
+        _xyz_coord_V : list of numpy.array
+            _xyz_coord_V[i] = xyz coordinates of vertex i
+
+        _h_out_V : list of int
+            _h_out_V[i] = some outgoing half-edge incident on vertex i
+        _v_origin_H : list of int
+            _v_origin_H[j] = vertex at the origin of half-edge j
+        _h_next_H : list of int
+            _h_next_H[j] next half-edge after half-edge j in the face cycle
+        _h_twin_H : list of int
+            _h_twin_H[j] = half-edge antiparalel to half-edge j
             _h_twin_H[j] = -1 if half-edge j is on a boundary of the mesh
         _f_left_H : list of int
             _f_left_H[j] = face to the left of half-edge j
@@ -505,6 +637,10 @@ class PlyConverter:
         self.target_ply_data.text = use_ascii
         self.target_ply_data.write(target_path)
 
+    def write_source_ply(self, target_path=None, use_ascii=False):
+        self.source_ply_data.text = use_ascii
+        self.source_ply_data.write(target_path)
+
     @classmethod
     def read_ply_header(cls, ply_path):
         print(f"Reading {ply_path}")
@@ -559,9 +695,11 @@ class PlyConverter:
         return target_samples
 
 
-class VertTri2HalfEdgeConverter(PlyConverter):
+class VertTri2HalfEdgeConverter_no_bdry_twin(PlyConverter):
     """
-    Reading/writing ply files
+    Builds a half-edge mesh data from a vertex-triangle mesh.
+
+    Boundary convention: All half-edges have a face to the left. Half-edges adjacent to boundary are assigned a -1 twin.
 
     Attributes
     ----------
@@ -603,7 +741,7 @@ class VertTri2HalfEdgeConverter(PlyConverter):
     ):
 
         source_ply_schema = VertexTriListSchema()
-        target_ply_schema = HalfEdgeSchema()
+        target_ply_schema = HalfEdgeSchema_no_bdry_twin()
         super().__init__(
             source_ply_schema, target_ply_schema, source_ply_data, source_ply_path
         )
@@ -694,85 +832,217 @@ class VertTri2HalfEdgeConverter(PlyConverter):
 
 
 ##################################################
-##################################################
-##################################################
-class VertTri2HalfEdgeConverter0:
-    """ """
+class VertTri2HalfEdgeConverter(PlyConverter):
+    """
+    Builds a half-edge mesh data from a vertex-triangle mesh.
 
-    def __init__(self, source_ply_data):
-        self.source_schema = VertexTriListSchema()
-        self.target_schema = HalfEdgeSchema()
-        self.source_ply_data = source_ply_data
-        self.target_ply_data = self.convert()
+    Boundary convention: All half-edges have a twin. Boundary half-edges are oriented cw are assigned a -1 face.
+
+    Attributes
+    ----------
+    source_ply_path : str
+        Path to the source ply file.
+    source_ply_schema : str
+        PlySchema for the source ply file.
+    source_ply_data : PlyData
+        Data from the source ply file.
+    source_samples : list
+        List of lists of data from the source ply file.
+    target_ply_schema : str
+        PlySchema for the target ply file.
+    target_ply_data : PlyData
+        Data from the target ply file.
+    target_samples : list
+        List of lists of data from the target ply file.
+
+    Methods
+    -------
+    from_source_ply(cls, source_ply_schema, target_ply_schema, source_ply_path)
+        Construct a PlyConverter object from a source ply file.
+    write_target_ply(target_path=None, use_ascii=False)
+        Write the target ply file.
+    read_ply_header(ply_path)
+        Read the header of a ply file.
+    print_target_ply_data_header
+        Print the header of the target_ply_data
+    print_source_ply_data_header
+        Print the header of the source_ply_data
+    source_samples_to_target_samples(*source_samples)
+        Override to define how to convert source samples to target samples.
+    """
+
+    def __init__(
+        self,
+        source_ply_data=None,
+        source_ply_path=None,
+    ):
+
+        source_ply_schema = VertexTriListSchema()
+        target_ply_schema = HalfEdgeSchema()
+        super().__init__(
+            source_ply_schema, target_ply_schema, source_ply_data, source_ply_path
+        )
 
     @classmethod
-    def from_ply_file(cls, file_path):
-        ply_data = PlyData.read(file_path)
-        return cls(ply_data)
+    def from_source_ply(cls, source_ply_path):
+        source_ply_data = PlyData.read(source_ply_path)
+        return cls(source_ply_data)
 
     @classmethod
-    def from_source_samples(cls, source_samples):
-        (V, F) = source_samples
-        source_ply_data = self.source_schema.samples_to_ply_data(*source_samples)
-        return cls(ply_data)
+    def from_source_samples(cls, *source_samples):
+        source_ply_schema = VertexTriListSchema()
+        source_ply_data = source_ply_schema.samples_to_ply_data(*source_samples)
+        return cls(source_ply_data)
 
-    def get_index_of_twin(self, E, e):
-        Nedges = len(E)
-        v0 = E[e][0]
-        v1 = E[e][1]
-        for e_twin in range(Nedges):
-            if E[e_twin][0] == v1 and E[e_twin][1] == v0:
-                return e_twin
+    @classmethod
+    def from_target_samples(cls, *target_samples):
+        target_ply_schema = HalfEdgeSchema()
+        pc = cls(
+            source_ply_data=None,
+            source_ply_path=None,
+        )
+        pc._target_samples = target_samples
+        pc._target_ply_data = target_ply_schema.samples_to_ply_data(*target_samples)
+        return pc
+
+    @classmethod
+    def from_target_ply(cls, target_ply_path):
+        target_ply_schema = HalfEdgeSchema()
+        pc = cls(
+            source_ply_data=None,
+            source_ply_path=None,
+        )
+        pc._target_ply_data = PlyData.read(target_ply_path)
+        pc._target_samples = pc.target_ply_schema.ply_data_to_samples(
+            pc.target_ply_data
+        )
+        return pc
+
+    def get_index_of_twin(self, H, h):
+        """
+        Find the half-edge twin to h in the list of half-edges H.
+
+        Parameters
+        ----------
+        H : list
+            List of half-edges [[v0, v1], ...]
+        h : int
+            Index of half-edge in H
+
+        Returns
+        -------
+        h_twin : int
+            Index of H[h_twin]=[v1,v0] in H, where H[h]=[v0,v1]. Returns -1 if twin not found.
+        """
+        Nhedges = len(H)
+        v0 = H[h][0]
+        v1 = H[h][1]
+        for h_twin in range(Nhedges):
+            if H[h_twin][0] == v1 and H[h_twin][1] == v0:
+                return h_twin
 
         return -1
 
-    def convert(self):
-        (V, F) = self.source_schema.ply_data_to_samples(self.source_ply_data)
+    def source_samples_to_target_samples(self, *source_samples):
+        (V, F) = source_samples
         Nfaces = len(F)
         Nvertices = len(V)
-        Nedges = 3 * Nfaces
 
-        E = Nedges * [[0, 0]]
+        H = []
+        h_out_V = Nvertices * [-1]
+        v_origin_H = []
+        h_next_H = []
+        f_left_H = []
+        h_bound_F = Nfaces * [0]
 
-        V_edge = Nvertices * [-1]
-        E_vertex = Nedges * [0]
-        E_next = Nedges * [0]
-        E_twin = Nedges * [-2]
-        E_face = Nedges * [0]
-        F_edge = Nfaces * [0]
-
+        # h = 0
         for f in range(Nfaces):
-            F_edge[f] = 3 * f
+            h_bound_F[f] = 3 * f
             for i in range(3):
-                e = 3 * f + i
-                e_next = 3 * f + (i + 1) % 3
+                h = 3 * f + i
+                h_next = 3 * f + (i + 1) % 3
                 v0 = F[f][i]
                 v1 = F[f][(i + 1) % 3]
-                E[e] = [v0, v1]
-                E_vertex[e] = v0
-                E_face[e] = f
-                E_next[e] = e_next
-                if V_edge[v0] == -1:
-                    V_edge[v0] = e
+                H.append([v0, v1])
+                v_origin_H.append(v0)
+                f_left_H.append(f)
+                h_next_H.append(h_next)
+                if h_out_V[v0] == -1:
+                    h_out_V[v0] = h
+        need_twins = set([_ for _ in range(len(H))])
+        need_next = set()
+        h_twin_H = len(H) * [-2]  # -2 means not set
+        while need_twins:
+            h = need_twins.pop()
+            if h_twin_H[h] == -2:  # if twin not set
+                h_twin = self.get_index_of_twin(H, h)  # returns -1 if twin not found
+                if h_twin == -1:  # if twin not found
+                    h_twin = len(H)
+                    v0, v1 = H[h]
+                    H.append([v1, v0])
+                    v_origin_H.append(v1)
+                    need_next.add(h_twin)
+                    h_twin_H[h] = h_twin
+                    h_twin_H.append(h)
+                    f_left_H.append(-1)
+                else:
+                    h_twin_H[h], h_twin_H[h_twin] = h_twin, h
+                    need_twins.remove(h_twin)
 
-        for e in range(Nedges):
-            if E_twin[e] == -2:
-                e_twin = self.get_index_of_twin(E, e)
-                E_twin[e] = e_twin
-                if e_twin != -1:
-                    E_twin[e_twin] = e
+        h_next_H.extend([-1] * len(need_next))
+        while need_next:
+            h = need_next.pop()
+            h_next = h_twin_H[h]
+            # rotate ccw around origin of twin until we find nex h on boundary
+            while f_left_H[h_next] != -1:
+                h_next = h_twin_H[h_next_H[h_next_H[h_next]]]
+            h_next_H[h] = h_next
 
-        target_samples = (V, V_edge, E_vertex, E_next, E_twin, E_face, F_edge)
-        target_ply_data = self.target_schema.samples_to_ply_data(*target_samples)
-        return target_ply_data
+        # find and enumerate boundaries -1,-2,...
+        H_need2visit = set([h for h in range(len(H)) if f_left_H[h] == -1])
+        bdry_count = 0
+        while H_need2visit:
+            bdry_count += 1
+            h_start = H_need2visit.pop()
+            f_left_H[h_start] = -bdry_count
+            h = h_next_H[h_start]
+            while h != h_start:
+                H_need2visit.remove(h)
+                f_left_H[h] = -bdry_count
+                h = h_next_H[h]
 
-    def write_target_ply(self, target_path=None, use_ascii=False):
-        self.target_ply_data.text = use_ascii
-        self.target_ply_data.write(target_path)
+        target_samples = (
+            V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+        )
+        return target_samples
 
-    @property
-    def target_samples(self):
-        return self.target_schema.ply_data_to_samples(self.target_ply_data)
+    def target_samples_to_source_samples(self, *target_samples):
+        (xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H, h_bound_F) = (
+            target_samples
+        )
+        # Nfaces = len(h_bound_F)
+
+        F = []
+        for h_start in h_bound_F:
+            F.append([])
+            h = h_start
+            while True:
+                F[-1].append(v_origin_H[h])
+                h = h_next_H[h]
+                if h == h_start:
+                    break
+        source_samples = (xyz_coord_V, F)
+        return source_samples
+
+
+##################################################
+##################################################
 
 
 class HalfEdgeMeshBuilder:
