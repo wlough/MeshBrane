@@ -31,6 +31,14 @@ class KeyCounter:
         self._count += 1
         return key
 
+    def increment(self):
+        self._count += 1
+        return self._count
+
+    def decrement(self):
+        self._count -= 1
+        return self._count
+
 
 class KeyManager:
     """

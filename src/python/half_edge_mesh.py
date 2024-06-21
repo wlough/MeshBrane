@@ -2,28 +2,89 @@ from src.python.ply_tools import VertTri2HalfEdgeConverter
 import numpy as np
 
 
+class HalfEdgeMeshOperator:
+    def __init__(self, mesh):
+        self.mesh = mesh
+
+    def _generate_twin_pairs_around_v_clockwise(self, v):
+        e = self.mesh.h_out_v(v)
+        e_start = e
+        while True:
+            e_twin = self.mesh.h_twin_h(e)
+            yield (e, e_twin)
+            e = self.mesh.h_next_h(e_twin)
+            if e == e_start:
+                break
+
+    def _Cl(self, V, E, F):
+        for f in F:
+            e0 = self.mesh.h_left_F(f)
+            e1 = self.mesh.h_next_h(e0)
+            e2 = self.mesh.h_next_h(e1)
+            E.update({e0, e1, e2})
+        E_twins = set()
+        for e in E:
+            E_twins.add(self.mesh.h_twin_h(e))
+        E.update(E_twins)
+        for e in E:
+            v0 = self.mesh.v_origin_h(e)
+            e_twin = self.mesh.h_twin_h(e)
+            v1 = self.mesh.v_origin_h(e_twin)
+            V.update({v0, v1})
+        return V, E, F
+
+    def _St_of_v(self, v):
+        V = {v}
+        E = set()
+        F = set()
+        E_Et_v = self.generate_twin_pairs_around_v_clockwise(v)
+        for e_et in E_Et_v:
+            # V.add(self.v_origin_h(e_et[1]))
+            E.update(e_et)
+            F.add(self.mesh.f_left_h(e_et[0]))
+        return V, E, F
+
+    def _St_of_e(self, e):
+        """face of a simplex is any subset of its vertices. the star of a simplex is defined as the set of all simplices that have the simplex as a face. the set of all simplices that contain its vertices as a subset of their vertices"""
+        et = self.mesh.h_twin_h(e)
+        V = set()
+        E = {e, et}
+        F = {self.mesh.f_left_h(e), self.mesh.f_left_h(et)}
+        return V, E, F
+
+    def _St(self, V_in, E_in, F_in):
+        F = F_in
+        E = set()
+        V = set()
+        for e in E_in:
+            pass
+
+
 class HalfEdgeMeshBase:
     """
+    h_bound_F-->h_adjacent_F
     Dict-based half-edge mesh data structure
     ----------------------------------------
     HalfEdgeMesh uses two basic data types: numpy.arrays of Cartesian coordinates for vertex position and integer-valued labels for vertices/half-edges/faces. Mesh connectivity data are stored as dicts of vertex/half-edge/face labels. Each data dict has a name of the form "a_description_B", where "a" denotes the type of object associated with the dict elements ("xyz" for position, "v" for vertex, "h" for half-edge, or "f" for face), "B" denotes the type of object associated with the dict indices ("V" for vertex, "H" for half-edge, or "F" for face), and "description" is a description of information represented by the dict. For example, "_v_origin_H" is a dict of vertices at the origin of each half-edge. The i-th element of data dict "a_description_B" can be accessed using the "a_description_b(i)" method.
 
-    Attributes
+    Properties
     ----------
-    _xyz_coord_V : dict of numpy.array
+    xyz_coord_V : dict of numpy.array
         _xyz_coord_V[i] = xyz coordinates of vertex i
-    _h_out_V : dict of int
+    h_out_V : dict of int
         _h_out_V[i] = some outgoing half-edge incident on vertex i
-    _v_origin_H : dict of int
+    v_origin_H : dict of int
         _v_origin_H[j] = vertex at the origin of half-edge j
-    _h_next_H : dict of int
+    h_next_H : dict of int
         _h_next_H[j] next half-edge after half-edge j in the face cycle
-    _h_twin_H : dict of int
+    h_twin_H : dict of int
         _h_twin_H[j] = half-edge antiparalel to half-edge j
-    _f_left_H : dict of int
+    f_left_H : dict of int
         _f_left_H[j] = face to the left of half-edge j
-    _h_bound_F : dict of int
-        _h_bound_F[k] = some half-edge on the boudary of face k
+    h_bound_F : dict of int
+        _h_bound_F[k] = some half-edge on the ccw boudary of face k
+    h_cw_B : dict of int
+        _h_cw_B[n] = half-edge in boundary n of the mesh
 
     Initialization
     ---------------
@@ -58,14 +119,19 @@ class HalfEdgeMeshBase:
         h_twin_H,
         f_left_H,
         h_bound_F,
+        h_cw_B=None,
     ):
-        self._xyz_coord_V = xyz_coord_V
-        self._h_out_V = h_out_V
-        self._v_origin_H = v_origin_H
-        self._h_next_H = h_next_H
-        self._h_twin_H = h_twin_H
-        self._h_bound_F = h_bound_F
-        self._f_left_H = f_left_H
+        self.xyz_coord_V = xyz_coord_V
+        self.h_out_V = h_out_V
+        self.v_origin_H = v_origin_H
+        self.h_next_H = h_next_H
+        self.h_twin_H = h_twin_H
+        self.h_bound_F = h_bound_F
+        self.f_left_H = f_left_H
+        if h_cw_B is None:
+            self.h_cw_B = self.find_h_cw_B()
+        else:
+            self.h_cw_B = h_cw_B
 
     @classmethod
     def from_vert_face_list(cls, xyz_coord_V, vvv_of_F):
@@ -83,11 +149,11 @@ class HalfEdgeMeshBase:
         -------
             HalfEdgeMesh: An instance of the HalfEdgeMesh class with the given vertices and faces.
         """
-        v2h = VertTri2HalfEdgeConverter.from_source_samples(xyz_coord_V, vvv_of_F)
-        data_dicts = [
-            {key: val for key, val in enumerate(data)} for data in v2h.target_samples
-        ]
-        return cls(*data_dicts)
+        return cls(
+            *VertTri2HalfEdgeConverter.from_source_samples(
+                xyz_coord_V, vvv_of_F
+            ).target_samples
+        )
 
     @classmethod
     def from_vertex_face_ply(cls, ply_path):
@@ -99,11 +165,7 @@ class HalfEdgeMeshBase:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class with data from the ply file.
         """
-        v2h = VertTri2HalfEdgeConverter.from_source_ply(ply_path)
-        data_dicts = [
-            {key: val for key, val in enumerate(data)} for data in v2h.target_samples
-        ]
-        return cls(*data_dicts)
+        return cls(*VertTri2HalfEdgeConverter.from_source_ply(ply_path).target_samples)
 
     @classmethod
     def from_half_edge_ply(cls, ply_path):
@@ -115,11 +177,7 @@ class HalfEdgeMeshBase:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
         """
-        v2h = VertTri2HalfEdgeConverter.from_target_ply(ply_path)
-        data_dicts = [
-            {key: val for key, val in enumerate(data)} for data in v2h.target_samples
-        ]
-        return cls(*data_dicts)
+        return cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).target_samples)
 
     @classmethod
     def from_half_edge_ply_no_bdry_twin(cls, ply_path):
@@ -131,42 +189,112 @@ class HalfEdgeMeshBase:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
         """
-        v2h = VertTri2HalfEdgeConverter.from_target_ply(ply_path)
-        V, F = v2h.target_samples_to_source_samples(*v2h.target_samples)
-        target_samples = v2h.source_samples_to_target_samples(V, F)
-        data_dicts = [
-            {key: val for key, val in enumerate(data)} for data in target_samples
-        ]
-        return cls(*data_dicts)
+        return cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).source_samples)
 
     #######################################################
     @property
+    def h_cw_B(self):
+        return self._h_cw_B
+
+    @h_cw_B.setter
+    def h_cw_B(self, value):
+        if isinstance(value, dict):
+            self._h_cw_B = value
+        elif hasattr(value, "__iter__"):
+            self._h_cw_B = dict(enumerate(value))
+        else:
+            raise TypeError("h_cw_B must be a dictionary or an iterable.")
+
+    @property
     def xyz_coord_V(self):
         return self._xyz_coord_V
+
+    @xyz_coord_V.setter
+    def xyz_coord_V(self, value):
+        if isinstance(value, dict):
+            self._xyz_coord_V = value
+        elif hasattr(value, "__iter__"):
+            self._xyz_coord_V = dict(enumerate(value))
+        else:
+            raise TypeError("xyz_coord_V must be a dictionary or an iterable.")
 
     @property
     def h_out_V(self):
         return self._h_out_V
 
+    @h_out_V.setter
+    def h_out_V(self, value):
+        if isinstance(value, dict):
+            self._h_out_V = value
+        elif hasattr(value, "__iter__"):
+            self._h_out_V = dict(enumerate(value))
+        else:
+            raise TypeError("h_out_V must be a dictionary or an iterable.")
+
     @property
     def v_origin_H(self):
         return self._v_origin_H
+
+    @v_origin_H.setter
+    def v_origin_H(self, value):
+        if isinstance(value, dict):
+            self._v_origin_H = value
+        elif hasattr(value, "__iter__"):
+            self._v_origin_H = dict(enumerate(value))
+        else:
+            raise TypeError("v_origin_H must be a dictionary or an iterable.")
 
     @property
     def h_next_H(self):
         return self._h_next_H
 
+    @h_next_H.setter
+    def h_next_H(self, value):
+        if isinstance(value, dict):
+            self._h_next_H = value
+        elif hasattr(value, "__iter__"):
+            self._h_next_H = dict(enumerate(value))
+        else:
+            raise TypeError("h_next_H must be a dictionary or an iterable.")
+
     @property
     def h_twin_H(self):
         return self._h_twin_H
+
+    @h_twin_H.setter
+    def h_twin_H(self, value):
+        if isinstance(value, dict):
+            self._h_twin_H = value
+        elif hasattr(value, "__iter__"):
+            self._h_twin_H = dict(enumerate(value))
+        else:
+            raise TypeError("h_twin_H must be a dictionary or an iterable.")
 
     @property
     def f_left_H(self):
         return self._f_left_H
 
+    @f_left_H.setter
+    def f_left_H(self, value):
+        if isinstance(value, dict):
+            self._f_left_H = value
+        elif hasattr(value, "__iter__"):
+            self._f_left_H = dict(enumerate(value))
+        else:
+            raise TypeError("f_left_H must be a dictionary or an iterable.")
+
     @property
     def h_bound_F(self):
         return self._h_bound_F
+
+    @h_bound_F.setter
+    def h_bound_F(self, value):
+        if isinstance(value, dict):
+            self._h_bound_F = value
+        elif hasattr(value, "__iter__"):
+            self._h_bound_F = dict(enumerate(value))
+        else:
+            raise TypeError("h_bound_F must be a dictionary or an iterable.")
 
     @property
     def num_vertices(self):
@@ -181,26 +309,25 @@ class HalfEdgeMeshBase:
         return len(self._h_bound_F)
 
     @property
+    def num_boundaries(self):
+        return len(self._h_cw_B)
+
+    @property
+    def genus(self):
+        return 1 - (self.euler_characteristic + self.num_boundaries) // 2
+
+    @property
     def euler_characteristic(self):
         return self.num_vertices - self.num_edges + self.num_faces
 
     @property
     def data_lists(self):
         """
-        get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file
+        get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...
         """
-        Vkeys = self._xyz_coord_V.keys()
-        min_v = min(Vkeys)
-        max_v = max(Vkeys)
-        V = sorted(Vkeys)
-        Hkeys = self._v_origin_H.keys()
-        min_h = min(Hkeys)
-        max_h = max(Hkeys)
-        H = sorted(Hkeys)
-        Fkeys = self._h_bound_F.keys()
-        min_f = min(Fkeys)
-        max_f = max(Fkeys)
-        F = sorted(Fkeys)
+        V = sorted(self._xyz_coord_V.keys())
+        H = sorted(self._v_origin_H.keys())
+        F = sorted(self._h_bound_F.keys())
 
         xyz_coord_V = [self.xyz_coord_v(v) for v in V]
         h_out_V = [H.index(self.h_out_v(v)) for v in V]
@@ -223,8 +350,22 @@ class HalfEdgeMeshBase:
             h_bound_F,
         )
 
-    #######################################################
+    @property
+    def data_dicts(self):
+        """
+        get dicts of vertex positions and connectivity data and required to reconstruct mesh or write to ply file
+        """
+        return (
+            self.xyz_coord_V,
+            self.h_out_V,
+            self.v_origin_H,
+            self.h_next_H,
+            self.h_twin_H,
+            self.f_left_H,
+            self.h_bound_F,
+        )
 
+    #######################################################
     def xyz_coord_v(self, v):
         """
         get array of xyz coordinates of vertex v
@@ -324,13 +465,17 @@ class HalfEdgeMeshBase:
         """only works for triangle faces"""
         return self.h_twin_h(self.h_next_h(self.h_next_h(h)))
 
-    def h_adjacent_to_boundary(self, h):
+    def _h_adjacent_to_boundary(self, h):
         """check if half-edge h is on the boundary of the mesh"""
         return self.f_left_h(self.h_twin_h(h)) < 0
 
-    def h_on_boundary(self, h):
-        """check if half-edge h is on the boundary of the mesh"""
+    def boundary_is_left_of_h(self, h):
+        """check if half-edge h is in the boundary of the mesh"""
         return self.f_left_h(h) < 0
+
+    def boundary_is_right_of_h(self, h):
+        """check if half-edge h is on the boundary of the mesh"""
+        return self.f_left_h(self.h_twin_h(h)) < 0
 
     ######################################################
     # generators
@@ -357,6 +502,15 @@ class HalfEdgeMeshBase:
             if h == h_start:
                 break
 
+    def generate_H_next_h(self, h):
+        """Generate half-edges in the face/boundary cycle of half-edge h"""
+        h_start = h
+        while True:
+            yield h
+            h = self.h_next_h(h)
+            if h == h_start:
+                break
+
     ######################################################
     # geometric computations
     def barcell_area(self, v):
@@ -364,7 +518,7 @@ class HalfEdgeMeshBase:
         r = self.xyz_coord_v(v)
         A = 0.0
         for h in self.generate_H_out_v_clockwise(v):
-            if self.h_on_boundary(h):
+            if self.boundary_is_left_of_h(h):
                 continue
             r1 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(h)))
             r2 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(self.h_next_h(h))))
@@ -377,6 +531,27 @@ class HalfEdgeMeshBase:
             A += A_face / 3
 
         return A
+
+    def find_h_cw_B(self):
+        """Find all boundary edges in the mesh"""
+        h_cw_B = dict()
+        boundary_is_left_of_H = set()
+        # boundary_is_right_of_H = set()
+        F_need2check = set(self.h_bound_F)  # set of faces that need to be checked
+        while F_need2check:
+            f = F_need2check.pop()
+            for h in self.generate_H_bound_f(f):
+                if self.boundary_is_right_of_h(h):
+                    boundary_is_left_of_H.add(self.h_twin_h(h))
+        cw_boundary_H_cycles = []
+        ccw_boundary_H_cycles = []
+        while boundary_is_left_of_H:
+            h = boundary_is_left_of_H.pop()
+            bdry = self.f_left_h(h)
+            h_cw_B[bdry] = h
+            for h in self.generate_H_next_h(h):
+                boundary_is_left_of_H.discard(h)
+        return h_cw_B
 
     ######################################################
     # star of a k-simplex s consists of:
@@ -391,7 +566,7 @@ class HalfEdgeMeshBase:
         for h in self.generate_H_out_v_clockwise(v):
             ht = self.h_twin_h(h)
             H.update([h, ht])
-            if not self.h_on_boundary(h):
+            if not self.boundary_is_left_of_h(h):
                 F.add(self.f_left_h(h))
 
         return V, H, F
@@ -402,7 +577,7 @@ class HalfEdgeMeshBase:
         H = {h, self.h_twin_h(h)}
         F = set()
         for hi in H:
-            if not self.h_on_boundary(hi):
+            if not self.boundary_is_left_of_h(hi):
                 F.add(self.f_left_h(hi))
 
         return V, H, F
@@ -416,15 +591,15 @@ class HalfEdgeMeshBase:
         for h in H_in:
             ht = self.h_twin_h(h)
             H.add(ht)
-            if not self.h_on_boundary(h):
+            if not self.boundary_is_left_of_h(h):
                 F.add(self.f_left_h(h))
-            if not self.h_on_boundary(ht):
+            if not self.boundary_is_left_of_h(ht):
                 F.add(self.f_left_h(ht))
         for v in V_in:
             for h in self.generate_H_out_v_clockwise(v):
                 H.add(h)
                 H.add(self.h_twin_h(h))
-                if not self.h_on_boundary(h):
+                if not self.boundary_is_left_of_h(h):
                     F.add(self.f_left_h(h))
         return V, H, F
 
@@ -593,6 +768,30 @@ class HalfEdgeMesh(HalfEdgeMeshBase):
             h_bound_F,
         )
 
+    def find_boundary_cycles(self):
+        """Find all boundary edges in the mesh"""
+        boundary_is_left_of_H = set()
+        # boundary_is_right_of_H = set()
+        F_need2check = set(self.h_bound_F)  # set of faces that need to be checked
+        while F_need2check:
+            f = F_need2check.pop()
+            for h in self.generate_H_bound_f(f):
+                if self.boundary_is_right_of_h(h):
+                    boundary_is_left_of_H.add(self.h_twin_h(h))
+        cw_boundary_H_cycles = []
+        ccw_boundary_H_cycles = []
+        while boundary_is_left_of_H:
+            h = boundary_is_left_of_H.pop()
+            cw_cycle = list(self.generate_H_next_h(h))
+            cw_boundary_H_cycles.append(cw_cycle)
+            ccw_cycle = []
+            for h in cw_cycle:
+                ccw_cycle.append(self.h_twin_h(h))
+                boundary_is_left_of_H.discard(h)
+            ccw_boundary_H_cycles.append(ccw_cycle[::-1])
+        return cw_boundary_H_cycles, ccw_boundary_H_cycles
+
+    ######################################################
     def _generate_twin_pairs_around_v_clockwise(self, v):
         e = self.h_out_v(v)
         e_start = e
@@ -798,8 +997,6 @@ class HalfEdgeMesh(HalfEdgeMeshBase):
     ######################################################
 
 
-######################################
-######################################
 class HalfEdgePatch:
     """
     A submanifold of a HalfEdgeMesh topologically equivalent to a disk.
@@ -819,6 +1016,45 @@ class HalfEdgePatch:
         self.F = F
         self.H_boundary_generators = H_boundary_generators
 
+    @property
+    def V(self):
+        return self._V
+
+    @V.setter
+    def V(self, _V):
+        if not isinstance(_V, set):
+            if hasattr(_V, "__iter__"):
+                self._V = set(_V)
+            else:
+                raise ValueError("Argument must be set or iterable.")
+        self._V = _V
+
+    @property
+    def H(self):
+        return self._H
+
+    @H.setter
+    def H(self, _H):
+        if not isinstance(_H, set):
+            if hasattr(_H, "__iter__"):
+                self._H = set(_H)
+            else:
+                raise ValueError("Argument must be set or iterable.")
+        self._H = _H
+
+    @property
+    def F(self):
+        return self._F
+
+    @F.setter
+    def F(self, _F):
+        if not isinstance(_F, set):
+            if hasattr(_F, "__iter__"):
+                self._F = set(_F)
+            else:
+                raise ValueError("Argument must be set or iterable.")
+        self._F = _F
+
     @classmethod
     def from_seed_vertex(cls, v, supermesh):
         V, H, F = supermesh.closure(*supermesh.star_of_vertex(v))
@@ -828,6 +1064,8 @@ class HalfEdgePatch:
         )
 
         return self
+
+    ##########################################################3
 
     def find_boundary_generators(self, feasible_H_bdry_generators=set()):
         H_boundary_generators = []

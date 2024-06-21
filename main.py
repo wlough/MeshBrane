@@ -2,7 +2,7 @@ from src.python.half_edge_mesh import HalfEdgeMesh, HalfEdgePatch
 from src.python.mesh_viewer import MeshViewer
 import numpy as np
 
-source_path = "./data/ply/binary/annulus.ply"
+source_path = "./data/ply/binary/neovius.ply"
 viewer_kwargs = {
     "image_dir": "./output/convergence_test/temp_images",
     # "view": {
@@ -12,18 +12,41 @@ viewer_kwargs = {
     #     "focalpoint": (0, 0, 0),
     # },
     "show_vertices": True,
-    "v_radius": 0.1,
+    "v_radius": 0.01,
 }
 # m = HalfEdgeMesh.from_vertex_face_ply(source_path)
 m = HalfEdgeMesh.from_half_edge_ply(source_path)
 mv = MeshViewer(*m.data_lists, **viewer_kwargs)
+# m.euler_characteristic
+# %%
+# cw, ccw = m.find_boundary_cycles()
+mv.set_F_rgba(f_rgba=mv.colors["green20"])
+mv.set_E_rgba(e_rgba=mv.colors["orange20"])
+mv.set_V_rgba(v_rgba=mv.colors["red10"])
+H = []
+for b, h in m.h_cw_B.items():
+    H.extend(m.generate_H_next_h(h))
+mv.set_subset_E_rgba(rgba=mv.colors["blue"], indices=H)
+# for cycle in cw:
+#     mv.set_subset_E_rgba(rgba=mv.colors["blue"], indices=cycle)
+# for cycle in ccw:
+#     mv.set_subset_E_rgba(rgba=mv.colors["red"], indices=cycle)
+mv.plot()
 
+# %%
+
+
+# %%
+Hl, Hr = m.find_boundary_cycles()
+mv.plot()
+# %%
 V, H, F = {3}, set(), set()
 # V, H, F = m.link(V, H, F)
-V, H, F = m.star(V, H, F)
-V, H, F = m.closure(V, H, F)
+V, H, F = (list(_) for _ in m.link(V, H, F))
+# V, H, F = m.star(V, H, F)
+# V, H, F = m.closure(V, H, F)
 p = HalfEdgePatch.from_seed_vertex(3, m)
-V, F, H = list(p.V), list(p.F), list(p.H)
+# V, F, H = list(p.V), list(p.F), list(p.H)
 mv.set_F_rgba(f_rgba=mv.colors["green20"])
 mv.set_E_rgba(e_rgba=mv.colors["orange20"])
 mv.set_V_rgba(v_rgba=mv.colors["red10"])
