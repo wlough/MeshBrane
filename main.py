@@ -8,16 +8,100 @@ viewer_kwargs = {
     # "view": {
     #     "azimuth": 0,
     #     "elevation": 55,
-    #     "distance": 4,
+    #     "distance": 6,
     #     "focalpoint": (0, 0, 0),
     # },
     "show_vertices": True,
-    "v_radius": 0.01,
+    "v_radius": 0.03,
 }
 # m = HalfEdgeMesh.from_vertex_face_ply(source_path)
 m = HalfEdgeMesh.from_half_edge_ply(source_path)
 mv = MeshViewer(*m.data_lists, **viewer_kwargs)
-# m.euler_characteristic
+
+p = HalfEdgePatch.from_seed_vertex(3, m)
+for iter in range(60):
+    print(f"iter={iter}")
+
+    # LkV, LkH, LkF = m.link(V, H, F)
+    mv.set_F_rgba(f_rgba=mv.colors["green10"])
+    mv.set_E_rgba(e_rgba=mv.colors["orange10"])
+    mv.set_V_rgba(v_rgba=mv.colors["transparent"])
+
+    V = list(p.expand_boundary())
+    H = list(p.generate_H_cw_B())
+    F = list(p.generate_F_cw_B())
+
+    mv.set_subset_E_rgba(rgba=mv.colors["blue"], indices=H)
+    mv.set_subset_F_rgba(rgba=mv.colors["green50"], indices=list(F))
+    mv.set_subset_V_rgba(rgba=mv.colors["red50"], indices=V)
+    mv.save_plot()
+
+
+def movie(
+    image_dir,
+    image_type="png",
+    image_prefix="frame",
+    index_length=4,
+    movie_name="movie",
+    movie_dir=None,
+    movie_type="mp4",
+):
+    import os
+    import subprocess
+
+    image_name = f"{image_prefix}_%0{index_length}d.{image_type}"
+    image_path = os.path.join(image_dir, image_name)
+    if movie_dir is None:
+        movie_dir = image_dir
+    movie_path = os.path.join(image_dir, f"{movie_name}.{movie_type}")
+    run_command = [
+        "ffmpeg",
+        # overwrite output file without asking
+        "-y",
+        # frame rate (Hz)
+        "-r",
+        "20",
+        # frame size (width x height)
+        "-s",
+        "1080x720",
+        # input files
+        "-i",
+        image_path,
+        # video codec
+        "-vcodec",
+        "libx264",
+        # video quality, lower means better
+        "-crf",
+        "25",
+        # pixel format
+        "-pix_fmt",
+        "yuv420p",
+        # output file
+        movie_path,
+    ]
+
+    # Start the process
+    process = subprocess.Popen(
+        run_command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        cwd=image_dir,
+    )
+    for line in iter(process.stdout.readline, b""):
+        print(line.decode(), end="")
+    # relative_path = os.path.relpath(target_dir, start_dir)
+    # os.path.join,os.path.basename,os.makedirs,os.system,os.path.exists,os.makedirs,shutil.rmtree
+
+
+movie(
+    "./output/convergence_test/temp_images",
+    image_type="png",
+    image_prefix="frame",
+    index_length=4,
+    movie_name="movie",
+    movie_dir=None,
+    movie_type="mp4",
+)
 # %%
 # cw, ccw = m.find_boundary_cycles()
 mv.set_F_rgba(f_rgba=mv.colors["green20"])
@@ -34,18 +118,21 @@ mv.set_subset_E_rgba(rgba=mv.colors["blue"], indices=H)
 mv.plot()
 
 # %%
-
+V, H, F = set(), {3}, set()
+V, H, F = m.star(V, H, F)
 
 # %%
 Hl, Hr = m.find_boundary_cycles()
 mv.plot()
 # %%
 V, H, F = {3}, set(), set()
-# V, H, F = m.link(V, H, F)
-V, H, F = (list(_) for _ in m.link(V, H, F))
+V, H, F = m.link(V, H, F)
+# V, H, F = (list(_) for _ in m.link(V, H, F))
 # V, H, F = m.star(V, H, F)
 # V, H, F = m.closure(V, H, F)
 p = HalfEdgePatch.from_seed_vertex(3, m)
+
+list(p.generate_V_cw_B())
 # V, F, H = list(p.V), list(p.F), list(p.H)
 mv.set_F_rgba(f_rgba=mv.colors["green20"])
 mv.set_E_rgba(e_rgba=mv.colors["orange20"])
@@ -56,19 +143,8 @@ mv.set_subset_F_rgba(rgba=mv.colors["green50"], indices=list(F))
 mv.set_subset_V_rgba(rgba=mv.colors["red50"], indices=list(V))
 mv.plot()
 # %%
-for iter in range(60):
-    print(f"iter={iter}")
 
-    # LkV, LkH, LkF = m.link(V, H, F)
-    mv.set_F_rgba(f_rgba=mv.colors["green20"])
-    mv.set_E_rgba(e_rgba=mv.colors["orange20"])
-    mv.set_V_rgba(v_rgba=mv.colors["red10"])
-
-    mv.set_subset_E_rgba(rgba=mv.colors["blue"], indices=list(H))
-    mv.set_subset_F_rgba(rgba=mv.colors["green50"], indices=list(F))
-    mv.set_subset_V_rgba(rgba=mv.colors["red50"], indices=list(V))
-    mv.save_plot()
-    V, H, F = m.link(V, H, F)
+# V, H, F = m.link(V, H, F)
 # %%
 # p = HalfEdgePatch.from_seed_vertex(3, m)
 # V, F, H = list(p.V), list(p.F), list(p.H)

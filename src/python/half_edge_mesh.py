@@ -465,17 +465,23 @@ class HalfEdgeMeshBase:
         """only works for triangle faces"""
         return self.h_twin_h(self.h_next_h(self.h_next_h(h)))
 
-    def _h_adjacent_to_boundary(self, h):
-        """check if half-edge h is on the boundary of the mesh"""
-        return self.f_left_h(self.h_twin_h(h)) < 0
-
-    def boundary_is_left_of_h(self, h):
+    # def boundary_is_left_of_h(self, h):
+    def cw_boundary_contains_h(self, h):
         """check if half-edge h is in the boundary of the mesh"""
         return self.f_left_h(h) < 0
 
-    def boundary_is_right_of_h(self, h):
+    # def boundary_is_right_of_h(self, h):
+    def ccw_boundary_contains_h(self, h):
         """check if half-edge h is on the boundary of the mesh"""
         return self.f_left_h(self.h_twin_h(h)) < 0
+
+    def boundary_contains_h(self, h):
+        """check if half-edge h is on the boundary of the mesh"""
+        return self.f_left_h(h) < 0 or self.f_left_h(self.h_twin_h(h)) < 0
+
+    def boundary_contains_v(self, v):
+        """check if vertex v is on the boundary of the mesh"""
+        return self.boundary_contains_h(self.h_out_v(v))
 
     ######################################################
     # generators
@@ -518,7 +524,7 @@ class HalfEdgeMeshBase:
         r = self.xyz_coord_v(v)
         A = 0.0
         for h in self.generate_H_out_v_clockwise(v):
-            if self.boundary_is_left_of_h(h):
+            if self.cw_boundary_contains_h(h):
                 continue
             r1 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(h)))
             r2 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(self.h_next_h(h))))
@@ -541,10 +547,10 @@ class HalfEdgeMeshBase:
         while F_need2check:
             f = F_need2check.pop()
             for h in self.generate_H_bound_f(f):
-                if self.boundary_is_right_of_h(h):
+                if self.ccw_boundary_contains_h(h):
                     boundary_is_left_of_H.add(self.h_twin_h(h))
-        cw_boundary_H_cycles = []
-        ccw_boundary_H_cycles = []
+        # cw_boundary_H_cycles = []
+        # ccw_boundary_H_cycles = []
         while boundary_is_left_of_H:
             h = boundary_is_left_of_H.pop()
             bdry = self.f_left_h(h)
@@ -566,7 +572,7 @@ class HalfEdgeMeshBase:
         for h in self.generate_H_out_v_clockwise(v):
             ht = self.h_twin_h(h)
             H.update([h, ht])
-            if not self.boundary_is_left_of_h(h):
+            if not self.cw_boundary_contains_h(h):
                 F.add(self.f_left_h(h))
 
         return V, H, F
@@ -577,7 +583,7 @@ class HalfEdgeMeshBase:
         H = {h, self.h_twin_h(h)}
         F = set()
         for hi in H:
-            if not self.boundary_is_left_of_h(hi):
+            if not self.cw_boundary_contains_h(hi):
                 F.add(self.f_left_h(hi))
 
         return V, H, F
@@ -591,15 +597,15 @@ class HalfEdgeMeshBase:
         for h in H_in:
             ht = self.h_twin_h(h)
             H.add(ht)
-            if not self.boundary_is_left_of_h(h):
+            if not self.cw_boundary_contains_h(h):
                 F.add(self.f_left_h(h))
-            if not self.boundary_is_left_of_h(ht):
+            if not self.cw_boundary_contains_h(ht):
                 F.add(self.f_left_h(ht))
         for v in V_in:
             for h in self.generate_H_out_v_clockwise(v):
                 H.add(h)
                 H.add(self.h_twin_h(h))
-                if not self.boundary_is_left_of_h(h):
+                if not self.cw_boundary_contains_h(h):
                     F.add(self.f_left_h(h))
         return V, H, F
 
@@ -628,7 +634,7 @@ class HalfEdgeMeshBase:
 
     ######################################################
     ######################################################
-    # old generators to be deprecated
+    # to be deprecated
 
     def _generate_H_out_v_clockwise(self, v):
         """
@@ -742,6 +748,10 @@ class HalfEdgeMeshBase:
         else:
             return Hccw
 
+    def _h_adjacent_to_boundary(self, h):
+        """check if half-edge h is on the boundary of the mesh"""
+        return self.f_left_h(self.h_twin_h(h)) < 0
+
     ######################################################
 
 
@@ -776,7 +786,7 @@ class HalfEdgeMesh(HalfEdgeMeshBase):
         while F_need2check:
             f = F_need2check.pop()
             for h in self.generate_H_bound_f(f):
-                if self.boundary_is_right_of_h(h):
+                if self.ccw_boundary_contains_h(h):
                     boundary_is_left_of_H.add(self.h_twin_h(h))
         cw_boundary_H_cycles = []
         ccw_boundary_H_cycles = []
@@ -1004,113 +1014,108 @@ class HalfEdgePatch:
 
     def __init__(
         self,
+        supermesh,
         V,
         H,
         F,
-        H_boundary_generators,
-        supermesh,
+        h_cw_B=None,
+        V_bdry=None,
     ):
         self.supermesh = supermesh
         self.V = V
         self.H = H
         self.F = F
-        self.H_boundary_generators = H_boundary_generators
+        if h_cw_B is None:
+            self.h_cw_B = self.find_h_cw_B()
+        if V_bdry is None:
+            self.V_bdry = set(self.generate_V_cw_B())
 
     @property
     def V(self):
         return self._V
 
     @V.setter
-    def V(self, _V):
-        if not isinstance(_V, set):
-            if hasattr(_V, "__iter__"):
-                self._V = set(_V)
-            else:
-                raise ValueError("Argument must be set or iterable.")
-        self._V = _V
+    def V(self, value):
+        if isinstance(value, set):
+            self._V = value
+        elif hasattr(value, "__iter__"):
+            self._V = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
 
     @property
     def H(self):
         return self._H
 
     @H.setter
-    def H(self, _H):
-        if not isinstance(_H, set):
-            if hasattr(_H, "__iter__"):
-                self._H = set(_H)
-            else:
-                raise ValueError("Argument must be set or iterable.")
-        self._H = _H
+    def H(self, value):
+        if isinstance(value, set):
+            self._H = value
+        elif hasattr(value, "__iter__"):
+            self._H = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
 
     @property
     def F(self):
         return self._F
 
     @F.setter
-    def F(self, _F):
-        if not isinstance(_F, set):
-            if hasattr(_F, "__iter__"):
-                self._F = set(_F)
-            else:
-                raise ValueError("Argument must be set or iterable.")
-        self._F = _F
+    def F(self, value):
+        if isinstance(value, set):
+            self._F = value
+        elif hasattr(value, "__iter__"):
+            self._F = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
 
+    @property
+    def V_bdry(self):
+        return self._V_bdry
+
+    @V_bdry.setter
+    def V_bdry(self, value):
+        if isinstance(value, set):
+            self._V_bdry = value
+        elif hasattr(value, "__iter__"):
+            self._V_bdry = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
+
+    ##############################################
     @classmethod
     def from_seed_vertex(cls, v, supermesh):
         V, H, F = supermesh.closure(*supermesh.star_of_vertex(v))
-        self = cls(V, H, F, [], supermesh)
-        self.H_boundary_generators = self.find_boundary_generators(
-            feasible_H_bdry_generators=H.copy()
-        )
+        self = cls(supermesh, V, H, F)
+        # self.h_cw_B = self.find_h_cw_B()
 
         return self
 
-    ##########################################################3
+    def cw_boundary_contains_h(self, h):
+        """check if half-edge h is in the boundary of the mesh"""
+        return h in self.H and self.supermesh.f_left_h(h) not in self.F
 
-    def find_boundary_generators(self, feasible_H_bdry_generators=set()):
-        H_boundary_generators = []
-        if len(feasible_H_bdry_generators) == 0:
-            feasible_H_bdry_generators.update(self.H)
-        while feasible_H_bdry_generators:
-            h = feasible_H_bdry_generators.pop()
-            if self.h_is_on_boundary(h):
-                H_boundary_generators.append(h)
-                H_next_h = self.generate_H_next_h(h)
-                for n in H_next_h:
-                    feasible_H_bdry_generators.discard(n)
+    def ccw_boundary_contains_h(self, h):
+        """check if half-edge h is on the boundary of the mesh"""
+        return (
+            h in self.H
+            and self.supermesh.f_left_h(self.supermesh.h_twin_h(h)) not in self.F
+        )
 
-        return H_boundary_generators
+    def boundary_contains_h(self, h):
+        """check if half-edge h is on the boundary of the mesh"""
+        if h in self.H:
+            if self.supermesh.f_left_h(h) not in self.F:
+                return True
+            if self.supermesh.f_left_h(self.supermesh.h_twin_h(h)) not in self.F:
+                return True
+        return False
 
-    @classmethod
-    def _from_seed_vertex(cls, v, supermesh):
-        V = {v}
-        H = set()
-        F = set()
-        H_boundary_cycle = []
-        H_out_v_counterclockwise = supermesh.H_out_v_counterclockwise_safe(v)
-        for h in H_out_v_counterclockwise:
-            # h is v-->bdry
-            n = supermesh.h_next_h(h)  # n is bdry-->bdry
-            v1 = supermesh.v_origin_h(n)
-            nn = supermesh.h_next_h(n)  # nn is bdry-->v
-            v2 = supermesh.v_origin_h(nn)
-            f = supermesh.f_left_h(h)
-            V.update([v1, v2])
-            H.update([h, n, nn])
-            F.add(f)  # new face
-            if supermesh.h_adjacent_to_boundary(
-                h
-            ):  # if h is on boundary of supermesh it's also on boundary of patch
-                H_boundary_cycle.append(h)
-            H_boundary_cycle.append(n)  # always on patch boundary
+    def boundary_contains_v(self, v):
+        """check if vertex v is on the boundary of the mesh"""
+        return self.boundary_contains_h(self.supermesh.h_out_v(v))
 
-        if supermesh.h_adjacent_to_boundary(
-            nn
-        ):  # if nn is on boundary of supermesh it's also on boundary of patch
-            H_boundary_cycle.append(nn)
-
-        return cls(V, H, F, H_boundary_cycle, supermesh)
-
+    ##############################################
     def xyz_coord_v(self, v):
         """
         get array of xyz coordinates of vertex v
@@ -1123,18 +1128,6 @@ class HalfEdgePatch:
         """
         return self.supermesh.xyz_coord_v(v)
 
-    def h_is_on_boundary(self, h):
-        """check if half-edge h is on the boundary of the patch"""
-        if h in self.H:
-            return self.supermesh.f_left_h(h) not in self.F
-        return False
-
-    def h_is_in_interior(self, h):
-        """check if half-edge h is on the boundary of the patch"""
-        if h in self.H:
-            return self.supermesh.f_left_h(h) in self.F
-        return False
-
     def h_out_v(self, v):
         """
         get index of an non-boundary outgoing half-edge incident on vertex v
@@ -1145,21 +1138,13 @@ class HalfEdgePatch:
         Returns:
             int: half-edge index
         """
-        # H_out_v = self.supermesh.generate_H_out_v_clockwise(v)
+        if v not in self.V:
+            raise ValueError("Vertex not in patch.")
         for h in self.supermesh.generate_H_out_v_clockwise(v):
-            if h in self.H and not self.h_is_on_boundary(h):
+            if h not in self.H:
+                continue
+            elif self.supermesh.f_left_h(h) in self.F:
                 return h
-
-    def h_bound_f(self, f):
-        """get index of a half-edge on the boundary of face f
-
-        Args:
-            f (int): face index
-
-        Returns:
-            int: half-edge index
-        """
-        return self.supermesh.h_bound_f(f)
 
     def v_origin_h(self, h):
         """get index of the vertex at the origin of half-edge h
@@ -1170,7 +1155,39 @@ class HalfEdgePatch:
         Returns:
             int: vertex index
         """
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
         return self.supermesh.v_origin_h(h)
+
+    def h_next_h(self, h):
+        """get index of the next half-edge after h in the face/boundary cycle
+        Args:
+            h (int): half-edge index
+
+        Returns:
+            int: half-edge index
+        """
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
+        elif self.supermesh.f_left_h(h) in self.F:
+            return self.supermesh.h_next_h(h)
+        n = self.supermesh.h_next_h(h)
+        while n not in self.H:
+            n = self.supermesh.h_out_cw_from_h(n)
+        return n
+
+    def h_twin_h(self, h):
+        """get index of the half-edge anti-parallel to half-edge h
+
+        Args:
+            h (int): half-edge index
+
+        Returns:
+            int: half-edge index
+        """
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
+        return self.supermesh.h_twin_h(h)
 
     def f_left_h(self, h):
         """get index of the face to the left of half-edge h
@@ -1181,23 +1198,25 @@ class HalfEdgePatch:
         Returns:
             int: face index
         """
-        return self.supermesh.f_left_h(h)
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
+        elif self.supermesh.f_left_h(h) in self.F:
+            return self.supermesh.f_left_h(h)
+        else:
+            return -1
 
-    def h_next_h(self, h):
-        """get index of the next half-edge after h in the face cycle
+    def h_bound_f(self, f):
+        """get index of a half-edge on the boundary of face f
 
         Args:
-            h (int): half-edge index
+            f (int): face index
 
         Returns:
             int: half-edge index
         """
-        if self.h_is_in_interior(h):
-            return self.supermesh.h_next_h(h)
-        n = self.supermesh.h_next_h(h)
-        while n not in self.H:
-            n = self.supermesh.h_out_cw_from_h(n)
-        return n
+        if f not in self.F:
+            raise ValueError("Face not in patch.")
+        return self.supermesh.h_bound_f(f)
 
     def generate_H_next_h(self, h_start):
         h = h_start
@@ -1207,55 +1226,57 @@ class HalfEdgePatch:
             if h == h_start:
                 break
 
-    def boundary_H_cycles(self):
-        bdry_cycles = []
-        for h_start in self.H_boundary_generators:
-            bdry_cycles.append([])
-            for h in self.generate_H_next_h(h_start):
-                bdry_cycles[-1].append(h)
-        return bdry_cycles
+    def generate_H_cw_B(self):
+        for bdry, h in self.h_cw_B.items():
+            for h in self.generate_H_next_h(h):
+                yield h
+
+    def generate_V_cw_B(self):
+        for h in self.generate_H_cw_B():
+            yield self.v_origin_h(h)
+
+    def generate_F_cw_B(self):
+        for h in self.generate_H_cw_B():
+            yield self.f_left_h(self.h_twin_h(h))
+
+    def find_h_cw_B(self, F_need2check=None):
+        h_cw_B = dict()
+        bdry_count = 0
+        H_in_cw_boundary = set()
+        # boundary_is_right_of_H = set()
+        if F_need2check is None:
+            F_need2check = self.F.copy()  # set of faces that need to be checked
+        while F_need2check:
+            f = F_need2check.pop()
+            h = self.h_bound_f(f)
+            for h in self.generate_H_next_h(h):
+                if self.ccw_boundary_contains_h(h):
+                    H_in_cw_boundary.add(self.h_twin_h(h))
+        while H_in_cw_boundary:
+            bdry_count += 1
+            h = H_in_cw_boundary.pop()
+            bdry = -bdry_count
+            h_cw_B[bdry] = h
+            for h in self.generate_H_next_h(h):
+                H_in_cw_boundary.discard(h)
+        return h_cw_B
+
+    def expand_boundary(self):
+        new_boundary_verts = set()
+        V_bdry_old = set(self.generate_V_cw_B())
+        V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
+        V_bdry_new = V - self.V
+        self.V.update(V)
+        self.H.update(H)
+        self.F.update(F)
+        self.h_cw_B = self.find_h_cw_B(F_need2check=F)
+        return V_bdry_new
 
     ##############################################
-    def h_twin_h(self, h):
-        """get index of the half-edge anti-parallel to half-edge h
+    ##############################################
+    # to be deprecated
 
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: half-edge index
-        """
-        t = self.supermesh.h_twin_h(h)
-        if t in self.H:
-            return t
-        else:
-            return -1
-
-    def h_adjacent_to_boundary(self, h):
-        """check if half-edge h is on the boundary of the mesh"""
-        t = self.supermesh.h_twin_h(h)
-        return t == -1 or t not in self.H
-
-    def _find_boundary_cycle(self, feasible_H_bdry_set=set()):
-        H_boundary_cycle = []
-        if len(feasible_H_bdry_set) == 0:  # find a boundary half-edge
-            feasible_H_bdry_set.update(self.H)
-        for h_start in feasible_H_bdry_set:
-            if self.h_adjacent_to_boundary(h_start):
-                break
-        h = h_start
-        while self.h_adjacent_to_boundary(h):
-            H_boundary_cycle.append(h)
-            H_in_cw = self.supermesh.generate_H_in_cw_from_h(h)
-            for h in H_in_cw:  # cycle through half-edges pointing the boundary vertex
-                h = self.h_next_h(h)
-                if self.h_adjacent_to_boundary(h):
-                    break
-            if h == h_start:
-                break
-        return H_boundary_cycle
-
-    def to_half_edge_mesh(self):
+    def _to_half_edge_mesh(self):
         V = sorted(self.V)
         H = sorted(self.H)
         F = sorted(self.F)
@@ -1282,7 +1303,7 @@ class HalfEdgePatch:
         )
 
     @property
-    def data_lists(self):
+    def _data_lists(self):
         """ """
         V = sorted(self.V)
         H = sorted(self.H)
@@ -1307,43 +1328,4 @@ class HalfEdgePatch:
             h_twin_H,
             f_left_H,
             h_bound_F,
-        )
-
-    def expand_boundary(self):
-        """ """
-        feasible_H_bdry_set = set()
-        N_old_bdry = len(self.H_boundary_cycle)
-        for i in range(N_old_bdry):
-            h_start = self.H_boundary_cycle[i]
-            h_stop = self.H_boundary_cycle[
-                (i + 1) % N_old_bdry
-            ]  # the next h in old boundary cycle
-            H_in_ccw = self.supermesh.generate_H_in_ccw_from_h(h_start)
-            h = next(H_in_ccw)  # already have h_start
-            # cycle through remaining half-edges pointing toward the old boundary vertex
-            for h in H_in_ccw:
-                self.V.add(self.v_origin_h(h))
-                self.F.add(self.f_left_h(h))
-                n = self.h_next_h(h)
-                nn = self.h_next_h(n)
-                # self.H.update([h, n, nn])
-                feasible_H_bdry_set.update([h, n, nn])
-                # if we reach the old boundary stop
-                if self.supermesh.h_twin_h(h) == h_stop:
-                    break
-            # if we reached the boundary of supermesh work cw from next h on old boundary...
-            if self.supermesh.h_adjacent_to_boundary(h):
-                # v = self.v_origin_h(h_stop)
-                H_out_cw = self.supermesh.generate_H_out_cw_from_h(h_stop)
-                h = next(H_out_cw)
-                for h in H_out_cw:
-                    self.V.add(self.v_origin_h(h))
-                    self.F.add(self.f_left_h(h))
-                    n = self.h_next_h(h)
-                    nn = self.h_next_h(n)
-                    # self.H.update([h, n, nn])
-                    feasible_H_bdry_set.update([h, n, nn])
-        self.H.update(feasible_H_bdry_set)
-        self.H_boundary_cycle = self.find_boundary_cycle(
-            feasible_H_bdry_set=feasible_H_bdry_set
         )

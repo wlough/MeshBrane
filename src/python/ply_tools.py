@@ -124,7 +124,7 @@ class PlySchema:
             elements=elements,
         )
 
-    def ply_data_to_samples(self, ply_data):
+    def ply_data_to_samples(self, plydata):
         """Constructs a lists of data from a PlyData object using the schema"""
         # ply_data = PlyData.read(file_path)
         V = [
