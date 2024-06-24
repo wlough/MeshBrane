@@ -1,6 +1,5 @@
 # this builds half-edge plys from vertex-face plys
-# using the face < 0 convention for boundary half-edges
-
+# using the face index < 0 convention for boundary half-edges
 import sys
 
 sys.path.insert(0, "/home/wlough/git/MeshBrane")
@@ -70,6 +69,6 @@ def generate_half_edge_mesh_plys_with_str(vf_ply_dir, he_ply_dir, use_binary=Tru
     print("-----------------------------------")
 
 
-generate_half_edge_mesh_plys_with_str(
-    vf_ply_dir, he_ply_dir, use_binary=True, only_use_strings=skip_strings_with
-)
+# generate_half_edge_mesh_plys_with_str(
+#     vf_ply_dir, he_ply_dir, use_binary=True, only_use_strings=skip_strings_with
+# )

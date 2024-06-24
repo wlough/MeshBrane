@@ -1,63 +1,7 @@
+from functools import lru_cache
 from src.python.ply_tools import VertTri2HalfEdgeConverter
 import numpy as np
-
-
-class HalfEdgeMeshOperator:
-    def __init__(self, mesh):
-        self.mesh = mesh
-
-    def _generate_twin_pairs_around_v_clockwise(self, v):
-        e = self.mesh.h_out_v(v)
-        e_start = e
-        while True:
-            e_twin = self.mesh.h_twin_h(e)
-            yield (e, e_twin)
-            e = self.mesh.h_next_h(e_twin)
-            if e == e_start:
-                break
-
-    def _Cl(self, V, E, F):
-        for f in F:
-            e0 = self.mesh.h_left_F(f)
-            e1 = self.mesh.h_next_h(e0)
-            e2 = self.mesh.h_next_h(e1)
-            E.update({e0, e1, e2})
-        E_twins = set()
-        for e in E:
-            E_twins.add(self.mesh.h_twin_h(e))
-        E.update(E_twins)
-        for e in E:
-            v0 = self.mesh.v_origin_h(e)
-            e_twin = self.mesh.h_twin_h(e)
-            v1 = self.mesh.v_origin_h(e_twin)
-            V.update({v0, v1})
-        return V, E, F
-
-    def _St_of_v(self, v):
-        V = {v}
-        E = set()
-        F = set()
-        E_Et_v = self.generate_twin_pairs_around_v_clockwise(v)
-        for e_et in E_Et_v:
-            # V.add(self.v_origin_h(e_et[1]))
-            E.update(e_et)
-            F.add(self.mesh.f_left_h(e_et[0]))
-        return V, E, F
-
-    def _St_of_e(self, e):
-        """face of a simplex is any subset of its vertices. the star of a simplex is defined as the set of all simplices that have the simplex as a face. the set of all simplices that contain its vertices as a subset of their vertices"""
-        et = self.mesh.h_twin_h(e)
-        V = set()
-        E = {e, et}
-        F = {self.mesh.f_left_h(e), self.mesh.f_left_h(et)}
-        return V, E, F
-
-    def _St(self, V_in, E_in, F_in):
-        F = F_in
-        E = set()
-        V = set()
-        for e in E_in:
-            pass
+from scipy.sparse import csr_matrix
 
 
 class HalfEdgeMeshBase:
@@ -208,6 +152,10 @@ class HalfEdgeMeshBase:
     @property
     def xyz_coord_V(self):
         return self._xyz_coord_V
+
+    @property
+    def xyz_array(self):
+        return np.array([self.xyz_coord_v(v) for v in sorted(self.xyz_coord_V.keys())])
 
     @xyz_coord_V.setter
     def xyz_coord_V(self, value):
@@ -1083,8 +1031,15 @@ class HalfEdgePatch:
 
     ##############################################
     @classmethod
-    def from_seed_vertex(cls, v, supermesh):
-        V, H, F = supermesh.closure(*supermesh.star_of_vertex(v))
+    def from_seed_vertex(cls, v_seed, supermesh):
+        """
+        Initialize a patch from a seed vertex by including taking the closure of all simplices in supermesh that contain the seed vertex. If v_seed is not in a boundary of supermesh, the patch will be a disk centered at v_seed.
+
+        Parameters:
+            v_seed (int): vertex index
+            supermesh (HalfEdgeMesh): mesh from which the patch is extracted
+        """
+        V, H, F = supermesh.closure(*supermesh.star_of_vertex(v_seed))
         self = cls(supermesh, V, H, F)
         # self.h_cw_B = self.find_h_cw_B()
 
@@ -1261,6 +1216,12 @@ class HalfEdgePatch:
         return h_cw_B
 
     def expand_boundary(self):
+        """
+        Expand the boundary of the patch by one ring of vertices, edges, and faces.
+
+        Returns:
+            set: set of new boundary vertices
+        """
         new_boundary_verts = set()
         V_bdry_old = set(self.generate_V_cw_B())
         V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
@@ -1316,3 +1277,178 @@ class HalfEdgePatch:
     ##############################################
     ##############################################
     # to be deprecated
+
+
+class LaplaceOperator:
+    def __init__(self, mesh):
+        self.mesh = mesh
+
+    def interact(self, vi, vj):
+        pass
+
+    def compute_matrix(self):
+        raise NotImplementedError("This method should be implemented by subclasses.")
+
+
+class HeatLaplacian(LaplaceOperator):
+    def __init__(self, mesh, rtol=1e-6, atol=1e-6):
+        super().__init__(mesh)
+        self.rtol = rtol
+        self.atol = atol
+        self.num_vertices = mesh.num_vertices
+        self.Vindices = sorted(self.mesh.xyz_coord_V.keys())
+        self.cached_weights = dict()
+        self.Vdict = {v: i for i, v in enumerate(self.Vindices)}
+        # self.weights = self.compute_weights()
+        self.matrix = self.construct_matrix()
+
+    @lru_cache(maxsize=None)
+    def barcell_area(self, v):
+        return self.mesh.barcell_area(v)
+
+    @lru_cache(maxsize=None)
+    def compute_weight(self, vi, vj):
+        # vi,vj = self.Vindices[i], self.Vindices[j]
+        ri, rj = self.mesh.xyz_coord_v(vi), self.mesh.xyz_coord_v(vj)
+        Ai, Aj = self.barcell_area(vi), self.barcell_area(vj)
+        wij = (
+            Aj * np.exp(-np.linalg.norm(rj - ri) ** 2 / (4 * Ai)) / (4 * np.pi * Ai**2)
+        )
+        return wij
+
+    def compute_weights_row(self, vi):
+        p = HalfEdgePatch.from_seed_vertex(vi, self.mesh)
+        V = p.V - {vi}
+        i = self.Vdict[vi]
+        wii = self.compute_weight(vi, vi)
+        data = [wii]
+        col_indices = [i]
+        for vj in V:
+            j = self.Vdict[vj]
+            wij = self.compute_weight(vi, vj)
+            data.append(wij)
+            col_indices.append(j)
+
+        norm_wi = np.linalg.norm(data)
+
+        while True:
+            V = p.expand_boundary()
+            new_data = []
+            new_col_indices = []
+            for vj in V:
+                j = self.Vdict[vj]
+                wij = self.compute_weight(vi, vj)
+                new_data.append(wij)
+                new_col_indices.append(j)
+
+            norm_dwi = np.linalg.norm(new_data)
+            data.extend(new_data)
+            col_indices.extend(new_col_indices)
+
+            if norm_wLi < self.rtol * norm_wi + self.atol:
+                break
+            if len(data) >= self.num_vertices:
+                break
+            norm_wi = np.linalg.norm(data)
+
+        return data, col_indices
+
+    def compute_row(self, vi):
+        p = HalfEdgePatch.from_seed_vertex(vi, self.mesh)
+        V = p.V - {vi}
+        i = self.Vdict[vi]
+        Lii = 0.0
+        data = [Lii]
+        col_indices = [i]
+        for vj in V:
+            j = self.Vdict[vj]
+            wij = self.compute_weight(vi, vj)
+            data.append(wij)
+            col_indices.append(j)
+            data[0] -= wij
+
+        norm_Li = np.linalg.norm(data)
+
+        while True:
+            V = p.expand_boundary()
+            new_data = [0.0]
+            new_col_indices = [i]
+            for vj in V:
+                j = self.Vdict[vj]
+                wij = self.compute_weight(vi, vj)
+                new_data.append(wij)
+                new_col_indices.append(j)
+                new_data[0] -= wij
+            norm_dLi = np.linalg.norm(new_data)
+            data[0] += new_data[0]
+            data.extend(new_data[1:])
+            col_indices.extend(new_col_indices[1:])
+
+            if norm_dLi < self.rtol * norm_Li + self.atol:
+                break
+            if len(data) >= self.num_vertices:
+                break
+            norm_Li = np.linalg.norm(data)
+
+        return data, col_indices
+
+    def construct_weights_matrix(self):
+        """Construct the sparse Laplacian matrix using cached areas."""
+        row_indices = []
+        col_indices = []
+        data = []
+
+        for vi, i in self.Vdict.items():
+            new_data, new_col_indices = self.compute_weights_row(vi)
+            data.extend(new_data)
+            col_indices.extend(new_col_indices)
+            row_indices.extend([i] * len(new_data))
+        self.wrow_indices = row_indices
+        self.wcol_indices = col_indices
+        self.wdata = data
+        self.W = csr_matrix(
+            (data, (row_indices, col_indices)),
+            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
+        )
+
+    def construct_matrix(self):
+        """Construct the sparse Laplacian matrix using cached areas."""
+        row_indices = []
+        col_indices = []
+        data = []
+
+        for vi, i in self.Vdict.items():
+            new_data, new_col_indices = self.compute_row(vi)
+            data.extend(new_data)
+            col_indices.extend(new_col_indices)
+            row_indices.extend([i] * len(new_data))
+        return csr_matrix(
+            (data, (row_indices, col_indices)),
+            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
+        )
+
+    def apply2array(self, Y):
+        return self.matrix.dot(Y)
+
+    def apply2dict(self, Y):
+        return self.matrix.dot([Y[v] for v in self.Vindices])
+
+    def apply(self, Y):
+        if isinstance(Y, dict):
+            return self.apply2dict(Y)
+        elif isinstance(Y, np.ndarray):
+            return self.apply2array(Y)
+        else:
+            raise ValueError("Argument must be dict or numpy.ndarray.")
+
+    def Cij(self, i, j):
+        vi, vj = self.Vindices[i], self.Vindices[j]
+        ri = self.mesh.xyz_coord_v(vi)
+        rj = self.mesh.xyz_coord_v(vj)
+        
+        return 
+    def gradient(self, Y):
+        gradY = np.zeros_like(Y)
+        for i,j,wij in zip(self.wrow_indices, self.wcol_indices, self.wdata):
+            # gradY[i] +=
+        return self.apply(Y)

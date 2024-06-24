@@ -196,9 +196,7 @@ class PermutationBase:
 
     @P.setter
     def P(self, value):
-        assert set(value) == set(
-            range(len(value))
-        ), "P must be a permutation of [0,...,len(P)-1]"
+        assert set(value) == set(range(len(value))), "P must be a permutation of [0,...,len(P)-1]"
         self._P = value
         self._cycles, self._parity = self.compute_cycles()
 
@@ -623,9 +621,9 @@ def relative_parity1(list1, list2):
     bool : True if the lists are equivalent, False otherwise
     """
     if set(list1) == set(list2):
-        return parity_of_sort(list1) == parity_of_sort(list2)
+        return parity_of_argsort(list1) == parity_of_argsort(list2)
 
-    return set(list1) == set(list2) and parity_of_sort(list1) == parity_of_sort(list2)
+    return set(list1) == set(list2) and parity_of_argsort(list1) == parity_of_argsort(list2)
 
 
 ###########################################################################################

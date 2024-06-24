@@ -2,21 +2,18 @@ from src.python.half_edge_mesh import HalfEdgeMesh, HalfEdgePatch
 from src.python.mesh_viewer import MeshViewer
 import os
 
+# %%
 
-def test(source_ply, image_dir, v_seed=3, iters=60):
-    # source_ply = "./data/ply/binary/neovius.ply"
-    # image_dir = "./output/expanding_patch_test/neovius"
+
+def expanding_patch_movie(source_ply, image_dir, v_seed=3, iters=60):
+    """
+    Makes a movie of surface patch expanding from seed vertex
+    """
     if os.path.exists(image_dir):
         os.system(f"rm -r {image_dir}")
     os.system(f"mkdir -p {image_dir}")
     viewer_kwargs = {
-        "image_dir": image_dir,  # "./output/convergence_test/temp_images",
-        # "view": {
-        #     "azimuth": 0,
-        #     "elevation": 55,
-        #     "distance": 6,
-        #     "focalpoint": (0, 0, 0),
-        # },
+        "image_dir": image_dir,
         "show_vertices": True,
         "v_radius": 0.03,
     }
@@ -54,15 +51,46 @@ def test(source_ply, image_dir, v_seed=3, iters=60):
     mv.movie()
 
 
-# %%
 source_ply = "./data/ply/binary/dumbbell.ply"
 image_dir = "./output/expanding_patch_test/dumbbell"
-test(source_ply, image_dir, v_seed=3, iters=60)
+expanding_patch_movie(source_ply, image_dir, v_seed=3, iters=60)
 
 source_ply = "./data/ply/binary/torus.ply"
 image_dir = "./output/expanding_patch_test/torus"
-test(source_ply, image_dir, v_seed=3, iters=60)
+expanding_patch_movie(source_ply, image_dir, v_seed=3, iters=60)
 
 source_ply = "./data/ply/binary/neovius.ply"
 image_dir = "./output/expanding_patch_test/neovius"
-test(source_ply, image_dir, v_seed=3, iters=60)
+expanding_patch_movie(source_ply, image_dir, v_seed=3, iters=60)
+
+# %%
+
+
+def expanding_patch_vertex_count(source_ply, v_seed=3):
+    """
+    check new verts from HalfEdgePatch.expand_boundary() for repeats
+    """
+
+    m = HalfEdgeMesh.from_half_edge_ply(source_ply)
+    Vcounts = {v: 0 for v in m.xyz_coord_V.keys()}
+    p = HalfEdgePatch.from_seed_vertex(v_seed, m)
+
+    Vnew = p.V
+    for v in Vnew:
+        Vcounts[v] += 1
+
+    while Vnew:
+        Vnew = p.expand_boundary()
+        for v in Vnew:
+            Vcounts[v] += 1
+
+    V = [val for key, val in Vcounts.items()]
+    count_max = max(V)
+    count_min = min(V)
+    print(f"{count_max=}, {count_min=}")
+
+
+source_ply = "./data/ply/binary/torus.ply"
+source_ply = "./data/ply/binary/neovius.ply"
+source_ply = "./data/ply/binary/dumbbell.ply"
+expanding_patch_vertex_count(source_ply, v_seed=3)

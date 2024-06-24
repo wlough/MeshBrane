@@ -1,37 +1,40 @@
 from src.python.ply_tools import (
     VertTri2HalfEdgeConverter_no_bdry_twin as VertTri2HalfEdgeConverter,
 )
-import numpy as np
 
 
-class HalfEdgeMeshList:
+class HalfEdgeMeshNoBdryTwins:
     """
-    List-based half-edge mesh data structure
+    Deprecated... See MeshBrane/src/python/half_edge_mesh.py
+
+    Uses h_twin=-1 convention for boundary half-edges
+
+    Dict-based half-edge mesh data structure
     ----------------------------------------
-    HalfEdgeMesh uses two basic data types: numpy.arrays of Cartesian coordinates for vertex position and integer-valued labels for vertices/half-edges/faces. Mesh connectivity data are stored as lists of vertex/half-edge/face labels. Each data list has a name of the form "a_description_B", where "a" denotes the type of object associated with the list elements ("xyz" for position, "v" for vertex, "h" for half-edge, or "f" for face), "B" denotes the type of object associated with the list indices ("V" for vertex, "H" for half-edge, or "F" for face), and "description" is a description of information represented by the list. For example, "_v_origin_H" is a list of vertices at the origin of each half-edge. The i-th element of data list "a_description_B" can be accessed using the "a_description_b(i)" method.
+    HalfEdgeMesh uses two basic data types: numpy.arrays of Cartesian coordinates for vertex position and integer-valued labels for vertices/half-edges/faces. Mesh connectivity data are stored as dicts of vertex/half-edge/face labels. Each data dict has a name of the form "a_description_B", where "a" denotes the type of object associated with the dict elements ("xyz" for position, "v" for vertex, "h" for half-edge, or "f" for face), "B" denotes the type of object associated with the dict indices ("V" for vertex, "H" for half-edge, or "F" for face), and "description" is a description of information represented by the dict. For example, "_v_origin_H" is a dict of vertices at the origin of each half-edge. The i-th element of data dict "a_description_B" can be accessed using the "a_description_b(i)" method.
 
     Attributes
     ----------
-    _xyz_coord_V : list of numpy.array
+    _xyz_coord_V : dict of numpy.array
         _xyz_coord_V[i] = xyz coordinates of vertex i
-    _h_out_V : list of int
+    _h_out_V : dict of int
         _h_out_V[i] = some outgoing half-edge incident on vertex i
-    _v_origin_H : list of int
+    _v_origin_H : dict of int
         _v_origin_H[j] = vertex at the origin of half-edge j
-    _h_next_H : list of int
+    _h_next_H : dict of int
         _h_next_H[j] next half-edge after half-edge j in the face cycle
-    _h_twin_H : list of int
+    _h_twin_H : dict of int
         _h_twin_H[j] = half-edge antiparalel to half-edge j
         _h_twin_H[j] = -1 if half-edge j is on a boundary of the mesh
-    _f_left_H : list of int
+    _f_left_H : dict of int
         _f_left_H[j] = face to the left of half-edge j
-    _h_bound_F : list of int
+    _h_bound_F : dict of int
         _h_bound_F[k] = some half-edge on the boudary of face k
 
     Initialization
     ---------------
     The HalfEdgeMesh class can be initialized in several ways:
-    - Directly from half-edge mesh data lists:
+    - Directly from half-edge mesh data dicts:
         HalfEdgeMesh(xyz_coord_V,
                      h_out_V,
                      v_origin_H,
@@ -39,8 +42,8 @@ class HalfEdgeMeshList:
                      h_twin_H,
                      f_left_H,
                      h_bound_F)
-    - From a list of vertex positions and a list of face vertices:
-        HalfEdgeMesh.from_vert_face_list(xyz_coord_V, vvv_of_F)
+    - From a dict of vertex positions and a dict of face vertices:
+        HalfEdgeMesh.from_vert_face_dict(xyz_coord_V, vvv_of_F)
     - From a ply file (binary/ascii) containing vertex/face data:
         HalfEdgeMesh.from_vertex_face_ply(ply_path)
         * See HalfEdgeMeshBuilder for more details about ply format.
@@ -87,7 +90,8 @@ class HalfEdgeMeshList:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class with the given vertices and faces.
         """
         v2h = VertTri2HalfEdgeConverter.from_source_samples(xyz_coord_V, vvv_of_F)
-        return cls(*v2h.target_samples)
+        data_dicts = [{key: val for key, val in enumerate(data)} for data in v2h.target_samples]
+        return cls(*data_dicts)
 
     @classmethod
     def from_vertex_face_ply(cls, ply_path):
@@ -100,7 +104,8 @@ class HalfEdgeMeshList:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class with data from the ply file.
         """
         v2h = VertTri2HalfEdgeConverter.from_source_ply(ply_path)
-        return cls(*v2h.target_samples)
+        data_dicts = [{key: val for key, val in enumerate(data)} for data in v2h.target_samples]
+        return cls(*data_dicts)
 
     @classmethod
     def from_half_edge_ply(cls, ply_path):
@@ -113,7 +118,8 @@ class HalfEdgeMeshList:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
         """
         v2h = VertTri2HalfEdgeConverter.from_target_ply(ply_path)
-        return cls(*v2h.target_samples)
+        data_dicts = [{key: val for key, val in enumerate(data)} for data in v2h.target_samples]
+        return cls(*data_dicts)
 
     #######################################################
     @property
@@ -163,14 +169,35 @@ class HalfEdgeMeshList:
         Returns:
             _type_: _description_
         """
+        Vkeys = self._xyz_coord_V.keys()
+        min_v = min(Vkeys)
+        max_v = max(Vkeys)
+        V = sorted(Vkeys)
+        Hkeys = self._v_origin_H.keys()
+        min_h = min(Hkeys)
+        max_h = max(Hkeys)
+        H = sorted(Hkeys)
+        Fkeys = self._h_bound_F.keys()
+        min_f = min(Fkeys)
+        max_f = max(Fkeys)
+        F = sorted(Fkeys)
+
+        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
+        h_out_V = [H.index(self.h_out_v(v)) for v in V]
+        v_origin_H = [V.index(self.v_origin_h(h)) for h in H]
+        h_next_H = [H.index(self.h_next_h(h)) for h in H]
+        h_twin_H = [-1 if self.h_on_boundary(h) else H.index(self.h_twin_h(h)) for h in H]
+        f_left_H = [F.index(self.f_left_h(h)) for h in H]
+        h_bound_F = [H.index(self.h_bound_f(f)) for f in F]
+
         return (
-            self._xyz_coord_V,
-            self._h_out_V,
-            self._v_origin_H,
-            self._h_next_H,
-            self._h_twin_H,
-            self._f_left_H,
-            self._h_bound_F,
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
         )
 
     #######################################################
@@ -306,6 +333,67 @@ class HalfEdgeMeshList:
             if h == h_start:
                 break
 
+    def generate_H_out_cw_from_h(self, h_start):
+        """
+        Starting with h_start, generate outgoing half-edges from origin of h_start in clockwise order until one of the following conditions is met:
+        1) a boundary is reached
+        2) the starting half-edge is reached again
+        """
+        h = h_start
+        while True:
+            yield h
+            if self.h_on_boundary(h):
+                break
+            h = self.h_next_h(self.h_twin_h(h))
+            if h == h_start:
+                break
+
+    def generate_H_out_ccw_from_h(self, h_start):
+        """
+        Starting with h_start, generate outgoing half-edges from origin of h_start in counterclockwise order until one of the following conditions is met:
+        1) a boundary is reached
+        2) the starting half-edge is reached again
+        """
+        h = h_start
+        while True:
+            yield h
+            if self.h_on_boundary(self.h_prev_h(h)):
+                break
+            h = self.h_twin_h(self.h_prev_h(h))
+            if h == h_start:
+                break
+
+    def generate_H_in_cw_from_h(self, h_start):
+        """
+        Starting with h_start, generate incoming half-edges toward origin(twin(h_start)) in clockwise order until one of the following conditions is met:
+        1) a boundary is reached
+        2) the starting half-edge is reached again
+        """
+        h = h_start
+        while True:
+            yield h
+            h = self.h_next_h(h)
+            if self.h_on_boundary(h):
+                break
+            h = self.h_twin_h(h)
+            if h == h_start:
+                break
+
+    def generate_H_in_ccw_from_h(self, h_start):
+        """
+        Starting with h_start, generate incoming half-edges toward origin(twin(h_start)) in counterclockwise order until one of the following conditions is met:
+        1) a boundary is reached
+        2) the starting half-edge is reached again
+        """
+        h = h_start
+        while True:
+            yield h
+            if self.h_on_boundary(h):
+                break
+            h = self.h_prev_h(self.h_twin_h(h))
+            if h == h_start:
+                break
+
     def H_out_v_counterclockwise_safe(self, v):
         """Returns a list of all outgoing half-edges from vertex v in counterclockwise order. If the vertex is on a boundary, the list starts with a the outgoing boundary half-edge."""
         ccw = self.generate_H_out_v_counterclockwise(v)
@@ -324,5 +412,3 @@ class HalfEdgeMeshList:
             return [*Hcw[::-1], *Hccw[1:]]
         else:
             return Hccw
-
-    ######################################################
