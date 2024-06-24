@@ -5,7 +5,7 @@ import os
 # %%
 v_seed = 3
 iters = 60
-source_path = "./data/ply/binary/neovius.ply"
+source_path = "./data/ply/binary/annulus.ply"
 image_dir = "./output/heat_laplacian_test/temp_images"
 if os.path.exists(image_dir):
     os.system(f"rm -r {image_dir}")
@@ -25,6 +25,9 @@ viewer_kwargs = {
 m = HalfEdgeMesh.from_half_edge_ply(source_path)
 mv = MeshViewer(*m.data_lists, **viewer_kwargs)
 p = HalfEdgePatch.from_seed_vertex(v_seed, m)
+mp = p.to_half_edge_mesh()
+mv = MeshViewer(*p.data_lists, **viewer_kwargs)
+mv.plot()
 # %%
 V = [v_seed]
 H, F = [], []

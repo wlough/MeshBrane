@@ -551,16 +551,24 @@ def movie(
     image_dir,
     image_type="png",
     image_prefix="frame",
-    index_length=4,
+    index_length=5,
     movie_name="movie",
     movie_dir=None,
     movie_type="mp4",
 ):
+    # print(os.getcwd())
+    # os.chdir('/desired/path')
     image_name = f"{image_prefix}_%0{index_length}d.{image_type}"
+    ###############################################################
     image_path = os.path.join(image_dir, image_name)
     if movie_dir is None:
         movie_dir = image_dir
     movie_path = os.path.join(image_dir, f"{movie_name}.{movie_type}")
+    ###############################################################
+    wkdir = image_dir
+    relative_movie_path = os.path.relpath(movie_path, wkdir)
+    relative_image_path = os.path.relpath(image_path, wkdir)
+    ###############################################################
     run_command = [
         "ffmpeg",
         # overwrite output file without asking
@@ -573,7 +581,8 @@ def movie(
         "1080x720",
         # input files
         "-i",
-        image_path,
+        # image_path,
+        relative_image_path,
         # video codec
         "-vcodec",
         "libx264",
@@ -584,7 +593,8 @@ def movie(
         "-pix_fmt",
         "yuv420p",
         # output file
-        movie_path,
+        # movie_path,
+        relative_movie_path,
     ]
 
     # Start the process

@@ -465,12 +465,10 @@ class HalfEdgeMeshBase:
         """only works for triangle faces"""
         return self.h_twin_h(self.h_next_h(self.h_next_h(h)))
 
-    # def boundary_is_left_of_h(self, h):
     def cw_boundary_contains_h(self, h):
         """check if half-edge h is in the boundary of the mesh"""
         return self.f_left_h(h) < 0
 
-    # def boundary_is_right_of_h(self, h):
     def ccw_boundary_contains_h(self, h):
         """check if half-edge h is on the boundary of the mesh"""
         return self.f_left_h(self.h_twin_h(h)) < 0
@@ -560,10 +558,7 @@ class HalfEdgeMeshBase:
         return h_cw_B
 
     ######################################################
-    # star of a k-simplex s consists of:
-    # 1) s
-    # 2) all (n>k)-simplices that contain s
-
+    # star of a k-simplex s consists of: s and all (n>k)-simplices that contain s
     def star_of_vertex(self, v):
         """Star of a vertex is the set of all simplices that contain the vertex."""
         V = {v}
@@ -631,6 +626,34 @@ class HalfEdgeMeshBase:
         StCl_V, StCl_H, StCl_F = self.star(*self.closure(V, H, F))
         ClSt_V, ClSt_H, ClSt_F = self.closure(*self.star(V, H, F))
         return ClSt_V - StCl_V, ClSt_H - StCl_H, ClSt_F - StCl_F
+
+    ######################################################
+    ######################################################
+    # to be deprecated
+
+
+######################################
+######################################
+class HalfEdgeMesh(HalfEdgeMeshBase):
+    def __init__(
+        self,
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+    ):
+        super().__init__(
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+        )
 
     ######################################################
     ######################################################
@@ -754,31 +777,7 @@ class HalfEdgeMeshBase:
 
     ######################################################
 
-
-######################################
-######################################
-class HalfEdgeMesh(HalfEdgeMeshBase):
-    def __init__(
-        self,
-        xyz_coord_V,
-        h_out_V,
-        v_origin_H,
-        h_next_H,
-        h_twin_H,
-        f_left_H,
-        h_bound_F,
-    ):
-        super().__init__(
-            xyz_coord_V,
-            h_out_V,
-            v_origin_H,
-            h_next_H,
-            h_twin_H,
-            f_left_H,
-            h_bound_F,
-        )
-
-    def find_boundary_cycles(self):
+    def _find_boundary_cycles(self):
         """Find all boundary edges in the mesh"""
         boundary_is_left_of_H = set()
         # boundary_is_right_of_H = set()
@@ -1273,37 +1272,21 @@ class HalfEdgePatch:
         return V_bdry_new
 
     ##############################################
-    ##############################################
-    # to be deprecated
-
-    def _to_half_edge_mesh(self):
+    def to_half_edge_mesh(self):
         V = sorted(self.V)
-        H = sorted(self.H)
         F = sorted(self.F)
-        # [x if x<.5 else 33 for x in X]
-        xyz_coord_V = {i: self.xyz_coord_v(v) for i, v in enumerate(V)}
-        h_out_V = {i: H.index(self.h_out_v(v)) for i, v in enumerate(V)}
-        v_origin_H = {i: V.index(self.v_origin_h(h)) for i, h in enumerate(H)}
-        h_next_H = {i: H.index(self.h_next_h(h)) for i, h in enumerate(H)}
-        h_twin_H = {
-            i: -1 if self.h_adjacent_to_boundary(h) else H.index(self.h_twin_h(h))
-            for i, h in enumerate(H)
-        }
-        f_left_H = {i: F.index(self.f_left_h(h)) for i, h in enumerate(H)}
-        h_bound_F = {i: H.index(self.h_bound_f(f)) for i, f in enumerate(F)}
-
-        return HalfEdgeMesh(
-            xyz_coord_V,
-            h_out_V,
-            v_origin_H,
-            h_next_H,
-            h_twin_H,
-            f_left_H,
-            h_bound_F,
-        )
+        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
+        F = [
+            [
+                V.index(self.v_origin_h(h))
+                for h in self.generate_H_next_h(self.h_bound_f(f))
+            ]
+            for f in F
+        ]
+        return HalfEdgeMesh.from_vert_face_list(xyz_coord_V, F)
 
     @property
-    def _data_lists(self):
+    def data_lists(self):
         """ """
         V = sorted(self.V)
         H = sorted(self.H)
@@ -1313,11 +1296,11 @@ class HalfEdgePatch:
         h_out_V = [H.index(self.h_out_v(v)) for v in V]
         v_origin_H = [V.index(self.v_origin_h(h)) for h in H]
         h_next_H = [H.index(self.h_next_h(h)) for h in H]
-        h_twin_H = [
-            -1 if self.h_adjacent_to_boundary(h) else H.index(self.h_twin_h(h))
+        h_twin_H = [H.index(self.h_twin_h(h)) for h in H]
+        f_left_H = [
+            self.f_left_h(h) if self.f_left_h(h) < 0 else F.index(self.f_left_h(h))
             for h in H
         ]
-        f_left_H = [F.index(self.f_left_h(h)) for h in H]
         h_bound_F = [H.index(self.h_bound_f(f)) for f in F]
 
         return (
@@ -1329,3 +1312,7 @@ class HalfEdgePatch:
             f_left_H,
             h_bound_F,
         )
+
+    ##############################################
+    ##############################################
+    # to be deprecated

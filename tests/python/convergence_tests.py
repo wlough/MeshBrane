@@ -8,7 +8,7 @@ source_paths = [
 ]
 m = [HalfEdgeMesh.from_half_edge_ply(source_path) for source_path in source_paths[:-1]]
 mv = [MeshViewer(*_.data_lists) for _ in m]
-
+# %%
 # %%
 # ply_path = "./ply_files_vf/dumbbell.ply"
 ply_path = "./data/ply/binary/torus.ply"
