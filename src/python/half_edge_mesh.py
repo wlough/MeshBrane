@@ -444,6 +444,15 @@ class HalfEdgeMeshBase:
             if h == h_start:
                 break
 
+    def generate_H_in_cw_from_h(self, h):
+        """ """
+        h_start = h
+        while True:
+            yield h
+            h = self.h_in_cw_from_h(h)
+            if h == h_start:
+                break
+
     def generate_H_bound_f(self, f):
         """Generate half-edges on the boundary of face f"""
         h = self.h_bound_f(f)
@@ -1215,7 +1224,7 @@ class HalfEdgePatch:
                 H_in_cw_boundary.discard(h)
         return h_cw_B
 
-    def expand_boundary(self):
+    def expand_boundary_safe(self):
         """
         Expand the boundary of the patch by one ring of vertices, edges, and faces.
 
@@ -1229,6 +1238,74 @@ class HalfEdgePatch:
         self.V.update(V)
         self.H.update(H)
         self.F.update(F)
+        self.h_cw_B = self.find_h_cw_B(F_need2check=F)
+        return V_bdry_new
+
+    def expand_boundary_little_bit_faster(self):
+        """
+        Expand the boundary of the patch by one ring of vertices, edges, and faces.
+
+        Returns:
+            set: set of new boundary vertices
+        """
+        new_boundary_verts = set()
+        V, H, F = set(), set(), set()
+        V_bdry_old = set(self.generate_V_cw_B())
+        for h_start in self.generate_H_cw_B():
+            if self.supermesh.cw_boundary_contains_h(h_start):
+                continue
+            for h in self.supermesh.generate_H_in_cw_from_h(h_start):
+                f = self.supermesh.f_left_h(h)
+                if f in self.F:
+                    break
+                n = self.supermesh.h_next_h(h)
+                v = self.supermesh.v_origin_h(h)
+                V.add(v)
+                H.update([h, n])
+                if f >= 0:
+                    nn = self.supermesh.h_next_h(n)
+                    H.update([nn, self.supermesh.h_twin_h(nn)])
+                    F.add(f)
+
+        # V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
+        V_bdry_new = V - self.V
+        self.V.update(V)
+        self.H.update(H)
+        self.F.update(F)
+        self.h_cw_B = self.find_h_cw_B(F_need2check=F)
+        return V_bdry_new
+
+    def expand_boundary_doesnt_work_yet(self):
+        """
+        Expand the boundary of the patch by one ring of vertices, edges, and faces.
+
+        Returns:
+            set: set of new boundary vertices
+        """
+        new_boundary_verts = set()
+        V, H, F = set(), set(), set()
+        V_bdry_old = set(self.generate_V_cw_B())
+        for h_start in self.generate_H_cw_B():
+            if self.supermesh.cw_boundary_contains_h(h_start):
+                continue
+            for h in self.supermesh.generate_H_in_cw_from_h(h_start):
+                f = self.supermesh.f_left_h(h)
+                if f in self.F:
+                    break
+                n = self.supermesh.h_next_h(h)
+                v = self.supermesh.v_origin_h(h)
+                V.add(v)
+                H.update([h, n])
+                if f >= 0:
+                    nn = self.supermesh.h_next_h(n)
+                    H.update([nn, self.supermesh.h_twin_h(nn)])
+                    F.add(f)
+
+        # V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
+        V_bdry_new = V - self.V
+        self.V = V
+        self.H = H
+        self.F = F.copy()
         self.h_cw_B = self.find_h_cw_B(F_need2check=F)
         return V_bdry_new
 
@@ -1297,10 +1374,10 @@ class HeatLaplacian(LaplaceOperator):
         self.atol = atol
         self.num_vertices = mesh.num_vertices
         self.Vindices = sorted(self.mesh.xyz_coord_V.keys())
-        self.cached_weights = dict()
         self.Vdict = {v: i for i, v in enumerate(self.Vindices)}
-        # self.weights = self.compute_weights()
-        self.matrix = self.construct_matrix()
+        # self.weights_matrix = self.compute_weights_matrix()
+        # self.cached_weights = dict()
+        # self.matrix = self.construct_matrix()
 
     @lru_cache(maxsize=None)
     def barcell_area(self, v):
@@ -1345,13 +1422,32 @@ class HeatLaplacian(LaplaceOperator):
             data.extend(new_data)
             col_indices.extend(new_col_indices)
 
-            if norm_wLi < self.rtol * norm_wi + self.atol:
+            if norm_dwi < self.rtol * norm_wi + self.atol:
                 break
             if len(data) >= self.num_vertices:
                 break
             norm_wi = np.linalg.norm(data)
 
         return data, col_indices
+
+    def compute_weights_matrix(self):
+        """Construct the sparse Laplacian matrix using cached areas."""
+        row_indices = []
+        col_indices = []
+        data = []
+
+        for vi, i in self.Vdict.items():
+            new_data, new_col_indices = self.compute_weights_row(vi)
+            data.extend(new_data)
+            col_indices.extend(new_col_indices)
+            row_indices.extend([i] * len(new_data))
+        # self.wrow_indices = row_indices
+        # self.wcol_indices = col_indices
+        # self.wdata = data
+        return csr_matrix(
+            (data, (row_indices, col_indices)),
+            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
+        )
 
     def compute_row(self, vi):
         p = HalfEdgePatch.from_seed_vertex(vi, self.mesh)
@@ -1392,25 +1488,6 @@ class HeatLaplacian(LaplaceOperator):
 
         return data, col_indices
 
-    def construct_weights_matrix(self):
-        """Construct the sparse Laplacian matrix using cached areas."""
-        row_indices = []
-        col_indices = []
-        data = []
-
-        for vi, i in self.Vdict.items():
-            new_data, new_col_indices = self.compute_weights_row(vi)
-            data.extend(new_data)
-            col_indices.extend(new_col_indices)
-            row_indices.extend([i] * len(new_data))
-        self.wrow_indices = row_indices
-        self.wcol_indices = col_indices
-        self.wdata = data
-        self.W = csr_matrix(
-            (data, (row_indices, col_indices)),
-            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
-        )
-
     def construct_matrix(self):
         """Construct the sparse Laplacian matrix using cached areas."""
         row_indices = []
@@ -1445,10 +1522,11 @@ class HeatLaplacian(LaplaceOperator):
         vi, vj = self.Vindices[i], self.Vindices[j]
         ri = self.mesh.xyz_coord_v(vi)
         rj = self.mesh.xyz_coord_v(vj)
-        
-        return 
+
+        return
+
     def gradient(self, Y):
         gradY = np.zeros_like(Y)
-        for i,j,wij in zip(self.wrow_indices, self.wcol_indices, self.wdata):
-            # gradY[i] +=
+        for i, j, wij in zip(self.wrow_indices, self.wcol_indices, self.wdata):
+            gradY[i] += 1
         return self.apply(Y)
