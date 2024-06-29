@@ -1,12 +1,13 @@
-from src.python.half_edge_mesh import HalfEdgeMesh, HalfEdgePatch
+from src.python.half_edge_mesh import HalfEdgeMesh, HalfEdgePatch, LaplaceOperator, CotanLaplacian
 from src.python.mesh_viewer import MeshViewer
 import numpy as np
 
 image_dir = "./output/debug"
-source_ply = "./data/ply/binary/unit_sphere_00012.ply"
+# source_ply = "./data/ply/binary/unit_sphere_00012.ply"
 # source_ply = "./data/ply/binary/dumbbell.ply"
 # source_ply = "./data/ply/binary/torus.ply"
-source_ply = "./data/ply/binary/neovius.ply"
+# source_ply = "./data/ply/binary/neovius.ply"
+source_ply = "./data/ply/ascii/pyramid3.ply"
 
 viewer_kwargs = {
     "image_dir": image_dir,
@@ -14,11 +15,19 @@ viewer_kwargs = {
     # "v_radius": 0.03,
 }
 
-m = HalfEdgeMesh.from_half_edge_ply(source_ply)
+# m = HalfEdgeMesh.from_half_edge_ply(source_ply)
+m = HalfEdgeMesh.from_vertex_face_ply(source_ply)
+# %%
 mv = MeshViewer(*m.data_lists, **viewer_kwargs)
-A = np.array([m.meyercell_area(v) for v in m.V])
+# A = np.array([m.meyercell_area(v) for v in m.V])
 mv.plot()
-
+L0 = LaplaceOperator(m)
+L1 = CotanLaplacian(m, compute=True)
+dir(L1.matrix)
+L0.matrix.data
+L1.matrix.data
+(L0.matrix - L1.matrix).toarray()
+np.linalg.norm((L0.matrix - L1.matrix).toarray().ravel())
 # %%
 
 
