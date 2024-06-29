@@ -1,2 +1,58 @@
 from src.python.half_edge_mesh import HalfEdgeMesh, HalfEdgePatch
 from src.python.mesh_viewer import MeshViewer
+import numpy as np
+
+image_dir = "./output/debug"
+source_ply = "./data/ply/binary/unit_sphere_00012.ply"
+# source_ply = "./data/ply/binary/dumbbell.ply"
+# source_ply = "./data/ply/binary/torus.ply"
+source_ply = "./data/ply/binary/neovius.ply"
+
+viewer_kwargs = {
+    "image_dir": image_dir,
+    "show_vertices": True,
+    # "v_radius": 0.03,
+}
+
+m = HalfEdgeMesh.from_half_edge_ply(source_ply)
+mv = MeshViewer(*m.data_lists, **viewer_kwargs)
+A = np.array([m.meyercell_area(v) for v in m.V])
+mv.plot()
+
+# %%
+
+
+def divide_faces(self):
+    F = []
+    V = [np.array(xyz) for xyz in self.V]
+    v_midpt_vv = dict()
+    for tri in self.F:
+        v0, v1, v2 = tri
+        v01 = v_midpt_vv.get((v0, v1))
+        v12 = v_midpt_vv.get((v1, v2))
+        v20 = v_midpt_vv.get((v2, v0))
+        if v01 is None:
+            v01 = len(V)
+            xyz01 = (V[v0] + V[v1]) / 2
+            xyz01 *= self.r / np.linalg.norm(xyz01)
+            V.append(xyz01)
+            v_midpt_vv[(v0, v1)] = v01
+            v_midpt_vv[(v1, v0)] = v01
+        if v12 is None:
+            v12 = len(V)
+            xyz12 = (V[v1] + V[v2]) / 2
+            xyz12 *= self.r / np.linalg.norm(xyz12)
+            V.append(xyz12)
+            v_midpt_vv[(v1, v2)] = v12
+            v_midpt_vv[(v2, v1)] = v12
+        if v20 is None:
+            v20 = len(V)
+            xyz20 = (V[v2] + V[v0]) / 2
+            xyz20 *= self.r / np.linalg.norm(xyz20)
+            V.append(xyz20)
+            v_midpt_vv[(v2, v0)] = v20
+            v_midpt_vv[(v0, v2)] = v20
+        F.append([v0, v01, v20])
+        F.append([v01, v1, v12])
+        F.append([v20, v12, v2])
+        F.append([v01, v12, v20])

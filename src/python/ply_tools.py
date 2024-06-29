@@ -129,9 +129,14 @@ class PlySchema:
         # ply_data = PlyData.read(file_path)
         V = [
             np.array([x, y, z])
-            for x, y, z in zip(plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"])
+            for x, y, z in zip(
+                plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]
+            )
         ]
-        F = [vertex_indices.tolist() for vertex_indices in plydata["face"]["vertex_indices"]]
+        F = [
+            vertex_indices.tolist()
+            for vertex_indices in plydata["face"]["vertex_indices"]
+        ]
         samples = (
             V,
             F,
@@ -203,9 +208,14 @@ class VertexTriListSchema(PlySchema):
         # ply_data = PlyData.read(file_path)
         V = [
             np.array([x, y, z])
-            for x, y, z in zip(plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"])
+            for x, y, z in zip(
+                plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]
+            )
         ]
-        F = [vertex_indices.tolist() for vertex_indices in plydata["face"]["vertex_indices"]]
+        F = [
+            vertex_indices.tolist()
+            for vertex_indices in plydata["face"]["vertex_indices"]
+        ]
         samples = (
             V,
             F,
@@ -308,7 +318,9 @@ class HalfEdgeSchema(PlySchema):
         # ply_data = PlyData.read(file_path)
         _xyz_coord_V = [
             np.array([x, y, z])
-            for x, y, z in zip(plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"])
+            for x, y, z in zip(
+                plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]
+            )
         ]
         _h_out_V = plydata["vertex"]["h"].tolist()
         _v_origin_H = plydata["half_edge"]["v"].tolist()
@@ -343,7 +355,10 @@ class HalfEdgeSchema(PlySchema):
             dtype=[("x", "double"), ("y", "double"), ("z", "double"), ("h", "int32")],
         )
         H_data = np.array(
-            [(v, n, t, f) for v, n, t, f in zip(_v_origin_H, _h_next_H, _h_twin_H, _f_left_H)],
+            [
+                (v, n, t, f)
+                for v, n, t, f in zip(_v_origin_H, _h_next_H, _h_twin_H, _f_left_H)
+            ],
             dtype=[("v", "int32"), ("n", "int32"), ("t", "int32"), ("f", "int32")],
         )
         F_data = np.array(_h_bound_F, dtype=[("h", "int32")])
@@ -351,7 +366,9 @@ class HalfEdgeSchema(PlySchema):
         vertex_element = PlyElement.describe(V_data, "vertex")
         half_edge_element = PlyElement.describe(H_data, "half_edge")
         face_element = PlyElement.describe(F_data, "face")
-        return PlyData([vertex_element, half_edge_element, face_element], text=not use_binary)
+        return PlyData(
+            [vertex_element, half_edge_element, face_element], text=not use_binary
+        )
 
 
 class PlyConverter:
@@ -405,9 +422,15 @@ class PlyConverter:
         self._target_ply_schema = target_ply_schema
         self._source_ply_data = source_ply_data
         if source_ply_data is not None:
-            self._source_samples = self.source_ply_schema.ply_data_to_samples(self.source_ply_data)
-            self._target_samples = self.source_samples_to_target_samples(*self._source_samples)
-            self._target_ply_data = self.target_ply_schema.samples_to_ply_data(*self._target_samples)
+            self._source_samples = self.source_ply_schema.ply_data_to_samples(
+                self.source_ply_data
+            )
+            self._target_samples = self.source_samples_to_target_samples(
+                *self._source_samples
+            )
+            self._target_ply_data = self.target_ply_schema.samples_to_ply_data(
+                *self._target_samples
+            )
         else:
             self._source_samples = None
             self._target_samples = None
@@ -473,7 +496,9 @@ class PlyConverter:
             source_ply_path=None,
         )
         pc._target_ply_data = PlyData.read(target_ply_path)
-        pc._target_samples = pc.target_ply_schema.ply_data_to_samples(pc.target_ply_data)
+        pc._target_samples = pc.target_ply_schema.ply_data_to_samples(
+            pc.target_ply_data
+        )
         return pc
 
     def write_target_ply(self, target_path=None, use_ascii=False):
@@ -585,7 +610,9 @@ class VertTri2HalfEdgeConverter(PlyConverter):
 
         source_ply_schema = VertexTriListSchema()
         target_ply_schema = HalfEdgeSchema()
-        super().__init__(source_ply_schema, target_ply_schema, source_ply_data, source_ply_path)
+        super().__init__(
+            source_ply_schema, target_ply_schema, source_ply_data, source_ply_path
+        )
 
     @classmethod
     def from_source_ply(cls, source_ply_path):
@@ -617,7 +644,9 @@ class VertTri2HalfEdgeConverter(PlyConverter):
             source_ply_path=None,
         )
         pc._target_ply_data = PlyData.read(target_ply_path)
-        pc._target_samples = pc.target_ply_schema.ply_data_to_samples(pc.target_ply_data)
+        pc._target_samples = pc.target_ply_schema.ply_data_to_samples(
+            pc.target_ply_data
+        )
         return pc
 
     def get_index_of_twin(self, H, h):
@@ -725,7 +754,9 @@ class VertTri2HalfEdgeConverter(PlyConverter):
         return target_samples
 
     def target_samples_to_source_samples(self, *target_samples):
-        (xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H, h_bound_F) = target_samples
+        (xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H, h_bound_F) = (
+            target_samples
+        )
         # Nfaces = len(h_bound_F)
 
         F = []
@@ -739,6 +770,116 @@ class VertTri2HalfEdgeConverter(PlyConverter):
                     break
         source_samples = (xyz_coord_V, F)
         return source_samples
+
+
+##################################################
+class SphereBuilder:
+    """
+    icosahedron (20 triangles; 12 vertices)
+    """
+
+    def __init__(self):
+        r = 1.0
+        self.r = r
+        xyz_coord_V = []
+        F = []
+        phi = (1.0 + np.sqrt(5.0)) * 0.5  # golden ratio
+        _a = 1.0
+        _b = 1.0 / phi
+        a = r * _a / np.sqrt(_a**2 + _b**2)
+        b = r * _b / np.sqrt(_a**2 + _b**2)
+        V = [
+            [0.0, b, -a],
+            [b, a, 0.0],
+            [-b, a, 0.0],
+            [0.0, b, a],
+            [0.0, -b, a],
+            [-a, 0.0, b],
+            [0.0, -b, -a],
+            [a, 0.0, -b],
+            [a, 0.0, b],
+            [-a, 0.0, -b],
+            [b, -a, 0.0],
+            [-b, -a, 0.0],
+        ]
+        F = [
+            [2, 1, 0],
+            [1, 2, 3],
+            [5, 4, 3],
+            [4, 8, 3],
+            [7, 6, 0],
+            [6, 9, 0],
+            [11, 10, 4],
+            [10, 11, 6],
+            [9, 5, 2],
+            [5, 9, 11],
+            [8, 7, 1],
+            [7, 8, 10],
+            [2, 5, 3],
+            [8, 1, 3],
+            [9, 2, 0],
+            [1, 7, 0],
+            [11, 9, 6],
+            [7, 10, 6],
+            [5, 11, 4],
+            [10, 8, 4],
+        ]
+        self.V = V
+        self.F = F
+        # self.num_vertices = len(V)
+        # self.xyz_coord_V = {v: xyz for v, xyz in enumerate(V)}
+        # self.vvv_verts_F = {f: verts for f, verts in enumerate(F)}
+        self.v2h = VertTri2HalfEdgeConverter.from_source_samples(V, F)
+
+    @property
+    def name(self):
+        return f"unit_sphere_{len(self.V):05d}"
+
+    def divide_faces(self):
+        F = []
+        V = [np.array(xyz) for xyz in self.V]
+        v_midpt_vv = dict()
+        for tri in self.F:
+            v0, v1, v2 = tri
+            v01 = v_midpt_vv.get((v0, v1))
+            v12 = v_midpt_vv.get((v1, v2))
+            v20 = v_midpt_vv.get((v2, v0))
+            if v01 is None:
+                v01 = len(V)
+                xyz01 = (V[v0] + V[v1]) / 2
+                xyz01 *= self.r / np.linalg.norm(xyz01)
+                V.append(xyz01)
+                v_midpt_vv[(v0, v1)] = v01
+                v_midpt_vv[(v1, v0)] = v01
+            if v12 is None:
+                v12 = len(V)
+                xyz12 = (V[v1] + V[v2]) / 2
+                xyz12 *= self.r / np.linalg.norm(xyz12)
+                V.append(xyz12)
+                v_midpt_vv[(v1, v2)] = v12
+                v_midpt_vv[(v2, v1)] = v12
+            if v20 is None:
+                v20 = len(V)
+                xyz20 = (V[v2] + V[v0]) / 2
+                xyz20 *= self.r / np.linalg.norm(xyz20)
+                V.append(xyz20)
+                v_midpt_vv[(v2, v0)] = v20
+                v_midpt_vv[(v0, v2)] = v20
+            F.append([v0, v01, v20])
+            F.append([v01, v1, v12])
+            F.append([v20, v12, v2])
+            F.append([v01, v12, v20])
+
+        # self.V = V
+        self.V = [list(xyz) for xyz in V]
+        self.F = F
+        self.v2h = VertTri2HalfEdgeConverter.from_source_samples(self.V, self.F)
+        # self.num_vertices = len(V)
+
+    def write_plys(self):
+        ply_file = f"{self.name}.ply"
+        self.v2h.write_target_ply(f"./data/ply/binary/{ply_file}", use_ascii=False)
+        self.v2h.write_source_ply(f"./data/ply/ascii/{ply_file}", use_ascii=True)
 
 
 ##################################################
@@ -823,7 +964,9 @@ class HalfEdgeSchema_no_bdry_twin(PlySchema):
         # ply_data = PlyData.read(file_path)
         _xyz_coord_V = [
             np.array([x, y, z])
-            for x, y, z in zip(plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"])
+            for x, y, z in zip(
+                plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]
+            )
         ]
         _h_out_V = plydata["vertex"]["h"].tolist()
         _v_origin_H = plydata["half_edge"]["v"].tolist()
@@ -858,7 +1001,10 @@ class HalfEdgeSchema_no_bdry_twin(PlySchema):
             dtype=[("x", "double"), ("y", "double"), ("z", "double"), ("h", "int32")],
         )
         H_data = np.array(
-            [(v, n, t, f) for v, n, t, f in zip(_v_origin_H, _h_next_H, _h_twin_H, _f_left_H)],
+            [
+                (v, n, t, f)
+                for v, n, t, f in zip(_v_origin_H, _h_next_H, _h_twin_H, _f_left_H)
+            ],
             dtype=[("v", "int32"), ("n", "int32"), ("t", "int32"), ("f", "int32")],
         )
         F_data = np.array(_h_bound_F, dtype=[("h", "int32")])
@@ -866,7 +1012,9 @@ class HalfEdgeSchema_no_bdry_twin(PlySchema):
         vertex_element = PlyElement.describe(V_data, "vertex")
         half_edge_element = PlyElement.describe(H_data, "half_edge")
         face_element = PlyElement.describe(F_data, "face")
-        return PlyData([vertex_element, half_edge_element, face_element], text=not use_binary)
+        return PlyData(
+            [vertex_element, half_edge_element, face_element], text=not use_binary
+        )
 
 
 class VertTri2HalfEdgeConverter_no_bdry_twin(PlyConverter):
@@ -916,7 +1064,9 @@ class VertTri2HalfEdgeConverter_no_bdry_twin(PlyConverter):
 
         source_ply_schema = VertexTriListSchema()
         target_ply_schema = HalfEdgeSchema_no_bdry_twin()
-        super().__init__(source_ply_schema, target_ply_schema, source_ply_data, source_ply_path)
+        super().__init__(
+            source_ply_schema, target_ply_schema, source_ply_data, source_ply_path
+        )
 
     @classmethod
     def from_source_ply(cls, source_ply_path):
@@ -948,7 +1098,9 @@ class VertTri2HalfEdgeConverter_no_bdry_twin(PlyConverter):
             source_ply_path=None,
         )
         pc._target_ply_data = PlyData.read(target_ply_path)
-        pc._target_samples = pc.target_ply_schema.ply_data_to_samples(pc.target_ply_data)
+        pc._target_samples = pc.target_ply_schema.ply_data_to_samples(
+            pc.target_ply_data
+        )
         return pc
 
     def get_index_of_twin(self, E, e):
@@ -1085,7 +1237,9 @@ class HalfEdgeMeshBuilder:
         plydata = PlyData.read(ply_path)
         V = [
             np.array([x, y, z])
-            for x, y, z in zip(plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"])
+            for x, y, z in zip(
+                plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]
+            )
         ]
         F = [verts.tolist() for verts in plydata["face"]["vertex_indices"]]
         return cls.from_vert_tri_lists(V, F)
@@ -1122,12 +1276,20 @@ class HalfEdgeMeshBuilder:
 
     def to_half_edge_ply(self, ply_path, use_binary=False):
         V_data = np.array(
-            [(vertex[0], vertex[1], vertex[2], e) for vertex, e in zip(self.V, self.V_edge)],
+            [
+                (vertex[0], vertex[1], vertex[2], e)
+                for vertex, e in zip(self.V, self.V_edge)
+            ],
             dtype=[("x", "f8"), ("y", "f8"), ("z", "f8"), ("e", "uint32")],
         )
         F_data = np.array(self.F_edge, dtype=[("e", "uint32")])
         E_data = np.array(
-            [(v, f, n, t) for v, f, n, t in zip(self.E_vertex, self.E_face, self.E_next, self.E_twin)],
+            [
+                (v, f, n, t)
+                for v, f, n, t in zip(
+                    self.E_vertex, self.E_face, self.E_next, self.E_twin
+                )
+            ],
             dtype=[("v", "uint32"), ("f", "uint32"), ("n", "uint32"), ("t", "i4")],
         )
         V_element = PlyElement.describe(V_data, "he_vertex")
@@ -1137,7 +1299,9 @@ class HalfEdgeMeshBuilder:
 
     def to_vertex_face_ply(self, ply_path, use_binary=False):
         F = self.get_faces()
-        V_data = np.array([tuple(v) for v in self.V], dtype=[("x", "f8"), ("y", "f8"), ("z", "f8")])
+        V_data = np.array(
+            [tuple(v) for v in self.V], dtype=[("x", "f8"), ("y", "f8"), ("z", "f8")]
+        )
         F_data = np.empty(len(F), dtype=[("vertex_indices", "i4", (3,))])
         F_data["vertex_indices"] = F
         vertex_element = PlyElement.describe(V_data, "vertex")
@@ -1243,7 +1407,9 @@ class CombinatorialMap2dSchema(PlySchema):
     """
 
     def __init__(self):
-        comments = ["Schema for a ply file representing a 2d surface mesh by combinatorial maps."]
+        comments = [
+            "Schema for a ply file representing a 2d surface mesh by combinatorial maps."
+        ]
         elements = [
             {
                 "name": "vertex",
