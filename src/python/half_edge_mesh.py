@@ -139,16 +139,25 @@ class HalfEdgeMeshBase:
 
     #######################################################
     @property
-    def V(self):
-        return sorted(self._xyz_coord_V.keys())
+    def V(self, sorted=False):
+        if sorted:
+            return sorted(self._xyz_coord_V.keys())
+        else:
+            return self._xyz_coord_V.keys()
 
     @property
-    def H(self):
-        return sorted(self._v_origin_H.keys())
+    def H(self, sorted=False):
+        if sorted:
+            return sorted(self._v_origin_H.keys())
+        else:
+            return self._v_origin_H.keys()
 
     @property
-    def F(self):
-        return sorted(self._h_bound_F.keys())
+    def F(self, sorted=False):
+        if sorted:
+            return sorted(self._h_bound_F.keys())
+        else:
+            return self._h_bound_F.keys()
 
     @property
     def h_cw_B(self):
@@ -502,6 +511,18 @@ class HalfEdgeMeshBase:
             if h == h_start:
                 break
 
+    def generate_V(self):
+        for v in self.xyz_coord_V.keys():
+            yield v
+
+    def generate_H(self):
+        for h in self.v_origin_H.keys():
+            yield h
+
+    def generate_F(self):
+        for f in self.h_bound_F.keys():
+            yield f
+
     ######################################################
     # The star St(s) of a k-simplex s consists of: s and all (n>k)-simplices that contain s.
     # The closure Cl(s) of a k-simplex s consists of: s and all (n<k)-simplices that are proper faces of s.
@@ -807,16 +828,20 @@ class HalfEdgeMesh(HalfEdgeMeshBase):
              \|/
              v4
         
-             v2
-             /|\
-           v3 | v1
-             \|/
              vj
+             /|\
+           vk | vi
+             \|/
+             vl
         """
-        vi = self.v_origin_h(self.h_next_h(self.h_twin_h(h)))
-        vj = self.v_origin_h(h)
-        vk = self.v_origin_h(self.h_next_h(h))
-        vl = self.v_origin_h(self.h_prev_h(h))
+        # vi = self.v_origin_h(self.h_next_h(self.h_twin_h(h)))
+        # vj = self.v_origin_h(h)
+        # vk = self.v_origin_h(self.h_next_h(h))
+        # vl = self.v_origin_h(self.h_prev_h(h))
+        vi = self.v_head_h(self.h_next_h(self.h_twin_h(h)))
+        vj = self.v_head_h(h)
+        vk = self.v_head_h(self.h_next_h(h))
+        vl = self.v_origin_h(h)
 
         pij = self.xyz_coord_v(vj) - self.xyz_coord_v(vi)
         pil = self.xyz_coord_v(vl) - self.xyz_coord_v(vi)
@@ -835,35 +860,74 @@ class HalfEdgeMesh(HalfEdgeMeshBase):
 
         return alphai + alphak <= np.pi
 
-    def is_flippable(self, h):
+    def _is_delaunay(self, h):
+        r"""
+          v2
+          /|\
+        v3 | v1
+          \|/
+           v4
         """
-        edge flip hlj-->hki is allowed unless vi and vk are already neighbors
+        vi = self.H_vertex[self.H_next[self.H_twin[h]]]
+        vj = self.H_vertex[h]
+        vk = self.H_vertex[self.H_next[h]]
+        vl = self.H_vertex[self.H_prev[h]]
+
+        pij = self.V_pq[vj, :3] - self.V_pq[vi, :3]
+        pil = self.V_pq[vl, :3] - self.V_pq[vi, :3]
+        pkj = self.V_pq[vj, :3] - self.V_pq[vk, :3]
+        pkl = self.V_pq[vl, :3] - self.V_pq[vk, :3]
+
+        pij_pil = pij[0] * pil[0] + pij[1] * pil[1] + pij[2] * pil[2]
+        pkl_pkj = pkl[0] * pkj[0] + pkl[1] * pkj[1] + pkl[2] * pkj[2]
+        normpij = np.sqrt(pij[0] ** 2 + pij[1] ** 2 + pij[2] ** 2)
+        normpil = np.sqrt(pil[0] ** 2 + pil[1] ** 2 + pil[2] ** 2)
+        normpkj = np.sqrt(pkj[0] ** 2 + pkj[1] ** 2 + pkj[2] ** 2)
+        normpkl = np.sqrt(pkl[0] ** 2 + pkl[1] ** 2 + pkl[2] ** 2)
+
+        alphai = np.arccos(pij_pil / (normpij * normpil))
+        alphak = np.arccos(pkl_pkj / (normpkl * normpkj))
+
+        return alphai + alphak <= np.pi
+
+    def is_flippable(self, h):
+        r"""
+        edge flip hlj-->hki is allowed unless hlj is on a boundary or vi and vk are already neighbors
         vj
         /|\
       vk | vi
         \|/
         vl
         """
+        if self.boundary_contains_h(h):
+            return False
         hlj = h
         hjk = self.h_next_h(hlj)
-        hjl = self.h_twin_h(hlj)
-        hli = self.h_next_h(hjl)
-        flippable = True
+        # hjl = self.h_twin_h(hlj)
+        hli = self.h_next_h(self.h_twin_h(hlj))
+        vi = self.v_head_h(hli)
+        vk = self.v_head_h(hjk)
 
-        vj = self.v_origin_h(hlj)
-        vk = self.v_origin_h(hjk)
+        for him in self.generate_H_out_v_clockwise(vi):
+            if self.v_head_h(him) == vk:
+                return False
+        return True
+        # ##################
+        # flippable = True
 
-        him = self.h_twin_h(hli)
-        while True:
-            him = self.h_twin_h(self.h_prev_h(him))
-            vm = self.v_origin_h(him)
-            if vm == vk:
-                flippable = False
-                break
-            if vm == vj:
-                break
+        # vj = self.v_head_h(hlj)
 
-        return flippable
+        # him = self.h_twin_h(hli)
+        # while True:
+        #     him = self.h_twin_h(self.h_prev_h(him))
+        #     vm = self.v_head_h(him)
+        #     if vm == vk:
+        #         flippable = False
+        #         break
+        #     if vm == vj:
+        #         break
+
+        # return flippable
 
     def edge_flip(self, h):
         r"""
