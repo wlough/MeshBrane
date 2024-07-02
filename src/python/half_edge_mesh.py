@@ -1,9 +1,5 @@
-from functools import lru_cache
 from src.python.ply_tools import VertTri2HalfEdgeConverter
 import numpy as np
-from scipy.sparse import csr_matrix
-from time import time
-import pickle
 
 
 class HalfEdgeMeshBase:
@@ -29,8 +25,8 @@ class HalfEdgeMeshBase:
         _f_left_H[j] = face to the left of half-edge j
     h_bound_F : dict of int
         _h_bound_F[k] = some half-edge on the ccw boudary of face k
-    h_cw_B : dict of int
-        _h_cw_B[n] = half-edge in boundary n of the mesh
+    h_comp_B : dict of int
+        _h_comp_B[n] = half-edge in complement boundary n of the mesh
 
     Initialization
     ---------------
@@ -65,7 +61,7 @@ class HalfEdgeMeshBase:
         h_twin_H,
         f_left_H,
         h_bound_F,
-        h_cw_B=None,
+        h_comp_B=None,
     ):
         self.xyz_coord_V = xyz_coord_V
         self.h_out_V = h_out_V
@@ -74,11 +70,13 @@ class HalfEdgeMeshBase:
         self.h_twin_H = h_twin_H
         self.h_bound_F = h_bound_F
         self.f_left_H = f_left_H
-        if h_cw_B is None:
-            self.h_cw_B = self.find_h_cw_B()
+        if h_comp_B is None:
+            self.h_comp_B = self.find_h_comp_B()
         else:
-            self.h_cw_B = h_cw_B
+            self.h_comp_B = h_comp_B
 
+    #######################################################
+    # Initilization methods
     @classmethod
     def from_vert_face_list(cls, xyz_coord_V, vvv_of_F):
         """
@@ -138,47 +136,10 @@ class HalfEdgeMeshBase:
         return cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).source_samples)
 
     #######################################################
-    @property
-    def V(self, sorted=False):
-        if sorted:
-            return sorted(self._xyz_coord_V.keys())
-        else:
-            return self._xyz_coord_V.keys()
-
-    @property
-    def H(self, sorted=False):
-        if sorted:
-            return sorted(self._v_origin_H.keys())
-        else:
-            return self._v_origin_H.keys()
-
-    @property
-    def F(self, sorted=False):
-        if sorted:
-            return sorted(self._h_bound_F.keys())
-        else:
-            return self._h_bound_F.keys()
-
-    @property
-    def h_cw_B(self):
-        return self._h_cw_B
-
-    @h_cw_B.setter
-    def h_cw_B(self, value):
-        if isinstance(value, dict):
-            self._h_cw_B = value
-        elif hasattr(value, "__iter__"):
-            self._h_cw_B = dict(enumerate(value))
-        else:
-            raise TypeError("h_cw_B must be a dictionary or an iterable.")
-
+    # Fundamental accessors
     @property
     def xyz_coord_V(self):
         return self._xyz_coord_V
-
-    @property
-    def xyz_array(self):
-        return np.array([self.xyz_coord_v(v) for v in sorted(self.xyz_coord_V.keys())])
 
     @xyz_coord_V.setter
     def xyz_coord_V(self, value):
@@ -268,87 +229,21 @@ class HalfEdgeMeshBase:
             raise TypeError("h_bound_F must be a dictionary or an iterable.")
 
     @property
-    def num_vertices(self):
-        return len(self._xyz_coord_V)
+    def h_comp_B(self):
+        return self._h_comp_B
 
-    @property
-    def num_edges(self):
-        return len(self._v_origin_H) // 2
-
-    @property
-    def num_faces(self):
-        return len(self._h_bound_F)
-
-    @property
-    def num_boundaries(self):
-        return len(self._h_cw_B)
-
-    @property
-    def genus(self):
-        return 1 - (self.euler_characteristic + self.num_boundaries) // 2
-
-    @property
-    def euler_characteristic(self):
-        return self.num_vertices - self.num_edges + self.num_faces
-
-    @property
-    def data_lists(self):
-        """
-        get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...
-        """
-        V = sorted(self._xyz_coord_V.keys())
-        H = sorted(self._v_origin_H.keys())
-        F = sorted(self._h_bound_F.keys())
-
-        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
-        h_out_V = [H.index(self.h_out_v(v)) for v in V]
-        v_origin_H = [V.index(self.v_origin_h(h)) for h in H]
-        h_next_H = [H.index(self.h_next_h(h)) for h in H]
-        h_twin_H = [H.index(self.h_twin_h(h)) for h in H]
-        f_left_H = [
-            self.f_left_h(h) if self.f_left_h(h) < 0 else F.index(self.f_left_h(h))
-            for h in H
-        ]
-        h_bound_F = [H.index(self.h_bound_f(f)) for f in F]
-
-        return (
-            xyz_coord_V,
-            h_out_V,
-            v_origin_H,
-            h_next_H,
-            h_twin_H,
-            f_left_H,
-            h_bound_F,
-        )
-
-    @property
-    def data_dicts(self):
-        """
-        get dicts of vertex positions and connectivity data and required to reconstruct mesh or write to ply file
-        """
-        return (
-            self.xyz_coord_V,
-            self.h_out_V,
-            self.v_origin_H,
-            self.h_next_H,
-            self.h_twin_H,
-            self.f_left_H,
-            self.h_bound_F,
-        )
+    @h_comp_B.setter
+    def h_comp_B(self, value):
+        if isinstance(value, dict):
+            self._h_comp_B = value
+        elif hasattr(value, "__iter__"):
+            self._h_comp_B = dict(enumerate(value))
+        else:
+            raise TypeError("h_comp_B must be a dictionary or an iterable.")
 
     #######################################################
-    def xyz_coord_v(self, v):
-        """
-        get array of xyz coordinates of vertex v
-
-        Args:
-            v (int): vertex index
-
-        Returns:
-            numpy.array: xyz coordinates
-        """
-        return self._xyz_coord_V[v]
-
+    # Combinatorial maps #
+    #######################################################
     def h_out_v(self, v):
         """
         get index of an outgoing half-edge incident on vertex v
@@ -416,8 +311,7 @@ class HalfEdgeMeshBase:
         """
         return self._h_twin_H[h]
 
-    ######################################################
-    # basic helpers
+    # Derived combinatorial maps
     def v_head_h(self, h):
         """get index of the vertex at the head of half-edge h
 
@@ -429,18 +323,20 @@ class HalfEdgeMeshBase:
         """
         return self.v_origin_h(self.h_twin_h(h))
 
+    def f_right_h(self, h):
+        return self.f_left_h(self.h_twin_h(h))
+
     def h_out_cw_from_h(self, h):
         return self.h_next_h(self.h_twin_h(h))
-
-    def h_out_ccw_from_h(self, h):
-
-        return self.h_twin_h(self.h_prev_h(h))
 
     def h_in_cw_from_h(self, h):
         return self.h_twin_h(self.h_next_h(h))
 
     def h_prev_h(self, h):
-        """works forhalf-edges of non-triangle faces and boundaries"""
+        """
+        Finds half-edge previous to h by following next cycle.
+        Safe for half-edges of non-triangle faces and boundaries.
+        """
         h_next = self.h_next_h(h)
 
         while h_next != h:
@@ -448,10 +344,23 @@ class HalfEdgeMeshBase:
             h_next = self.h_next_h(h_prev)
         return h_prev
 
-    def h_prev_h_tri(self, h):
-        """only works for triangle faces"""
-        return self.h_twin_h(self.h_next_h(self.h_next_h(h)))
+    def h_prev_h_by_rot(self, h):
+        """
+        Finds half-edge previous to h by rotating around origin of h. Faster when length of next cycle is much larger than valence of origin of h.
+        """
+        p_h = self.h_twin_h(h)
+        n_h = self.h_next_h(p_h)
+        while n_h != h:
+            p_h = self.h_twin_h(n_h)
+            n_h = self.h_next_h(p_h)
+        return p_h
 
+    def h_out_ccw_from_h(self, h):
+        return self.h_twin_h(self.h_prev_h(h))
+
+    ######################################################
+    # Predicates
+    #######################################################
     def complement_boundary_contains_h(self, h):
         """check if half-edge h is in the boundary of the mesh"""
         return self.f_left_h(h) < 0
@@ -466,14 +375,143 @@ class HalfEdgeMeshBase:
 
     def boundary_contains_v(self, v):
         """check if vertex v is on the boundary of the mesh"""
-        return self.boundary_contains_h(self.h_out_v(v))
+        for h in self.generate_H_out_v_clockwise(v):
+            if self.f_left_h(h) < 0 or self.f_left_h(self.h_twin_h(h)) < 0:
+                return True
+        return False
 
-    ######################################################
-    # generators
+    def h_is_locally_delaunay(self, h):
+        r"""
+        Checks if edge is locally Delaunay (the circumcircle of the triangle to one side of the edge does not contain the vertex opposite the edge on the triangle's other side)
+             vj
+             /|\
+           vk | vi
+             \|/
+             vl
+        """
+        vi = self.v_head_h(self.h_next_h(self.h_twin_h(h)))
+        vj = self.v_head_h(h)
+        vk = self.v_head_h(self.h_next_h(h))
+        vl = self.v_origin_h(h)
+
+        rij = self.xyz_coord_v(vj) - self.xyz_coord_v(vi)
+        ril = self.xyz_coord_v(vl) - self.xyz_coord_v(vi)
+
+        rkj = self.xyz_coord_v(vj) - self.xyz_coord_v(vk)
+        rkl = self.xyz_coord_v(vl) - self.xyz_coord_v(vk)
+
+        alphai = np.arccos(
+            np.dot(rij, ril) / (np.linalg.norm(rij) * np.linalg.norm(ril))
+        )
+        alphak = np.arccos(
+            np.dot(rkl, rkj) / (np.linalg.norm(rkl) * np.linalg.norm(rkj))
+        )
+
+        return alphai + alphak <= np.pi
+
+    def h_is_flippable(self, h):
+        r"""
+        edge flip hlj-->hki is allowed unless hlj is on a boundary or vi and vk are already neighbors
+        vj
+        /|\
+      vk | vi
+        \|/
+        vl
+        """
+        if self.boundary_contains_h(h):
+            return False
+        hlj = h
+        hjk = self.h_next_h(hlj)
+        # hjl = self.h_twin_h(hlj)
+        hli = self.h_next_h(self.h_twin_h(hlj))
+        vi = self.v_head_h(hli)
+        vk = self.v_head_h(hjk)
+
+        for him in self.generate_H_out_v_clockwise(vi):
+            if self.v_head_h(him) == vk:
+                return False
+        return True
+
+    #######################################################
+    # Generators and data exporters
+    @property
+    def V(self, sorted=False):
+        if sorted:
+            return sorted(self._xyz_coord_V.keys())
+        else:
+            return self._xyz_coord_V.keys()
+
+    @property
+    def H(self, sorted=False):
+        if sorted:
+            return sorted(self._v_origin_H.keys())
+        else:
+            return self._v_origin_H.keys()
+
+    @property
+    def F(self, sorted=False):
+        if sorted:
+            return sorted(self._h_bound_F.keys())
+        else:
+            return self._h_bound_F.keys()
+
+    @property
+    def xyz_array(self, sorted=False):
+        if sorted:
+            return np.array(
+                [self.xyz_coord_v(v) for v in sorted(self.xyz_coord_V.keys())]
+            )
+        else:
+            return np.array([self.xyz_coord_v(v) for v in self.xyz_coord_V.keys()])
+
+    @property
+    def data_lists(self):
+        """
+        Get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...
+        """
+        V = sorted(self._xyz_coord_V.keys())
+        H = sorted(self._v_origin_H.keys())
+        F = sorted(self._h_bound_F.keys())
+
+        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
+        h_out_V = [H.index(self.h_out_v(v)) for v in V]
+        v_origin_H = [V.index(self.v_origin_h(h)) for h in H]
+        h_next_H = [H.index(self.h_next_h(h)) for h in H]
+        h_twin_H = [H.index(self.h_twin_h(h)) for h in H]
+        f_left_H = [
+            self.f_left_h(h) if self.f_left_h(h) < 0 else F.index(self.f_left_h(h))
+            for h in H
+        ]
+        h_bound_F = [H.index(self.h_bound_f(f)) for f in F]
+
+        return (
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+        )
+
+    @property
+    def data_dicts(self):
+        """
+        get dicts of vertex positions and connectivity data and required to reconstruct mesh or write to ply file
+        """
+        return (
+            self.xyz_coord_V,
+            self.h_out_V,
+            self.v_origin_H,
+            self.h_next_H,
+            self.h_twin_H,
+            self.f_left_H,
+            self.h_bound_F,
+        )
+
     def generate_H_out_v_clockwise(self, v):
         """
-        Generate outgoing half-edges from vertex v in clockwise order until one of the following conditions is met:
-        1) the starting half-edge is reached again
+        Generate outgoing half-edges from vertex v in clockwise order until the starting half-edge is reached again
         """
         h = self.h_out_v(v)
         h_start = h
@@ -503,25 +541,13 @@ class HalfEdgeMeshBase:
                 break
 
     def generate_H_next_h(self, h):
-        """Generate half-edges in the face/boundary cycle of half-edge h"""
+        """Generate half-edges in the face/boundary cycle containing half-edge h"""
         h_start = h
         while True:
             yield h
             h = self.h_next_h(h)
             if h == h_start:
                 break
-
-    def generate_V(self):
-        for v in self.xyz_coord_V.keys():
-            yield v
-
-    def generate_H(self):
-        for h in self.v_origin_H.keys():
-            yield h
-
-    def generate_F(self):
-        for f in self.h_bound_F.keys():
-            yield f
 
     ######################################################
     # The star St(s) of a k-simplex s consists of: s and all (n>k)-simplices that contain s.
@@ -595,9 +621,9 @@ class HalfEdgeMeshBase:
         ClSt_V, ClSt_H, ClSt_F = self.closure(*self.star(V, H, F))
         return ClSt_V - StCl_V, ClSt_H - StCl_H, ClSt_F - StCl_F
 
-    def find_h_cw_B(self):
-        """Find all boundary edges in the mesh"""
-        h_cw_B = dict()
+    def find_h_comp_B(self):
+        """Find a half-edge in each boundary of mesh"""
+        h_comp_B = dict()
         complement_boundary_contains_H = set()
         F_need2check = set(self.h_bound_F)  # set of faces that need to be checked
         while F_need2check:
@@ -608,12 +634,25 @@ class HalfEdgeMeshBase:
         while complement_boundary_contains_H:
             h = complement_boundary_contains_H.pop()
             bdry = self.f_left_h(h)
-            h_cw_B[bdry] = h
+            h_comp_B[bdry] = h
             for h in self.generate_H_next_h(h):
                 complement_boundary_contains_H.discard(h)
-        return h_cw_B
+        return h_comp_B
 
     ######################################################
+    # Geometry
+    def xyz_coord_v(self, v):
+        """
+        get array of xyz coordinates of vertex v
+
+        Args:
+            v (int): vertex index
+
+        Returns:
+            numpy.array: xyz coordinates
+        """
+        return self._xyz_coord_V[v]
+
     def xyz_com_f(self, f):
         h0 = self.h_bound_f(f)
         h1 = self.h_next_h(h0)
@@ -671,36 +710,43 @@ class HalfEdgeMeshBase:
         return Atot
 
     def vorcell_area(self, v):
-        """area of cell dual to vertex v"""
+        r"""area of voronoi cell dual to vertex v
+                  v=v0
+                //  \\
+               // |  \\
+              // /|   \\
+             //   ||   \\
+            //    || h20\\
+           //     ||     \\
+        ...       ||h01    v2
+           \\     ||     //
+            \\    || h12//
+             \\   ||   //
+              \\  ||/ //
+               \\ |  // 
+                \\| //
+                  v1      
+        """
         Atot = 0.0
-        r = self.xyz_coord_v(v)
-        r_r = r[0] ** 2 + r[1] ** 2 + r[2] ** 2
-
+        r0 = self.xyz_coord_v(v)
         for h in self.generate_H_out_v_clockwise(v):
             if self.complement_boundary_contains_h(h):
                 continue
-            h1 = self.h_next_h(h)
-            h2 = self.h_next_h(h1)
-            v1 = self.v_origin_h(h1)
-            r1 = self.xyz_coord_v(v1)
-            v2 = self.v_origin_h(h2)
-            r2 = self.xyz_coord_v(v2)
+            r1 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(h)))
+            r2 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(self.h_next_h(h))))
+            r01 = r1 - r0
+            r12 = r2 - r1
+            r20 = r0 - r2
 
-            r1_r1 = r1[0] ** 2 + r1[1] ** 2 + r1[2] ** 2
-            r2_r2 = r2[0] ** 2 + r2[1] ** 2 + r2[2] ** 2
-            r_r1 = r[0] * r1[0] + r[1] * r1[1] + r[2] * r1[2]
-            r1_r2 = r1[0] * r2[0] + r1[1] * r2[1] + r1[2] * r2[2]
-            r2_r = r2[0] * r[0] + r2[1] * r[1] + r2[2] * r[2]
+            norm_r20 = np.linalg.norm(r20)
+            norm_r01 = np.linalg.norm(r01)
+            norm_r12 = np.linalg.norm(r12)
+            cos_210 = -np.dot(r12, r01) / (norm_r12 * norm_r01)
+            cos_021 = -np.dot(r20, r12) / (norm_r20 * norm_r12)
 
-            normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
-            normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
-            normu3 = np.sqrt(r_r - 2 * r2_r + r2_r2)  # jitnorm(u3)
-            cos_alpha = (r1_r1 + r2_r - r_r1 - r1_r2) / (normu1 * normu2)
-            cos_beta = (r2_r2 + r_r1 - r1_r2 - r2_r) / (normu2 * normu3)
-
-            cot_alpha = cos_alpha / np.sqrt(1 - cos_alpha**2)
-            cot_beta = cos_beta / np.sqrt(1 - cos_beta**2)
-            Atot += normu3**2 * cot_alpha / 8 + normu1**2 * cot_beta / 8
+            cot_210 = cos_210 / np.sqrt(1 - cos_210**2)
+            cot_021 = cos_021 / np.sqrt(1 - cos_021**2)
+            Atot += norm_r20**2 * cot_210 / 8 + norm_r01**2 * cot_021 / 8
 
         return Atot
 
@@ -791,6 +837,39 @@ class HalfEdgeMeshBase:
         return Atot
 
     ######################################################
+    # Misc helper functions
+    def valence_v(self, v):
+        """get the valence of vertex v"""
+        valence = 0
+        for h in self.generate_H_out_v_clockwise(v):
+            valence += 1
+        return valence
+
+    @property
+    def num_vertices(self):
+        return len(self._xyz_coord_V)
+
+    @property
+    def num_edges(self):
+        return len(self._v_origin_H) // 2
+
+    @property
+    def num_faces(self):
+        return len(self._h_bound_F)
+
+    @property
+    def num_boundaries(self):
+        return len(self._h_comp_B)
+
+    @property
+    def genus(self):
+        return 1 - (self.euler_characteristic + self.num_boundaries) // 2
+
+    @property
+    def euler_characteristic(self):
+        return self.num_vertices - self.num_edges + self.num_faces
+
+    ######################################################
     # to be deprecated
 
 
@@ -819,216 +898,148 @@ class HalfEdgeMesh(HalfEdgeMeshBase):
 
     ######################################################
     # mesh mutation
-    def is_delaunay(self, h):
+
+    def flip_edge(self, h):
         r"""
-        checks if edge is locally delaunay
-             v2
-             /|\
-           v3 | v1
-             \|/
-             v4
-        
-             vj
-             /|\
-           vk | vi
-             \|/
-             vl
-        """
-        # vi = self.v_origin_h(self.h_next_h(self.h_twin_h(h)))
-        # vj = self.v_origin_h(h)
-        # vk = self.v_origin_h(self.h_next_h(h))
-        # vl = self.v_origin_h(self.h_prev_h(h))
-        vi = self.v_head_h(self.h_next_h(self.h_twin_h(h)))
-        vj = self.v_head_h(h)
-        vk = self.v_head_h(self.h_next_h(h))
-        vl = self.v_origin_h(h)
-
-        pij = self.xyz_coord_v(vj) - self.xyz_coord_v(vi)
-        pil = self.xyz_coord_v(vl) - self.xyz_coord_v(vi)
-        pkj = self.xyz_coord_v(vj) - self.xyz_coord_v(vk)
-        pkl = self.xyz_coord_v(vl) - self.xyz_coord_v(vk)
-
-        pij_pil = pij[0] * pil[0] + pij[1] * pil[1] + pij[2] * pil[2]
-        pkl_pkj = pkl[0] * pkj[0] + pkl[1] * pkj[1] + pkl[2] * pkj[2]
-        normpij = np.sqrt(pij[0] ** 2 + pij[1] ** 2 + pij[2] ** 2)
-        normpil = np.sqrt(pil[0] ** 2 + pil[1] ** 2 + pil[2] ** 2)
-        normpkj = np.sqrt(pkj[0] ** 2 + pkj[1] ** 2 + pkj[2] ** 2)
-        normpkl = np.sqrt(pkl[0] ** 2 + pkl[1] ** 2 + pkl[2] ** 2)
-
-        alphai = np.arccos(pij_pil / (normpij * normpil))
-        alphak = np.arccos(pkl_pkj / (normpkl * normpkj))
-
-        return alphai + alphak <= np.pi
-
-    def _is_delaunay(self, h):
-        r"""
-          v2
-          /|\
-        v3 | v1
-          \|/
-           v4
-        """
-        vi = self.H_vertex[self.H_next[self.H_twin[h]]]
-        vj = self.H_vertex[h]
-        vk = self.H_vertex[self.H_next[h]]
-        vl = self.H_vertex[self.H_prev[h]]
-
-        pij = self.V_pq[vj, :3] - self.V_pq[vi, :3]
-        pil = self.V_pq[vl, :3] - self.V_pq[vi, :3]
-        pkj = self.V_pq[vj, :3] - self.V_pq[vk, :3]
-        pkl = self.V_pq[vl, :3] - self.V_pq[vk, :3]
-
-        pij_pil = pij[0] * pil[0] + pij[1] * pil[1] + pij[2] * pil[2]
-        pkl_pkj = pkl[0] * pkj[0] + pkl[1] * pkj[1] + pkl[2] * pkj[2]
-        normpij = np.sqrt(pij[0] ** 2 + pij[1] ** 2 + pij[2] ** 2)
-        normpil = np.sqrt(pil[0] ** 2 + pil[1] ** 2 + pil[2] ** 2)
-        normpkj = np.sqrt(pkj[0] ** 2 + pkj[1] ** 2 + pkj[2] ** 2)
-        normpkl = np.sqrt(pkl[0] ** 2 + pkl[1] ** 2 + pkl[2] ** 2)
-
-        alphai = np.arccos(pij_pil / (normpij * normpil))
-        alphak = np.arccos(pkl_pkj / (normpkl * normpkj))
-
-        return alphai + alphak <= np.pi
-
-    def is_flippable(self, h):
-        r"""
-        edge flip hlj-->hki is allowed unless hlj is on a boundary or vi and vk are already neighbors
-        vj
-        /|\
-      vk | vi
-        \|/
-        vl
-        """
-        if self.boundary_contains_h(h):
-            return False
-        hlj = h
-        hjk = self.h_next_h(hlj)
-        # hjl = self.h_twin_h(hlj)
-        hli = self.h_next_h(self.h_twin_h(hlj))
-        vi = self.v_head_h(hli)
-        vk = self.v_head_h(hjk)
-
-        for him in self.generate_H_out_v_clockwise(vi):
-            if self.v_head_h(him) == vk:
-                return False
-        return True
-        # ##################
-        # flippable = True
-
-        # vj = self.v_head_h(hlj)
-
-        # him = self.h_twin_h(hli)
-        # while True:
-        #     him = self.h_twin_h(self.h_prev_h(him))
-        #     vm = self.v_head_h(him)
-        #     if vm == vk:
-        #         flippable = False
-        #         break
-        #     if vm == vj:
-        #         break
-
-        # return flippable
-
-    def edge_flip(self, h):
-        r"""
-        h/ht can not be on boundary!
-        keeps fa
-                v2                           v2
+        h cannot be on boundary!
+                v1                           v1
               /    \                       /  |  \
              /      \                     /   |   \
-            /h2    h1\                   /h2  |  h1\
-           /    f1    \                 /     |     \
-          /            \               /  f1  |  f2  \
-         /      h       \             /       |       \
-        v3--------------v1  |----->  v3      h|ht     v1
-         \      ht      /             \       |       /
+            /h3    h2\                   /h3  |  h2\
+           /    f0    \                 /     |     \
+          /            \               /  f0  |  f1  \
+         /      h0      \             /       |       \
+        v2--------------v0  |----->  v2     h0|h1     v0
+         \      h1      /             \       |       /
           \            /               \      |      /
-           \    f2    /                 \     |     /
-            \h3    h4/                   \h3  |  h4/
+           \    f1    /                 \     |     /
+            \h4    h5/                   \h4  |  h5/
              \      /                     \   |   /
               \    /                       \  |  /
-                v4                           v4
+                v3                           v3      
+        v0
+        --
+        h_out
+            pre-flip: may be h1
+            post-flip: set to h2 if needed
+        v2
+        --
+            pre-flip: may be h0
+            post-flip: set to h4 if needed
+        h0
+        --
+        v_origin_h(h0)
+            pre-flip: v2
+            post-flip: v3
+        h_next
+            pre-flip: h2
+            post-flip: h3
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        h1
+        --
+        v_origin
+            pre-flip: v0
+            post-flip: v1
+        h_next
+            pre-flip: h4
+            post-flip: h5
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        h2
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h3
+            post-flip: h1
+        h_twin
+            unchanged
+        f_left
+            pre-flip: f0
+            post-flip: f1
+        h3
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h0
+            post-flip: h4
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        h4
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h5
+            post-flip: h0
+        h_twin
+            unchanged
+        f_left
+            pre-flip: f1
+            post-flip: f0
+        h5
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h1
+            post-flip: h2
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        f0
+        --
+        h_bound
+            pre-flip: may be h2
+            post-flip: set to h3 if needed
+        f1
+        --
+        h_bound
+            pre-flip: may be h4
+            post-flip: set to h5 if needed
         """
-        n_h = self.h_next_h(h)  # ->h2
-        p_h = self.h_prev_h(h)  # ->h3
-        t_h = self.h_twin_h(h)  #
-        nt_h = self.h_next_h(t_h)  # ->h4
-        pt_h = self.h_prev_h(t_h)  # ->h1
+        # get involved half-edges/vertices/faces
+        h0 = h
+        h1 = self.h_twin_h(h0)
+        h2 = self.h_next_h(h0)
+        h3 = self.h_next_h(h2)
+        h4 = self.h_next_h(h1)
+        h5 = self.h_next_h(h4)
 
-        f_h = self.f_left_h(h)  # ->f1
-        ft_h = self.f_left_h(t_h)  # ->f2
+        v0 = self.v_origin_h(h1)
+        v1 = self.v_origin_h(h3)
+        v2 = self.v_origin_h(h0)
+        v3 = self.v_origin_h(h5)
 
-        o_h = self.v_origin_h(h)  # ->v4
-        ot_h = self.v_origin_h(t_h)  # ->v2
-        op_h = self.v_origin_h(p_h)
-        opt_h = self.v_origin_h(pt_h)
+        f0 = self.f_left_h(h0)
+        f1 = self.f_left_h(h1)
 
-        # update h_out for v1,v3
-
-        # update next for h2,h,ht,h4
-
-        # update h_bound for f1,f2
-        if self.h_bound_f(f_h) == n_h:
-            self.update_face(f_h, h_bound=h)
-        if self.h_bound_f(ft_h) == nt_h:
-            self.update_face(ft_h, h_bound=t_h)
-
-        ht = self.h_twin_h(h)
-        h1 = self.h_next_h(h)
-        h2 = self.h_prev_h(h)
-        h3 = self.h_next_h(ht)
-        h4 = self.h_prev_h(ht)
-
-        f1 = self.f_left_h(h)
-        f2 = self.f_left_h(ht)
-
-        # v1 = self.v_origin_h(h4)
-        # v2 = self.v_origin_h(h1)
-        # v3 = self.v_origin_h(h2)
-        # v4 = self.v_origin_h(h3)
-        v1 = self.v_origin_h(ht)
-        v2 = self.v_origin_h(h2)
-        v3 = self.v_origin_h(h)
-        v4 = self.v_origin_h(h4)
-
-        # self.faces[f1] = np.array([v2, v3, v4], dtype=np.int32)
-        # self.faces[f2] = np.array([v4, v1, v2], dtype=np.int32)
-        self.update_face(f1, h_bound=h2)
-        self.update_face(f2, h_bound=h4)
-
-        # self.halfedges[h] = np.array([v4, v2], dtype=np.int32)
-        # self.halfedges[ht] = np.array([v2, v4], dtype=np.int32)
-
-        # self.H_next[h] = h2
-        # self.H_vertex[h] = v2
-        self.update_hedge(h, h_next=h2, v_origin=v4)
-
-        # self.H_next[ht] = h4
-        # self.H_vertex[ht] = v4
-        self.update_hedge(ht, h_next=h4, v_origin=v2)
-
-        # self.H_next[h1] = ht
-        # self.H_face[h1] = f2
-        self.update_hedge(h1, h_next=ht, f_left=f2)
-
-        # self.H_next[h2] = h3
-        self.update_hedge(h2, h_next=h3)
-
-        # self.H_face[h3] = f1
-        # self.H_next[h3] = h
-        self.update_hedge(h3, f_left=f1, h_next=h)
-
-        # self.H_next[h4] = h1
-        self.update_hedge(h4, h_next=h1)
-
-        # self.V_hedge[v3] = h3
-        # self.V_hedge[v1] = h1
-        # self.V_hedge[v2] = h2
-        # self.V_hedge[v4] = h4
-        self.update_vertex(v3, h_out=h3)
-        self.update_vertex(v1, h_out=h1)
-        self.update_vertex(v2, h_out=h2)
-        self.update_vertex(v4, h_out=h4)
+        # update vertices
+        if self.h_out_v(v0) == h1:
+            self.update_vertex(v0, h_out=h2)
+        if self.h_out_v(v2) == h0:
+            self.update_vertex(v2, h_out=h4)
+        # update half-edges
+        self.update_hedge(h0, v_origin=v3, h_next=h3)
+        self.update_hedge(h1, v_origin=v1, h_next=h5)
+        self.update_hedge(h2, h_next=h1, f_left=f1)
+        self.update_hedge(h3, h_next=h4)
+        self.update_hedge(h4, h_next=h0, f_left=f0)
+        self.update_hedge(h5, h_next=h2)
+        # update faces
+        if self.h_bound_f(f0) == h2:
+            self.update_face(f0, h_bound=h3)
+        if self.h_bound_f(f1) == h4:
+            self.update_face(f1, h_bound=h5)
 
     @property
     def v_new(self):
@@ -1082,7 +1093,7 @@ class HalfEdgeMesh(HalfEdgeMeshBase):
             self._f_left_H[h] = f_left
 
     def split_edge(self, h):
-        # choose hij = h or twin(h) so that its face is a thing
+        # choose hij = h or twin(h) so that its face is contained in the mesh
         if not self.complement_boundary_contains_h(h):
             hij = h
         else:
@@ -1158,1356 +1169,3 @@ class HalfEdgeMesh(HalfEdgeMeshBase):
     ######################################################
     ######################################################
     # to be deprecated
-
-
-class HalfEdgePatch:
-    """
-    A submanifold of a HalfEdgeMesh topologically equivalent to a disk.
-    """
-
-    def __init__(
-        self,
-        supermesh,
-        V,
-        H,
-        F,
-        h_cw_B=None,
-        V_bdry=None,
-    ):
-        self.supermesh = supermesh
-        self.V = V
-        self.H = H
-        self.F = F
-        if h_cw_B is None:
-            self.h_cw_B = self.find_h_cw_B()
-        if V_bdry is None:
-            self.V_bdry = set(self.generate_V_cw_B())
-
-    @property
-    def V(self):
-        return self._V
-
-    @V.setter
-    def V(self, value):
-        if isinstance(value, set):
-            self._V = value
-        elif hasattr(value, "__iter__"):
-            self._V = set(value)
-        else:
-            raise ValueError("Argument must be set or iterable.")
-
-    @property
-    def H(self):
-        return self._H
-
-    @H.setter
-    def H(self, value):
-        if isinstance(value, set):
-            self._H = value
-        elif hasattr(value, "__iter__"):
-            self._H = set(value)
-        else:
-            raise ValueError("Argument must be set or iterable.")
-
-    @property
-    def F(self):
-        return self._F
-
-    @F.setter
-    def F(self, value):
-        if isinstance(value, set):
-            self._F = value
-        elif hasattr(value, "__iter__"):
-            self._F = set(value)
-        else:
-            raise ValueError("Argument must be set or iterable.")
-
-    @property
-    def V_bdry(self):
-        return self._V_bdry
-
-    @V_bdry.setter
-    def V_bdry(self, value):
-        if isinstance(value, set):
-            self._V_bdry = value
-        elif hasattr(value, "__iter__"):
-            self._V_bdry = set(value)
-        else:
-            raise ValueError("Argument must be set or iterable.")
-
-    ##############################################
-    @classmethod
-    def from_seed_vertex(cls, v_seed, supermesh):
-        """
-        Initialize a patch from a seed vertex by including taking the closure of all simplices in supermesh that contain the seed vertex. If v_seed is not in a boundary of supermesh, the patch will be a disk centered at v_seed.
-
-        Parameters:
-            v_seed (int): vertex index
-            supermesh (HalfEdgeMesh): mesh from which the patch is extracted
-        """
-        V, H, F = supermesh.closure(*supermesh.star_of_vertex(v_seed))
-        self = cls(supermesh, V, H, F)
-        # self.h_cw_B = self.find_h_cw_B()
-
-        return self
-
-    def complement_boundary_contains_h(self, h):
-        """check if half-edge h is in the boundary of the mesh"""
-        return h in self.H and self.supermesh.f_left_h(h) not in self.F
-
-    def interior_boundary_contains_h(self, h):
-        """check if half-edge h is on the boundary of the mesh"""
-        return (
-            h in self.H
-            and self.supermesh.f_left_h(self.supermesh.h_twin_h(h)) not in self.F
-        )
-
-    def boundary_contains_h(self, h):
-        """check if half-edge h is on the boundary of the mesh"""
-        if h in self.H:
-            if self.supermesh.f_left_h(h) not in self.F:
-                return True
-            if self.supermesh.f_left_h(self.supermesh.h_twin_h(h)) not in self.F:
-                return True
-        return False
-
-    def boundary_contains_v(self, v):
-        """check if vertex v is on the boundary of the mesh"""
-        return self.boundary_contains_h(self.supermesh.h_out_v(v))
-
-    ##############################################
-    def xyz_coord_v(self, v):
-        """
-        get array of xyz coordinates of vertex v
-
-        Args:
-            v (int): vertex index
-
-        Returns:
-            numpy.array: xyz coordinates
-        """
-        return self.supermesh.xyz_coord_v(v)
-
-    def h_out_v(self, v):
-        """
-        get index of an non-boundary outgoing half-edge incident on vertex v
-
-        Args:
-            v (int): vertex index
-
-        Returns:
-            int: half-edge index
-        """
-        if v not in self.V:
-            raise ValueError("Vertex not in patch.")
-        for h in self.supermesh.generate_H_out_v_clockwise(v):
-            if h not in self.H:
-                continue
-            elif self.supermesh.f_left_h(h) in self.F:
-                return h
-
-    def v_origin_h(self, h):
-        """get index of the vertex at the origin of half-edge h
-
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: vertex index
-        """
-        if h not in self.H:
-            raise ValueError("Half-edge not in patch.")
-        return self.supermesh.v_origin_h(h)
-
-    def h_next_h(self, h):
-        """get index of the next half-edge after h in the face/boundary cycle
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: half-edge index
-        """
-        if h not in self.H:
-            raise ValueError("Half-edge not in patch.")
-        elif self.supermesh.f_left_h(h) in self.F:
-            return self.supermesh.h_next_h(h)
-        n = self.supermesh.h_next_h(h)
-        while n not in self.H:
-            n = self.supermesh.h_out_cw_from_h(n)
-        return n
-
-    def h_twin_h(self, h):
-        """get index of the half-edge anti-parallel to half-edge h
-
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: half-edge index
-        """
-        if h not in self.H:
-            raise ValueError("Half-edge not in patch.")
-        return self.supermesh.h_twin_h(h)
-
-    def f_left_h(self, h):
-        """get index of the face to the left of half-edge h
-
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: face index
-        """
-        if h not in self.H:
-            raise ValueError("Half-edge not in patch.")
-        elif self.supermesh.f_left_h(h) in self.F:
-            return self.supermesh.f_left_h(h)
-        else:
-            return -1
-
-    def h_bound_f(self, f):
-        """get index of a half-edge on the boundary of face f
-
-        Args:
-            f (int): face index
-
-        Returns:
-            int: half-edge index
-        """
-        if f not in self.F:
-            raise ValueError("Face not in patch.")
-        return self.supermesh.h_bound_f(f)
-
-    def generate_H_next_h(self, h_start):
-        h = h_start
-        while True:
-            yield h
-            h = self.h_next_h(h)
-            if h == h_start:
-                break
-
-    def generate_H_cw_B(self):
-        for bdry, h in self.h_cw_B.items():
-            for h in self.generate_H_next_h(h):
-                yield h
-
-    def generate_V_cw_B(self):
-        for h in self.generate_H_cw_B():
-            yield self.v_origin_h(h)
-
-    def generate_F_cw_B(self):
-        for h in self.generate_H_cw_B():
-            yield self.f_left_h(self.h_twin_h(h))
-
-    def find_h_cw_B(self, F_need2check=None):
-        h_cw_B = dict()
-        bdry_count = 0
-        H_in_cw_boundary = set()
-        # boundary_is_right_of_H = set()
-        if F_need2check is None:
-            F_need2check = self.F.copy()  # set of faces that need to be checked
-        while F_need2check:
-            f = F_need2check.pop()
-            h = self.h_bound_f(f)
-            for h in self.generate_H_next_h(h):
-                if self.interior_boundary_contains_h(h):
-                    H_in_cw_boundary.add(self.h_twin_h(h))
-        while H_in_cw_boundary:
-            bdry_count += 1
-            h = H_in_cw_boundary.pop()
-            bdry = -bdry_count
-            h_cw_B[bdry] = h
-            for h in self.generate_H_next_h(h):
-                H_in_cw_boundary.discard(h)
-        return h_cw_B
-
-    def _expand_boundary(self):
-        """
-        **slow but actually works***
-        Expand the boundary of the patch by one ring of vertices, edges, and faces.
-
-        Returns:
-            set: set of new boundary vertices
-        """
-        new_boundary_verts = set()
-        V_bdry_old = set(self.generate_V_cw_B())
-        V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
-        V_bdry_new = V - self.V
-        self.V.update(V)
-        self.H.update(H)
-        self.F.update(F)
-        self.h_cw_B = self.find_h_cw_B(F_need2check=F)
-        return V_bdry_new
-
-    def expand_boundary(self):
-        """
-        ***a little bit faster***
-        Expand the boundary of the patch by one ring of vertices, edges, and faces.
-
-        Returns:
-            set: set of new boundary vertices
-        """
-        new_boundary_verts = set()
-        V, H, F = set(), set(), set()
-        V_bdry_old = set(self.generate_V_cw_B())
-        for h_start in self.generate_H_cw_B():
-            if self.supermesh.complement_boundary_contains_h(h_start):
-                continue
-            for h in self.supermesh.generate_H_in_cw_from_h(h_start):
-                f = self.supermesh.f_left_h(h)
-                if f in self.F:
-                    break
-                n = self.supermesh.h_next_h(h)
-                v = self.supermesh.v_origin_h(h)
-                V.add(v)
-                H.update([h, n])
-                if f >= 0:
-                    nn = self.supermesh.h_next_h(n)
-                    H.update([nn, self.supermesh.h_twin_h(nn)])
-                    F.add(f)
-
-        # V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
-        V_bdry_new = V - self.V
-        self.V.update(V)
-        self.H.update(H)
-        self.F.update(F)
-        self.h_cw_B = self.find_h_cw_B(F_need2check=F)
-        return V_bdry_new
-
-    def expand_boundary_doesnt_work_yet(self):
-        """
-        Expand the boundary of the patch by one ring of vertices, edges, and faces.
-
-        Returns:
-            set: set of new boundary vertices
-        """
-        new_boundary_verts = set()
-        V, H, F = set(), set(), set()
-        V_bdry_old = set(self.generate_V_cw_B())
-        for h_start in self.generate_H_cw_B():
-            if self.supermesh.complement_boundary_contains_h(h_start):
-                continue
-            for h in self.supermesh.generate_H_in_cw_from_h(h_start):
-                f = self.supermesh.f_left_h(h)
-                if f in self.F:
-                    break
-                n = self.supermesh.h_next_h(h)
-                v = self.supermesh.v_origin_h(h)
-                V.add(v)
-                H.update([h, n])
-                if f >= 0:
-                    nn = self.supermesh.h_next_h(n)
-                    H.update([nn, self.supermesh.h_twin_h(nn)])
-                    F.add(f)
-
-        # V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
-        V_bdry_new = V - self.V
-        self.V = V
-        self.H = H
-        self.F = F.copy()
-        self.h_cw_B = self.find_h_cw_B(F_need2check=F)
-        return V_bdry_new
-
-    ##############################################
-    def to_half_edge_mesh(self):
-        V = sorted(self.V)
-        F = sorted(self.F)
-        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
-        F = [
-            [
-                V.index(self.v_origin_h(h))
-                for h in self.generate_H_next_h(self.h_bound_f(f))
-            ]
-            for f in F
-        ]
-        return HalfEdgeMesh.from_vert_face_list(xyz_coord_V, F)
-
-    @property
-    def data_lists(self):
-        """ """
-        V = sorted(self.V)
-        H = sorted(self.H)
-        F = sorted(self.F)
-        # [x if x<.5 else 33 for x in X]
-        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
-        h_out_V = [H.index(self.h_out_v(v)) for v in V]
-        v_origin_H = [V.index(self.v_origin_h(h)) for h in H]
-        h_next_H = [H.index(self.h_next_h(h)) for h in H]
-        h_twin_H = [H.index(self.h_twin_h(h)) for h in H]
-        f_left_H = [
-            self.f_left_h(h) if self.f_left_h(h) < 0 else F.index(self.f_left_h(h))
-            for h in H
-        ]
-        h_bound_F = [H.index(self.h_bound_f(f)) for f in F]
-
-        return (
-            xyz_coord_V,
-            h_out_V,
-            v_origin_H,
-            h_next_H,
-            h_twin_H,
-            f_left_H,
-            h_bound_F,
-        )
-
-    ##############################################
-    ##############################################
-    # to be deprecated
-
-
-class LaplaceOperatorBase:
-    def __init__(self, mesh):
-        self.mesh = mesh
-
-    def compute_weight(self, vi, vj):
-        pass
-
-    def compute_matrix(self):
-        raise NotImplementedError("This method should be implemented by subclasses.")
-
-
-class CotanLaplaceOperator:
-    def __init__(self, mesh):
-        self.mesh = mesh
-        self.csr_data = []
-        self.csr_indices = []
-        self.csr_indptr = []
-        self.V = self.mesh.V
-        self.Vdict = {vi: i for i, vi in enumerate(self.V)}
-        self.csr_data, self.csr_indices, self.csr_indptr = self.compute_csr_matrix()
-        self.matrix = csr_matrix(
-            (self.csr_data, self.csr_indices, self.csr_indptr),
-            shape=(len(self.V), len(self.V)),
-        )
-
-    @lru_cache(maxsize=None)
-    def cot_theta_h_opposite(self, hij):
-        if self.mesh.complement_boundary_contains_h(hij):
-            return 0.0
-        vi = self.mesh.v_origin_h(hij)
-        ri = self.mesh.xyz_coord_v(vi)
-        vj = self.mesh.v_head_h(hij)
-        rj = self.mesh.xyz_coord_v(vj)
-        hijp1 = self.mesh.h_out_ccw_from_h(hij)
-        vjp1 = self.mesh.v_head_h(hijp1)
-        rjp1 = self.mesh.xyz_coord_v(vjp1)
-
-        ui = ri - rjp1
-        uj = rj - rjp1
-        cos_theta = np.dot(ui, uj) / (np.linalg.norm(ui) * np.linalg.norm(uj))
-        cot_theta = cos_theta / np.sqrt(1 - cos_theta**2)
-        return cot_theta
-
-    @lru_cache(maxsize=None)
-    def dual_cell_area(self, vi):
-        return self.mesh.meyercell_area(vi)
-
-    def cache_clear(self):
-        self.cot_theta_h_opposite.cache_clear()
-        self.dual_cell_area.cache_clear()
-
-    def compute_csr_matrix(self):
-        t = time()
-        csr_data = []
-        csr_indices = []
-        csr_indptr = []
-        nonzero_count = 0
-        csr_indptr.append(nonzero_count)
-        for i, vi in enumerate(self.V):
-            M_i = self.dual_cell_area(vi)
-            indices_i = [i]
-            data_i = [0.0]
-            nonzero_count += 1
-            for hij in self.mesh.generate_H_out_v_clockwise(vi):
-                hji = self.mesh.h_twin_h(hij)
-                vj = self.mesh.v_head_h(hij)
-                j = self.Vdict[vj]
-                indices_i.append(j)
-                data_ij = (
-                    self.cot_theta_h_opposite(hij) + self.cot_theta_h_opposite(hji)
-                ) / (2 * M_i)
-                data_i[0] -= data_ij
-                data_i.append(data_ij)
-                nonzero_count += 1
-            csr_indices.extend(indices_i)
-            csr_data.extend(data_i)
-            csr_indptr.append(nonzero_count)
-
-        return csr_data, csr_indices, csr_indptr
-
-
-class HeatLaplaceOperator:
-    def __init__(self, mesh):
-        self.mesh = mesh
-        self.csr_data = []
-        self.csr_indices = []
-        self.csr_indptr = []
-        self.V = self.mesh.V
-        self.Vdict = {vi: i for i, vi in enumerate(self.V)}
-        self.csr_data, self.csr_indices, self.csr_indptr = self.compute_csr_matrix()
-        self.matrix = csr_matrix(
-            (self.csr_data, self.csr_indices, self.csr_indptr),
-            shape=(len(self.V), len(self.V)),
-        )
-
-    @lru_cache(maxsize=None)
-    def dual_cell_area(self, vi):
-        return self.mesh.meyercell_area(vi)
-
-    @lru_cache(maxsize=None)
-    def interaction_vv(self, v0, v1):
-        r0, r1 = self.mesh.xyz_coord_v(v0), self.mesh.xyz_coord_v(v1)
-        A0, A1 = self.dual_cell_area(v0), self.dual_cell_area(v1)
-        W01 = (
-            A1 * np.exp(-np.linalg.norm(r1 - r0) ** 2 / (4 * A0)) / (4 * np.pi * A0**2)
-        )
-        return W01
-
-    @lru_cache(maxsize=None)
-    def interaction_vv_symmetricish(self, v0, v1):
-        r0, r1 = self.mesh.xyz_coord_v(v0), self.mesh.xyz_coord_v(v1)
-        A0, A1 = self.dual_cell_area(v0), self.dual_cell_area(v1)
-        W01 = (
-            A1
-            * np.exp(-np.linalg.norm(r1 - r0) ** 2 / (2 * (A0 + A1)))
-            / (np.pi * (A0 + A1) ** 2)
-        )
-        # 1/Mi=sum_j Aj/(Ai+Aj)**2
-        return W01
-
-    def cache_clear(self):
-        self.cot_theta_h_opposite.cache_clear()
-        self.dual_cell_area.cache_clear()
-
-    def nearest_neighbors_interaction(self, v0):
-        data = [0.0]
-        indices = [self.Vdict[v0]]
-        for h in self.mesh.generate_H_out_v_clockwise(v0):
-            v1 = self.mesh.v_head_h(h)
-            W01 = self.interaction_vv(v0, v1)
-            data.append(W01)
-            data[0] -= W01
-            indices.append(self.Vdict[v1])
-        return data, indices
-
-    def next_ring_interactions(self, v0, data, indices):
-        return 1
-
-    def compute_csr_matrix(self):
-        t = time()
-        csr_data = []
-        csr_indices = []
-        csr_indptr = []
-        nonzero_count = 0
-        csr_indptr.append(nonzero_count)
-        for i, vi in enumerate(self.V):
-            M_i = self.dual_cell_area(vi)
-            indices_i = [i]
-            data_i = [0.0]
-            nonzero_count += 1
-            for hij in self.mesh.generate_H_out_v_clockwise(vi):
-                hji = self.mesh.h_twin_h(hij)
-                vj = self.mesh.v_head_h(hij)
-                j = self.Vdict[vj]
-                indices_i.append(j)
-                data_ij = (
-                    self.cot_theta_h_opposite(hij) + self.cot_theta_h_opposite(hji)
-                ) / (2 * M_i)
-                data_i[0] -= data_ij
-                data_i.append(data_ij)
-                nonzero_count += 1
-            csr_indices.extend(indices_i)
-            csr_data.extend(data_i)
-            csr_indptr.append(nonzero_count)
-
-        return csr_data, csr_indices, csr_indptr
-
-
-class CotanLaplacian(LaplaceOperatorBase):
-    def __init__(
-        self, mesh, rtol=1e-6, atol=1e-6, compute=False, data_path=None, run_tests=False
-    ):
-        super().__init__(mesh)
-        self.data_path = data_path
-        self.rtol = rtol
-        self.atol = atol
-        self.num_vertices = mesh.num_vertices
-        self.Vindices = sorted(self.mesh.xyz_coord_V.keys())
-        self.Vdict = {v: i for i, v in enumerate(self.Vindices)}
-        if compute:
-            self.weights_matrix = self.compute_weights_matrix()
-            self.matrix = self.compute_matrix()
-        if run_tests:
-            self.run_unit_sphere_mean_curvature_normal_tests()
-
-    def save(self, data_path=None):
-        if data_path is not None:
-            self.data_path = data_path
-        if self.data_path is None:
-            raise ValueError("No path to save data.")
-        # with open(self.data_path, "wb") as f:
-        #     pickle.dump(self.__dict__, f)
-        with open(self.data_path + ".pickle", "wb") as f:
-            pickle.dump(self, f)
-
-    @lru_cache(maxsize=None)
-    def barcell_area(self, v):
-        return self.mesh.barcell_area(v)
-
-    @lru_cache(maxsize=None)
-    def meyercell_area(self, v):
-        return self.mesh.meyercell_area(v)
-
-    # @lru_cache(maxsize=None)
-    # def compute_weight(self, vi, vj):
-    #     Ai = self.meyercell_area(vi)
-    #     ri = self.mesh.xyz_coord_v(vi)
-    #     ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-
-    #     return wij
-
-    def compute_weights_row(self, vi):
-        """computes the laplacian of Y at each vertex"""
-        data, col_indices = [], []
-        i = self.Vdict[vi]
-        Atot = 0.0
-        ri = self.mesh.xyz_coord_v(vi)
-        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-        for hij in self.mesh.generate_H_out_v_clockwise(vi):
-            vj = self.mesh.v_head_h(hij)
-            j = self.Vdict[vj]
-            col_indices.append(j)
-            hijm1 = self.mesh.h_out_cw_from_h(hij)
-            hijp1 = self.mesh.h_out_ccw_from_h(hij)
-            vjm1 = self.mesh.v_head_h(hijm1)
-            vjp1 = self.mesh.v_head_h(hijp1)
-
-            rjm1 = self.mesh.xyz_coord_v(vjm1)
-            rj = self.mesh.xyz_coord_v(vj)
-            rjp1 = self.mesh.xyz_coord_v(vjp1)
-
-            rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
-            rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
-            rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
-            ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
-            ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
-            rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
-            ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
-            rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
-
-            Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
-            Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
-            Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
-            Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
-            Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
-
-            cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
-
-            cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
-
-            cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
-            cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
-
-            Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
-            data.append((cot_thetam + cot_thetap) / 2)
-
-        for k in range(len(data)):
-            data[k] /= Atot
-        return data, col_indices
-
-    def compute_weights_matrix(self):
-        """Construct the sparse Laplacian matrix using cached areas."""
-        t = time()
-        row_indices = []
-        col_indices = []
-        data = []
-
-        for vi, i in self.Vdict.items():
-            new_data, new_col_indices = self.compute_weights_row(vi)
-            data.extend(new_data)
-            col_indices.extend(new_col_indices)
-            row_indices.extend([i] * len(new_data))
-        # self.wrow_indices = row_indices
-        # self.wcol_indices = col_indices
-        # self.wdata = data
-        self.T_compute_weights_matrix = time() - t
-        return csr_matrix(
-            (data, (row_indices, col_indices)),
-            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
-        )
-
-    def compute_row(self, vi):
-        i = self.Vdict[vi]
-        data, col_indices = self.compute_weights_row(vi)
-        # data[0] -= sum(data)
-
-        # return data, col_indices
-        return [-sum(data), *data], [i, *col_indices]
-
-    def compute_matrix(self):
-        """Construct the sparse Laplacian matrix using cached areas."""
-        t = time()
-        row_indices = []
-        col_indices = []
-        data = []
-
-        for vi, i in self.Vdict.items():
-            new_data, new_col_indices = self.compute_row(vi)
-            data.extend(new_data)
-            col_indices.extend(new_col_indices)
-            row_indices.extend([i] * len(new_data))
-        self.T_compute_matrix = time() - t
-        return csr_matrix(
-            (data, (row_indices, col_indices)),
-            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
-        )
-
-    def apply2array(self, Y):
-        return self.matrix.dot(Y)
-
-    def apply2dict(self, Y):
-        return self.matrix.dot([Y[v] for v in self.Vindices])
-
-    def apply(self, Y):
-        t = time()
-        if isinstance(Y, dict):
-            lapY = self.apply2dict(Y)
-        elif isinstance(Y, np.ndarray):
-            lapY = self.apply2array(Y)
-        else:
-            raise ValueError("Argument must be dict or numpy.ndarray.")
-        self.T_apply = time() - t
-        return lapY
-
-    def run_unit_sphere_mean_curvature_normal_tests(self):
-        self.weights_matrix = self.compute_weights_matrix()
-        self.matrix = self.compute_matrix()
-        self.Y = self.mesh.xyz_array
-        self.lapY = self.apply(self.Y)
-        self.lapY_actual = -2 * self.Y
-        self.lapY_error = np.linalg.norm(self.lapY - self.lapY_actual, axis=1)
-        self.lapY_error_max = np.linalg.norm(self.lapY_error, np.inf)
-        self.lapY_error_ave = np.mean(self.lapY_error)
-        self.H = 0.5 * np.linalg.norm(self.lapY, axis=1)
-        self.H_max = np.linalg.norm(self.H, np.inf)
-        self.H_ave = np.mean(self.H)
-        self.sparsity = self.matrix.nnz / self.matrix.shape[0] ** 2
-        self.weights_sparsity = (
-            self.weights_matrix.nnz / self.weights_matrix.shape[0] ** 2
-        )
-
-
-class HeatLaplacian(LaplaceOperatorBase):
-    def __init__(
-        self, mesh, rtol=1e-6, atol=1e-6, compute=False, data_path=None, run_tests=False
-    ):
-        super().__init__(mesh)
-        self.data_path = data_path
-        self.rtol = rtol
-        self.atol = atol
-        self.num_vertices = mesh.num_vertices
-        self.Vindices = sorted(self.mesh.xyz_coord_V.keys())
-        self.Vdict = {v: i for i, v in enumerate(self.Vindices)}
-        if compute:
-            self.weights_matrix = self.compute_weights_matrix()
-            self.matrix = self.compute_matrix()
-        if run_tests:
-            self.run_unit_sphere_mean_curvature_normal_tests()
-
-    def save(self, data_path=None):
-        if data_path is not None:
-            self.data_path = data_path
-        if self.data_path is None:
-            raise ValueError("No path to save data.")
-        # with open(self.data_path, "wb") as f:
-        #     pickle.dump(self.__dict__, f)
-        with open(self.data_path + ".pickle", "wb") as f:
-            pickle.dump(self, f)
-
-    @lru_cache(maxsize=None)
-    def barcell_area(self, v):
-        return self.mesh.barcell_area(v)
-
-    @lru_cache(maxsize=None)
-    def meyercell_area(self, v):
-        return self.mesh.meyercell_area(v)
-
-    @lru_cache(maxsize=None)
-    def compute_weight(self, vi, vj):
-        # vi,vj = self.Vindices[i], self.Vindices[j]
-        ri, rj = self.mesh.xyz_coord_v(vi), self.mesh.xyz_coord_v(vj)
-        Ai, Aj = self.barcell_area(vi), self.barcell_area(vj)
-        # Ai, Aj = self.meyercell_area(vi), self.meyercell_area(vj)
-        wij = (
-            Aj * np.exp(-np.linalg.norm(rj - ri) ** 2 / (4 * Ai)) / (4 * np.pi * Ai**2)
-        )
-        return wij
-
-    def compute_weights_row(self, vi):
-        p = HalfEdgePatch.from_seed_vertex(vi, self.mesh)
-        V = p.V - {vi}
-        i = self.Vdict[vi]
-        wii = self.compute_weight(vi, vi)
-        data = [wii]
-        col_indices = [i]
-        for vj in V:
-            j = self.Vdict[vj]
-            wij = self.compute_weight(vi, vj)
-            data.append(wij)
-            col_indices.append(j)
-
-        norm_wi = np.linalg.norm(data)
-
-        while True:
-            V = p.expand_boundary()
-            new_data = []
-            new_col_indices = []
-            for vj in V:
-                j = self.Vdict[vj]
-                wij = self.compute_weight(vi, vj)
-                new_data.append(wij)
-                new_col_indices.append(j)
-
-            norm_dwi = np.linalg.norm(new_data)
-            data.extend(new_data)
-            col_indices.extend(new_col_indices)
-
-            if norm_dwi < self.rtol * norm_wi + self.atol:
-                break
-            if len(data) >= self.num_vertices:
-                break
-            norm_wi = np.linalg.norm(data)
-
-        return data, col_indices
-
-    def compute_weights_matrix(self):
-        """Construct the sparse Laplacian matrix using cached areas."""
-        t = time()
-        row_indices = []
-        col_indices = []
-        data = []
-
-        for vi, i in self.Vdict.items():
-            new_data, new_col_indices = self.compute_weights_row(vi)
-            data.extend(new_data)
-            col_indices.extend(new_col_indices)
-            row_indices.extend([i] * len(new_data))
-        # self.wrow_indices = row_indices
-        # self.wcol_indices = col_indices
-        # self.wdata = data
-        self.T_compute_weights_matrix = time() - t
-        return csr_matrix(
-            (data, (row_indices, col_indices)),
-            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
-        )
-
-    def compute_row(self, vi):
-        p = HalfEdgePatch.from_seed_vertex(vi, self.mesh)
-        V = p.V - {vi}
-        i = self.Vdict[vi]
-        Lii = 0.0
-        data = [Lii]
-        col_indices = [i]
-        for vj in V:
-            j = self.Vdict[vj]
-            wij = self.compute_weight(vi, vj)
-            data.append(wij)
-            col_indices.append(j)
-            data[0] -= wij
-
-        norm_Li = np.linalg.norm(data)
-
-        while True:
-            V = p.expand_boundary()
-            new_data = [0.0]
-            new_col_indices = [i]
-            for vj in V:
-                j = self.Vdict[vj]
-                wij = self.compute_weight(vi, vj)
-                new_data.append(wij)
-                new_col_indices.append(j)
-                new_data[0] -= wij
-            norm_dLi = np.linalg.norm(new_data)
-            data[0] += new_data[0]
-            data.extend(new_data[1:])
-            col_indices.extend(new_col_indices[1:])
-
-            if norm_dLi < self.rtol * norm_Li + self.atol:
-                break
-            if len(data) >= self.num_vertices:
-                break
-            norm_Li = np.linalg.norm(data)
-
-        return data, col_indices
-
-    def compute_matrix(self):
-        """Construct the sparse Laplacian matrix using cached areas."""
-        t = time()
-        row_indices = []
-        col_indices = []
-        data = []
-
-        for vi, i in self.Vdict.items():
-            new_data, new_col_indices = self.compute_row(vi)
-            data.extend(new_data)
-            col_indices.extend(new_col_indices)
-            row_indices.extend([i] * len(new_data))
-        self.T_compute_matrix = time() - t
-        return csr_matrix(
-            (data, (row_indices, col_indices)),
-            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
-        )
-
-    def apply2array(self, Y):
-        return self.matrix.dot(Y)
-
-    def apply2dict(self, Y):
-        return self.matrix.dot([Y[v] for v in self.Vindices])
-
-    def apply(self, Y):
-        t = time()
-        if isinstance(Y, dict):
-            lapY = self.apply2dict(Y)
-        elif isinstance(Y, np.ndarray):
-            lapY = self.apply2array(Y)
-        else:
-            raise ValueError("Argument must be dict or numpy.ndarray.")
-        self.T_apply = time() - t
-        return lapY
-
-    def run_unit_sphere_mean_curvature_normal_tests(self):
-        self.weights_matrix = self.compute_weights_matrix()
-        self.matrix = self.compute_matrix()
-        self.Y = self.mesh.xyz_array
-        self.lapY = self.apply(self.Y)
-        self.lapY_actual = -2 * self.Y
-        self.lapY_error = np.linalg.norm(self.lapY - self.lapY_actual, axis=1)
-        self.lapY_error_max = np.linalg.norm(self.lapY_error, np.inf)
-        self.lapY_error_ave = np.mean(self.lapY_error)
-        self.H = 0.5 * np.linalg.norm(self.lapY, axis=1)
-        self.H_max = np.linalg.norm(self.H, np.inf)
-        self.H_ave = np.mean(self.H)
-        self.sparsity = self.matrix.nnz / self.matrix.shape[0] ** 2
-        self.weights_sparsity = (
-            self.weights_matrix.nnz / self.weights_matrix.shape[0] ** 2
-        )
-
-
-class MeyerHeatLaplacian(LaplaceOperatorBase):
-    def __init__(
-        self, mesh, rtol=1e-6, atol=1e-6, compute=False, data_path=None, run_tests=False
-    ):
-        super().__init__(mesh)
-        self.data_path = data_path
-        self.rtol = rtol
-        self.atol = atol
-        self.num_vertices = mesh.num_vertices
-        self.Vindices = sorted(self.mesh.xyz_coord_V.keys())
-        self.Vdict = {v: i for i, v in enumerate(self.Vindices)}
-        if compute:
-            self.weights_matrix = self.compute_weights_matrix()
-            self.matrix = self.compute_matrix()
-        if run_tests:
-            self.run_unit_sphere_mean_curvature_normal_tests()
-
-    def save(self, data_path=None):
-        if data_path is not None:
-            self.data_path = data_path
-        if self.data_path is None:
-            raise ValueError("No path to save data.")
-        with open(self.data_path + ".pickle", "wb") as f:
-            pickle.dump(self, f)
-
-    @lru_cache(maxsize=None)
-    def barcell_area(self, v):
-        return self.mesh.barcell_area(v)
-
-    @lru_cache(maxsize=None)
-    def meyercell_area(self, v):
-        return self.mesh.meyercell_area(v)
-
-    @lru_cache(maxsize=None)
-    def compute_weight(self, vi, vj):
-        ri, rj = self.mesh.xyz_coord_v(vi), self.mesh.xyz_coord_v(vj)
-        Ai, Aj = self.meyercell_area(vi), self.meyercell_area(vj)
-        wij = (
-            Aj * np.exp(-np.linalg.norm(rj - ri) ** 2 / (4 * Ai)) / (4 * np.pi * Ai**2)
-        )
-        return wij
-
-    def compute_weights_row(self, vi):
-        p = HalfEdgePatch.from_seed_vertex(vi, self.mesh)
-        V = p.V - {vi}
-        i = self.Vdict[vi]
-        wii = self.compute_weight(vi, vi)
-        data = [wii]
-        col_indices = [i]
-        for vj in V:
-            j = self.Vdict[vj]
-            wij = self.compute_weight(vi, vj)
-            data.append(wij)
-            col_indices.append(j)
-
-        norm_wi = np.linalg.norm(data)
-
-        while True:
-            V = p.expand_boundary()
-            new_data = []
-            new_col_indices = []
-            for vj in V:
-                j = self.Vdict[vj]
-                wij = self.compute_weight(vi, vj)
-                new_data.append(wij)
-                new_col_indices.append(j)
-
-            norm_dwi = np.linalg.norm(new_data)
-            data.extend(new_data)
-            col_indices.extend(new_col_indices)
-
-            if norm_dwi < self.rtol * norm_wi + self.atol:
-                break
-            if len(data) >= self.num_vertices:
-                break
-            norm_wi = np.linalg.norm(data)
-
-        return data, col_indices
-
-    def compute_weights_matrix(self):
-        """Construct the sparse Laplacian matrix using cached areas."""
-        t = time()
-        row_indices = []
-        col_indices = []
-        data = []
-
-        for vi, i in self.Vdict.items():
-            new_data, new_col_indices = self.compute_weights_row(vi)
-            data.extend(new_data)
-            col_indices.extend(new_col_indices)
-            row_indices.extend([i] * len(new_data))
-        # self.wrow_indices = row_indices
-        # self.wcol_indices = col_indices
-        # self.wdata = data
-        self.T_compute_weights_matrix = time() - t
-        return csr_matrix(
-            (data, (row_indices, col_indices)),
-            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
-        )
-
-    def compute_row(self, vi):
-        p = HalfEdgePatch.from_seed_vertex(vi, self.mesh)
-        V = p.V - {vi}
-        i = self.Vdict[vi]
-        Lii = 0.0
-        data = [Lii]
-        col_indices = [i]
-        for vj in V:
-            j = self.Vdict[vj]
-            wij = self.compute_weight(vi, vj)
-            data.append(wij)
-            col_indices.append(j)
-            data[0] -= wij
-
-        norm_Li = np.linalg.norm(data)
-
-        while True:
-            V = p.expand_boundary()
-            new_data = [0.0]
-            new_col_indices = [i]
-            for vj in V:
-                j = self.Vdict[vj]
-                wij = self.compute_weight(vi, vj)
-                new_data.append(wij)
-                new_col_indices.append(j)
-                new_data[0] -= wij
-            norm_dLi = np.linalg.norm(new_data)
-            data[0] += new_data[0]
-            data.extend(new_data[1:])
-            col_indices.extend(new_col_indices[1:])
-
-            if norm_dLi < self.rtol * norm_Li + self.atol:
-                break
-            if len(data) >= self.num_vertices:
-                break
-            norm_Li = np.linalg.norm(data)
-
-        return data, col_indices
-
-    def compute_matrix(self):
-        """Construct the sparse Laplacian matrix using cached areas."""
-        t = time()
-        row_indices = []
-        col_indices = []
-        data = []
-
-        for vi, i in self.Vdict.items():
-            new_data, new_col_indices = self.compute_row(vi)
-            data.extend(new_data)
-            col_indices.extend(new_col_indices)
-            row_indices.extend([i] * len(new_data))
-        self.T_compute_matrix = time() - t
-        return csr_matrix(
-            (data, (row_indices, col_indices)),
-            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
-        )
-
-    def apply2array(self, Y):
-        return self.matrix.dot(Y)
-
-    def apply2dict(self, Y):
-        return self.matrix.dot([Y[v] for v in self.Vindices])
-
-    def apply(self, Y):
-        t = time()
-        if isinstance(Y, dict):
-            lapY = self.apply2dict(Y)
-        elif isinstance(Y, np.ndarray):
-            lapY = self.apply2array(Y)
-        else:
-            raise ValueError("Argument must be dict or numpy.ndarray.")
-        self.T_apply = time() - t
-        return lapY
-
-    def run_unit_sphere_mean_curvature_normal_tests(self):
-        self.weights_matrix = self.compute_weights_matrix()
-        self.matrix = self.compute_matrix()
-        self.Y = self.mesh.xyz_array
-        self.lapY = self.apply(self.Y)
-        self.lapY_actual = -2 * self.Y
-        self.lapY_error = np.linalg.norm(self.lapY - self.lapY_actual, axis=1)
-        self.lapY_error_max = np.linalg.norm(self.lapY_error, np.inf)
-        self.lapY_error_ave = np.mean(self.lapY_error)
-        self.H = 0.5 * np.linalg.norm(self.lapY, axis=1)
-        self.H_max = np.linalg.norm(self.H, np.inf)
-        self.H_ave = np.mean(self.H)
-        self.sparsity = self.matrix.nnz / self.matrix.shape[0] ** 2
-        self.weights_sparsity = (
-            self.weights_matrix.nnz / self.weights_matrix.shape[0] ** 2
-        )
-
-
-class FixedTimelikeParamHeatLaplacian(LaplaceOperatorBase):
-    def __init__(
-        self, mesh, rtol=1e-6, atol=1e-6, compute=False, data_path=None, run_tests=False
-    ):
-        super().__init__(mesh)
-        self.Ai = self.mesh.total_area_of_faces() / self.mesh.num_vertices
-        self.data_path = data_path
-        self.rtol = rtol
-        self.atol = atol
-        self.num_vertices = mesh.num_vertices
-        self.Vindices = sorted(self.mesh.xyz_coord_V.keys())
-        self.Vdict = {v: i for i, v in enumerate(self.Vindices)}
-        if compute:
-            self.weights_matrix = self.compute_weights_matrix()
-            self.matrix = self.compute_matrix()
-        if run_tests:
-            self.run_unit_sphere_mean_curvature_normal_tests()
-
-    def save(self, data_path=None):
-        if data_path is not None:
-            self.data_path = data_path
-        if self.data_path is None:
-            raise ValueError("No path to save data.")
-        with open(self.data_path + ".pickle", "wb") as f:
-            pickle.dump(self, f)
-
-    @lru_cache(maxsize=None)
-    def barcell_area(self, v):
-        return self.mesh.barcell_area(v)
-
-    @lru_cache(maxsize=None)
-    def meyercell_area(self, v):
-        return self.mesh.meyercell_area(v)
-
-    @lru_cache(maxsize=None)
-    def compute_weight(self, vi, vj):
-        ri, rj = self.mesh.xyz_coord_v(vi), self.mesh.xyz_coord_v(vj)
-        Ai, Aj = self.Ai, self.barcell_area(vj)
-        wij = (
-            Aj * np.exp(-np.linalg.norm(rj - ri) ** 2 / (4 * Ai)) / (4 * np.pi * Ai**2)
-        )
-        return wij
-
-    def compute_weights_row(self, vi):
-        p = HalfEdgePatch.from_seed_vertex(vi, self.mesh)
-        V = p.V - {vi}
-        i = self.Vdict[vi]
-        wii = self.compute_weight(vi, vi)
-        data = [wii]
-        col_indices = [i]
-        for vj in V:
-            j = self.Vdict[vj]
-            wij = self.compute_weight(vi, vj)
-            data.append(wij)
-            col_indices.append(j)
-
-        norm_wi = np.linalg.norm(data)
-
-        while True:
-            V = p.expand_boundary()
-            new_data = []
-            new_col_indices = []
-            for vj in V:
-                j = self.Vdict[vj]
-                wij = self.compute_weight(vi, vj)
-                new_data.append(wij)
-                new_col_indices.append(j)
-
-            norm_dwi = np.linalg.norm(new_data)
-            data.extend(new_data)
-            col_indices.extend(new_col_indices)
-
-            if norm_dwi < self.rtol * norm_wi + self.atol:
-                break
-            if len(data) >= self.num_vertices:
-                break
-            norm_wi = np.linalg.norm(data)
-
-        return data, col_indices
-
-    def compute_weights_matrix(self):
-        """Construct the sparse Laplacian matrix using cached areas."""
-        t = time()
-        row_indices = []
-        col_indices = []
-        data = []
-
-        for vi, i in self.Vdict.items():
-            new_data, new_col_indices = self.compute_weights_row(vi)
-            data.extend(new_data)
-            col_indices.extend(new_col_indices)
-            row_indices.extend([i] * len(new_data))
-        # self.wrow_indices = row_indices
-        # self.wcol_indices = col_indices
-        # self.wdata = data
-        self.T_compute_weights_matrix = time() - t
-        return csr_matrix(
-            (data, (row_indices, col_indices)),
-            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
-        )
-
-    def compute_row(self, vi):
-        p = HalfEdgePatch.from_seed_vertex(vi, self.mesh)
-        V = p.V - {vi}
-        i = self.Vdict[vi]
-        Lii = 0.0
-        data = [Lii]
-        col_indices = [i]
-        for vj in V:
-            j = self.Vdict[vj]
-            wij = self.compute_weight(vi, vj)
-            data.append(wij)
-            col_indices.append(j)
-            data[0] -= wij
-
-        norm_Li = np.linalg.norm(data)
-
-        while True:
-            V = p.expand_boundary()
-            new_data = [0.0]
-            new_col_indices = [i]
-            for vj in V:
-                j = self.Vdict[vj]
-                wij = self.compute_weight(vi, vj)
-                new_data.append(wij)
-                new_col_indices.append(j)
-                new_data[0] -= wij
-            norm_dLi = np.linalg.norm(new_data)
-            data[0] += new_data[0]
-            data.extend(new_data[1:])
-            col_indices.extend(new_col_indices[1:])
-
-            if norm_dLi < self.rtol * norm_Li + self.atol:
-                break
-            if len(data) >= self.num_vertices:
-                break
-            norm_Li = np.linalg.norm(data)
-
-        return data, col_indices
-
-    def compute_matrix(self):
-        """Construct the sparse Laplacian matrix using cached areas."""
-        t = time()
-        row_indices = []
-        col_indices = []
-        data = []
-
-        for vi, i in self.Vdict.items():
-            new_data, new_col_indices = self.compute_row(vi)
-            data.extend(new_data)
-            col_indices.extend(new_col_indices)
-            row_indices.extend([i] * len(new_data))
-        self.T_compute_matrix = time() - t
-        return csr_matrix(
-            (data, (row_indices, col_indices)),
-            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
-        )
-
-    def apply2array(self, Y):
-        return self.matrix.dot(Y)
-
-    def apply2dict(self, Y):
-        return self.matrix.dot([Y[v] for v in self.Vindices])
-
-    def apply(self, Y):
-        t = time()
-        if isinstance(Y, dict):
-            lapY = self.apply2dict(Y)
-        elif isinstance(Y, np.ndarray):
-            lapY = self.apply2array(Y)
-        else:
-            raise ValueError("Argument must be dict or numpy.ndarray.")
-        self.T_apply = time() - t
-        return lapY
-
-    def run_unit_sphere_mean_curvature_normal_tests(self):
-        self.weights_matrix = self.compute_weights_matrix()
-        self.matrix = self.compute_matrix()
-        self.Y = self.mesh.xyz_array
-        self.lapY = self.apply(self.Y)
-        self.lapY_actual = -2 * self.Y
-        self.lapY_error = np.linalg.norm(self.lapY - self.lapY_actual, axis=1)
-        self.lapY_error_max = np.linalg.norm(self.lapY_error, np.inf)
-        self.lapY_error_ave = np.mean(self.lapY_error)
-        self.H = 0.5 * np.linalg.norm(self.lapY, axis=1)
-        self.H_max = np.linalg.norm(self.H, np.inf)
-        self.H_ave = np.mean(self.H)
-        self.sparsity = self.matrix.nnz / self.matrix.shape[0] ** 2
-        self.weights_sparsity = (
-            self.weights_matrix.nnz / self.weights_matrix.shape[0] ** 2
-        )
-
-
-class PatchBoundary:
-    def __init__(self, supermesh):
-        self.supermesh = supermesh
-        self.h_next_H = dict()
-        self.h_twin_H = dict()
-        self.v_origin_H = dict()
-        self.front_contains_h = dict()
-
-    @classmethod
-    def from_seed_vertex(cls, v_seed, supermesh):
-        """
-        Initialize a patch from a seed vertex by including taking the closure of all simplices in supermesh that contain the seed vertex. If v_seed is not in a boundary of supermesh, the patch will be a disk centered at v_seed.
-
-        Parameters:
-            v_seed (int): vertex index
-            supermesh (HalfEdgeMesh): mesh from which the patch is extracted
-        """
-        b = cls(supermesh)
-        p = HalfEdgePatch.from_seed_vertex(v_seed, supermesh)
-        H_complement_B = p.generate_H_cw_B()
-        h_prev_H = dict()
-        for h in H_complement_B:
-            n = p.h_next_h(h)
-            t = p.h_twin_h(h)
-            b.h_next_H[h] = n
-            b.h_twin_H[h] = t
-            b.h_twin_H[t] = h
-
-            h_prev_H[t] = p.h_twin_h(n)
-        for key, val in h_prev_h.items():
-            b.h_next_h[val] = key
-
-        return b
