@@ -1,6 +1,14 @@
 # MeshBrane
 
-Create environment:
+
+## To do
+- decimation/subdivision
+- cotan laplacian
+- laplacian-->gradient
+
+
+
+## Create environment:
 
 ```
 python3.10 -m venv ~/.env/meshbrane

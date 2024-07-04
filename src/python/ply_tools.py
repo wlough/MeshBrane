@@ -779,30 +779,29 @@ class SphereBuilder:
     """
 
     def __init__(self):
+        self._name = "unit_sphere"
         r = 1.0
         self.r = r
-        xyz_coord_V = []
-        F = []
         phi = (1.0 + np.sqrt(5.0)) * 0.5  # golden ratio
         _a = 1.0
         _b = 1.0 / phi
         a = r * _a / np.sqrt(_a**2 + _b**2)
         b = r * _b / np.sqrt(_a**2 + _b**2)
-        V = [
-            [0.0, b, -a],
-            [b, a, 0.0],
-            [-b, a, 0.0],
-            [0.0, b, a],
-            [0.0, -b, a],
-            [-a, 0.0, b],
-            [0.0, -b, -a],
-            [a, 0.0, -b],
-            [a, 0.0, b],
-            [-a, 0.0, -b],
-            [b, -a, 0.0],
-            [-b, -a, 0.0],
+        V0 = [
+            np.array([0.0, b, -a]),
+            np.array([b, a, 0.0]),
+            np.array([-b, a, 0.0]),
+            np.array([0.0, b, a]),
+            np.array([0.0, -b, a]),
+            np.array([-a, 0.0, b]),
+            np.array([0.0, -b, -a]),
+            np.array([a, 0.0, -b]),
+            np.array([a, 0.0, b]),
+            np.array([-a, 0.0, -b]),
+            np.array([b, -a, 0.0]),
+            np.array([-b, -a, 0.0]),
         ]
-        F = [
+        F0 = [
             [2, 1, 0],
             [1, 2, 3],
             [5, 4, 3],
@@ -824,62 +823,176 @@ class SphereBuilder:
             [5, 11, 4],
             [10, 8, 4],
         ]
-        self.V = V
-        self.F = F
-        # self.num_vertices = len(V)
-        # self.xyz_coord_V = {v: xyz for v, xyz in enumerate(V)}
-        # self.vvv_verts_F = {f: verts for f, verts in enumerate(F)}
-        self.v2h = VertTri2HalfEdgeConverter.from_source_samples(V, F)
+
+        self.num_vertices = [len(V0)]
+        self.F = [F0]
+        self.V = V0
+        self.v2h = [VertTri2HalfEdgeConverter.from_source_samples(*self.VF())]
+
+    def VF(self, level=-1):
+        return self.V[: self.num_vertices[level]], self.F[level]
 
     @property
     def name(self):
-        return f"unit_sphere_{len(self.V):05d}"
+        return self._name
 
     def divide_faces(self):
         F = []
-        V = [np.array(xyz) for xyz in self.V]
         v_midpt_vv = dict()
-        for tri in self.F:
+        for tri in self.F[-1]:
             v0, v1, v2 = tri
             v01 = v_midpt_vv.get((v0, v1))
             v12 = v_midpt_vv.get((v1, v2))
             v20 = v_midpt_vv.get((v2, v0))
             if v01 is None:
-                v01 = len(V)
-                xyz01 = (V[v0] + V[v1]) / 2
+                v01 = len(self.V)
+                xyz01 = (self.V[v0] + self.V[v1]) / 2
                 xyz01 *= self.r / np.linalg.norm(xyz01)
-                V.append(xyz01)
+                self.V.append(xyz01)
                 v_midpt_vv[(v0, v1)] = v01
                 v_midpt_vv[(v1, v0)] = v01
             if v12 is None:
-                v12 = len(V)
-                xyz12 = (V[v1] + V[v2]) / 2
+                v12 = len(self.V)
+                xyz12 = (self.V[v1] + self.V[v2]) / 2
                 xyz12 *= self.r / np.linalg.norm(xyz12)
-                V.append(xyz12)
+                self.V.append(xyz12)
                 v_midpt_vv[(v1, v2)] = v12
                 v_midpt_vv[(v2, v1)] = v12
             if v20 is None:
-                v20 = len(V)
-                xyz20 = (V[v2] + V[v0]) / 2
+                v20 = len(self.V)
+                xyz20 = (self.V[v2] + self.V[v0]) / 2
                 xyz20 *= self.r / np.linalg.norm(xyz20)
-                V.append(xyz20)
+                self.V.append(xyz20)
                 v_midpt_vv[(v2, v0)] = v20
                 v_midpt_vv[(v0, v2)] = v20
             F.append([v0, v01, v20])
             F.append([v01, v1, v12])
             F.append([v20, v12, v2])
             F.append([v01, v12, v20])
+        self.F.append(F)
+        self.num_vertices.append(len(self.V))
+        self.v2h.append(VertTri2HalfEdgeConverter.from_source_samples(*self.VF()))
 
-        # self.V = V
-        self.V = [list(xyz) for xyz in V]
-        self.F = F
-        self.v2h = VertTri2HalfEdgeConverter.from_source_samples(self.V, self.F)
-        # self.num_vertices = len(V)
+    def write_plys(self, level=-1):
+        ply_file = f"{self.name}_{self.num_vertices[level]:05d}.ply"
+        self.v2h[level].write_target_ply(
+            f"./data/ply/binary/{ply_file}", use_ascii=False
+        )
+        self.v2h[level].write_source_ply(f"./data/ply/ascii/{ply_file}", use_ascii=True)
 
-    def write_plys(self):
-        ply_file = f"{self.name}.ply"
-        self.v2h.write_target_ply(f"./data/ply/binary/{ply_file}", use_ascii=False)
-        self.v2h.write_source_ply(f"./data/ply/ascii/{ply_file}", use_ascii=True)
+
+def VF_torus(p):
+    p = 3
+    N_big = 3 * 2**p
+    N_small = 2**p
+    rad_small = 1 / 3
+    rad_big = 1
+
+    V = []
+    F = []
+    for b in range(N_big):
+        phi_big = 2 * np.pi * b / N_big
+        bp1 = (b + 1) % N_big
+        for s in range(N_small):
+            sp1 = (s + 1) % N_small
+            phi_small = 2 * np.pi * s / N_small
+            x = np.cos(phi_big) * (rad_big + np.cos(phi_small) * rad_small)
+            y = np.sin(phi_big) * (rad_big + np.cos(phi_small) * rad_small)
+            z = np.sin(phi_small) * rad_small
+            V.append(np.array([x, y, z]))
+            b_s = b * N_small + s
+            b_sp1 = b * N_small + sp1
+            bp1_s = bp1 * N_small + s
+            bp1_sp1 = bp1 * N_small + sp1
+            F.append([b_s, bp1_sp1, bp1_s])
+            F.append([b_s, b_sp1, bp1_sp1])
+    return V, F
+
+
+class DoughnutBuilder:
+    """
+    R = 1  # big radius
+    r = 1/3  # small radius
+    x**2 + y**2 + z**2 + R**2 - r**2) ** 2 - 4 * R**2 * (x**2 + y**2)=0
+    """
+
+    def __init__(self):
+        self._name = "torus"
+        p = 3
+        N_big = 3 * 2**p
+        N_small = 2**p
+        rad_small = 1 / 3
+        rad_big = 1
+
+        V = []
+        F = []
+        for b in range(N_big):
+            phi_big = 2 * np.pi * b / N_big
+            bp1 = (b + 1) % N_big
+            for s in range(N_small):
+                sp1 = (s + 1) % N_small
+                phi_small = 2 * np.pi * s / N_small
+                x = np.cos(phi_big) * (rad_big + np.cos(phi_small) * rad_small)
+                y = np.sin(phi_big) * (rad_big + np.cos(phi_small) * rad_small)
+                z = np.sin(phi_small) * rad_small
+                V.append(np.array([x, y, z]))
+                b_s = b * N_small + s
+                b_sp1 = b * N_small + sp1
+                bp1_s = bp1 * N_small + s
+                bp1_sp1 = bp1 * N_small + sp1
+                F.append([b_s, bp1_sp1, bp1_s])
+                F.append([b_s, b_sp1, bp1_sp1])
+
+    def VF(self, level=-1):
+        return self.V[: self.num_vertices[level]], self.F[level]
+
+    @property
+    def name(self):
+        return self._name
+
+    def divide_faces(self):
+        F = []
+        v_midpt_vv = dict()
+        for tri in self.F[-1]:
+            v0, v1, v2 = tri
+            v01 = v_midpt_vv.get((v0, v1))
+            v12 = v_midpt_vv.get((v1, v2))
+            v20 = v_midpt_vv.get((v2, v0))
+            if v01 is None:
+                v01 = len(self.V)
+                xyz01 = (self.V[v0] + self.V[v1]) / 2
+                xyz01 *= self.r / np.linalg.norm(xyz01)
+                self.V.append(xyz01)
+                v_midpt_vv[(v0, v1)] = v01
+                v_midpt_vv[(v1, v0)] = v01
+            if v12 is None:
+                v12 = len(self.V)
+                xyz12 = (self.V[v1] + self.V[v2]) / 2
+                xyz12 *= self.r / np.linalg.norm(xyz12)
+                self.V.append(xyz12)
+                v_midpt_vv[(v1, v2)] = v12
+                v_midpt_vv[(v2, v1)] = v12
+            if v20 is None:
+                v20 = len(self.V)
+                xyz20 = (self.V[v2] + self.V[v0]) / 2
+                xyz20 *= self.r / np.linalg.norm(xyz20)
+                self.V.append(xyz20)
+                v_midpt_vv[(v2, v0)] = v20
+                v_midpt_vv[(v0, v2)] = v20
+            F.append([v0, v01, v20])
+            F.append([v01, v1, v12])
+            F.append([v20, v12, v2])
+            F.append([v01, v12, v20])
+        self.F.append(F)
+        self.num_vertices.append(len(self.V))
+        self.v2h.append(VertTri2HalfEdgeConverter.from_source_samples(*self.VF()))
+
+    def write_plys(self, level=-1):
+        ply_file = f"{self.name}_{self.num_vertices[level]:05d}.ply"
+        self.v2h[level].write_target_ply(
+            f"./data/ply/binary/{ply_file}", use_ascii=False
+        )
+        self.v2h[level].write_source_ply(f"./data/ply/ascii/{ply_file}", use_ascii=True)
 
 
 ##################################################
