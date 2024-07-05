@@ -26,3 +26,18 @@ t = HalfEdgeMesh.from_half_edge_ply("./data/ply/binary/torus_003072_he.ply")
 s = HalfEdgeMesh.from_half_edge_ply("./data/ply/binary/unit_sphere_02562.ply")
 iso_torus = np.array([torus.implicit_fun(*xyz) for xyz in t.xyz_array])
 iso_sphere = np.array([sphere.implicit_fun(*xyz) for xyz in s.xyz_array])
+
+
+theta = np.linspace(0, np.pi, 100)
+phi = np.linspace(0, 2 * np.pi, 200)
+th, ph = theta[3], phi[15]
+xyz = sphere.parametric_fun(th, ph)
+sphere.xyz_thetaphi
+sphere.gaussian_curvature_fun(th, ph)
+
+H = sp.Array(
+    [
+        [[x_i.diff(phi_j).diff(phi_k) for phi_k in sphere.thetaphi] for phi_j in sphere.thetaphi]
+        for x_i in sphere.xyz
+    ]
+)

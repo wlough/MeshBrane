@@ -146,10 +146,22 @@ class SymTorus:
         self.surface_area = 4 * sp.pi**2 * self.R * self.r
         self.volume = 2 * sp.pi**2 * self.R * self.r**2
         ############################################################################
-        self.jacobian = sp.derive_by_array(self.xyz_thetaphi, self.thetaphi).reshape(
-            3, 2
+        # self.jacobian = sp.derive_by_array(self.xyz_thetaphi, self.thetaphi).reshape(
+        #     3, 2
+        # )
+        self.jacobian = sp.Array(
+            [[x_i.diff(phi_j) for phi_j in self.thetaphi] for x_i in self.xyz_thetaphi]
         )
-        self.hessian = sp.derive_by_array(self.jacobian, self.thetaphi).reshape(3, 2, 2)
+        # self.hessian = sp.derive_by_array(self.jacobian, self.thetaphi).reshape(3, 2, 2)
+        self.hessian = sp.Array(
+            [
+                [
+                    [x_i.diff(phi_j).diff(phi_k) for phi_k in self.thetaphi]
+                    for phi_j in self.thetaphi
+                ]
+                for x_i in self.xyz_thetaphi
+            ]
+        )
         self.implicit_fun = sp.lambdify(
             self.xyz, self.implicit_rep_xyz.subs(self.num_subs)
         )
@@ -256,16 +268,25 @@ class SymSphere:
                 self.R * sp.cos(self.theta),
             ]
         )
-        self.thetaphi_xyz = sp.Array(
-            [sp.acos(self.z / self.R), sp.atan2(self.y, self.x)]
-        )
         self.surface_area = 4 * sp.pi * self.R**2
         self.volume = 4 * sp.pi * self.R**3 / 3
         ############################################################################
-        self.jacobian = sp.derive_by_array(self.xyz_thetaphi, self.thetaphi).reshape(
-            3, 2
+        # self.jacobian = sp.derive_by_array(self.xyz_thetaphi, self.thetaphi).reshape(
+        #     3, 2
+        # )
+        self.jacobian = sp.Array(
+            [[x_i.diff(phi_j) for phi_j in self.thetaphi] for x_i in self.xyz_thetaphi]
         )
-        self.hessian = sp.derive_by_array(self.jacobian, self.thetaphi).reshape(3, 2, 2)
+        # self.hessian = sp.derive_by_array(self.jacobian, self.thetaphi).reshape(3, 2, 2)
+        self.hessian = sp.Array(
+            [
+                [
+                    [x_i.diff(phi_j).diff(phi_k) for phi_k in self.thetaphi]
+                    for phi_j in self.thetaphi
+                ]
+                for x_i in self.xyz_thetaphi
+            ]
+        )
         self.implicit_fun = sp.lambdify(
             self.xyz, self.implicit_rep_xyz.subs(self.num_subs)
         )
