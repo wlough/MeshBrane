@@ -1,32 +1,66 @@
-from src.python.ply_tools import VertTri2HalfEdgeConverter, SphereBuilder, DoughnutBuilder
+from src.python.ply_tools import SphereFactory, TorusFactory
 from src.python.half_edge_mesh import HalfEdgeMesh
-from src.python.mesh_viewer import MeshViewer
-from src.python.half_edge_ops import CotanLaplaceOperator
-from src.python.rigid_body import exp_so3
-
-ply = "./data/ply/ascii/torus.ply"
-m = HalfEdgeMesh.from_vertex_face_ply(ply)
-# sb = SphereBuilder()
-#
-# sb._name = "test_sphere"
-# sb.write_plys()
-# sb.divide_faces()
+from src.python.sym_tools import UniformCoordinateInterval, Samples1D, IndexTransform, sym_sorted
+import sympy as sp
 import numpy as np
 
+S = Samples1D.linspace(3, 5.1, 33)
+S = Samples1D.geoseries(3, 5, 55)
+S.apply_coord_transform(lambda _: _**2)
 
-# V,F=VF_torus(6)
-db = DoughnutBuilder()
-for iter in range(2):
-    db.refine()
-db.convert_to_half_edge()
-db.write_plys()
+
 # %%
-db.num_vertices(-1)
-max_level = len(db.pow) - 1
-M = [HalfEdgeMesh.from_vert_face_list(*db.VF(level=level)) for level in range(len(db.pow))]
-[m.num_vertices for m in M]
+k, a, r, n = sp.symbols("k a r n")
+# np.einsum("ij,kjm->ikm",[[1,2],[3,4]], 2*[2*[[1,2]]])
+x = a * (1 - r**k) / (1 - r)
+num_dict = {
+    a: seq_start,
+    r: seq_ratio,
+    n: num,
+}
+self=Samples(x, k, num_dict, make_lamfun=False)
+syms = [self.index] + sym_sorted(self.num_dict.keys())
+if set(syms) > set(self.value_at_index.free_symbols):
+    raise ValueError("Mismatched symbols")
+set(syms)  set(self.value_at_index.free_symbols)
+Samples.index= k
+Samples.num_dict
 # %%
-level = 2
-m = HalfEdgeMesh.from_vert_face_list(*db.VF(level=level))
-mv = MeshViewer(*m.data_lists)
-mv.plot()
+set([1]) | set([2])
+x, xx, y, z = sp.symbols("x xx y z")
+np.linspace
+isinstance(x, sp.Expr)
+l = sym_sorted([z, x, y, xx], skip=[z, sp.Symbol("q")])
+sp.Subs()
+R = UniformCoordinateInterval(
+    lower_bound=0,
+    upper_bound=1,
+    num_samples="2**p",
+    dummy_index="k",
+    subs={"p": 6},
+    include_lower=False,
+    include_upper=True,
+)
+Theta = UniformCoordinateInterval(
+    lower_bound=0,
+    upper_bound="pi",
+    num_samples="2**p",
+    dummy_index="k",
+    subs={"p": 6},
+    include_lower=False,
+    include_upper=False,
+)
+Phi = UniformCoordinateInterval(
+    lower_bound=0,
+    upper_bound="2*pi",
+    num_samples="2**p",
+    dummy_index="k",
+    subs={"p": 6},
+    include_lower=True,
+    include_upper=False,
+)
+
+
+R.numpy_samples - np.linspace(0, 1, 2**6 + 1)[1:]
+# Theta.numpy_samples-np.linspace(0,np.pi,2**6+2)[1:-1]*********
+Phi.numpy_samples - np.linspace(0, 2 * np.pi, 2**6 + 1)[:-1]

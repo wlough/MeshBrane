@@ -775,7 +775,7 @@ class VertTri2HalfEdgeConverter(PlyConverter):
 
 
 ##################################################
-class SphereBuilder:
+class SphereFactory:
     """
     icosahedron (20 triangles; 12 vertices)
     """
@@ -1183,46 +1183,7 @@ class DoughnutFactory0:
         return 6 * 4**p + 3 * 4**p
 
 
-class SymTorus:
-    def __init__(self, R=1, R2r=3):
-        self.name = "torus"
-        self.R = R
-        self.R2r = R2r
-        self.r = sp.sympify(f"{R} / {R2r}")
-        self.xyz = sp.Array([*sp.symbols("x y z")])
-        self.phipsi = sp.Array([*sp.symbols("phi psi")])
-        x, y, z = self.xyz
-        phi, psi = self.phipsi
-        R = self.R
-        r = self.r
-        self.implicit_fun_xyz = (sp.sqrt(x**2 + y**2) - R) ** 2 + z**2 - r**2
-        self.xyz_phipsi = sp.Array(
-            [
-                sp.cos(phi) * (R + sp.cos(psi) * r),
-                sp.sin(phi) * (R + sp.cos(psi) * r),
-                sp.sin(psi) * r,
-            ]
-        )
-        self.phipsi_xyz = sp.Array([sp.atan2(y, x), sp.atan2(z, sp.sqrt(x**2 + y**2))])
-        self.jacobian_xyz_phipsi = sp.derive_by_array(
-            self.xyz_phipsi, self.phipsi
-        ).reshape(3, 2)
-        self.jacobian_phipsi_xyz = sp.derive_by_array(
-            self.phipsi_xyz, self.xyz
-        ).reshape(2, 3)
-        self.hessian_xyz_phipsi = sp.derive_by_array(
-            self.jacobian_xyz_phipsi, self.phipsi
-        ).reshape(3, 2, 2)
-        self.hessian_phipsi_xyz = sp.derive_by_array(
-            self.jacobian_phipsi_xyz, self.xyz
-        ).reshape(2, 3, 3)
-
-    @property
-    def e_phi(self):
-        return sp.Array([1, 0, 0])
-
-
-class DoughnutFactory:
+class TorusFactory:
     """
     Makes and refines meshes for the tori,
     (sqrt(x**2 + y**2) - rad_big)**2 + z**2 - rad_small**2 = 0.
