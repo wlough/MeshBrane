@@ -1,6 +1,8 @@
 from src.python.ply_tools import VertTri2HalfEdgeConverter
 import numpy as np
 
+# acceleration/extraplation for laplacian
+
 
 class HalfEdgeMeshBase:
     """

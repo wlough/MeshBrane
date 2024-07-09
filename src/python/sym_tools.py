@@ -1,6 +1,177 @@
 import sympy as sp
 import numpy as np
+from sympy.series.acceleration import richardson
+from sympy.utilities.lambdify import lambdify, lambdastr, implemented_function
 
+# from sympy.functions.combinatorial.numbers import bernoulli, kronecker_symbol
+# from sympy.functions.conbinatorial.factorials import factorial, binomial
+# from sympy.functions.elementary.integers import floor, ceiling
+# from sympy.functions.elementary.piecewise import Piecewise
+
+# from sympy.core.symbol import uniquely_named_symbol
+# from sympy.printing.conventions import (
+#     split_super_sub,
+#     requires_partial,
+#     requires_super,
+#     requires_sub,
+# )
+# from sympy.printing.latex import (
+#     accepted_latex_functions,
+#     tex_greek_dictionary,
+#     modifier_dict,
+#     greek_letters_set as sp_accepted_latex_functions,
+#     sp_tex_greek_dictionary,
+#     sp_modifier_dict,
+#     sp_greek_letters_set,
+# )
+
+_latex_functions_ = [
+    "arcsin",
+    "arccos",
+    "arctan",
+    "sin",
+    "cos",
+    "tan",
+    "sinh",
+    "cosh",
+    "tanh",
+    "sqrt",
+    "ln",
+    "log",
+    "sec",
+    "csc",
+    "cot",
+    "coth",
+    "re",
+    "im",
+    "frac",
+    "root",
+    "arg",
+]
+_LATINS_ = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+_latins_ = "abcdefghijklmnopqrstuvwxyz"
+_GREEKS_ = [
+    "Alpha",
+    "Beta",
+    "Gamma",
+    "Delta",
+    "Epsilon",
+    "Zeta",
+    "Eta",
+    "Theta",
+    "Iota",
+    "Kappa",
+    "Lambda",
+    "Mu",
+    "Nu",
+    "Xi",
+    "Omicron",
+    "Pi",
+    "Rho",
+    "Sigma",
+    "Tau",
+    "Upsilon",
+    "Phi",
+    "Chi",
+    "Psi",
+    "Omega",
+]
+_greeks_ = [
+    "alpha",
+    "beta",
+    "gamma",
+    "delta",
+    "epsilon",
+    "zeta",
+    "eta",
+    "theta",
+    "iota",
+    "kappa",
+    "lambda",
+    "mu",
+    "nu",
+    "xi",
+    "omicron",
+    "pi",
+    "rho",
+    "sigma",
+    "tau",
+    "upsilon",
+    "phi",
+    "chi",
+    "psi",
+    "omega",
+]
+_latin_indices_ = [
+    "i",
+    "j",
+    "k",
+    "l",
+    "m",
+    "n",
+    "o",
+    "p",
+    "q",
+    "r",
+    "s",
+    "t",
+    "u",
+    "v",
+    "w",
+    "x",
+    "y",
+    "z",
+]
+
+
+class Alphabet:
+    def __init__(self, letters=_latins_):
+        self.letters = letters
+
+    @property
+    def letters(self):
+        return self._letters
+
+    @letters.setter
+    def letters(self, letters):
+        if isinstance(letters, str):
+            self._letters = letters.split()
+        elif hasattr(letters, "__iter__"):
+            _letters = []
+            for letter in letters:
+                if isinstance(letter, str):
+                    _letters.append(letter)
+                else:
+                    raise ValueError("letters must be a string or iterable of strings")
+            self._letters = letters
+        else:
+            raise ValueError("letters must be a string or iterable of strings")
+
+
+class Symdex(sp.Symbol):
+    def __intit__(self, name, mathmode_base_latex, **assumptions):
+        super().__init__(name, **assumptions)
+        self.mathmode_latex = mathmode_latex
+
+    def _repr_latex_(self):
+        return repr_latex
+
+
+class SampleSymbol:
+    def __intit__(self, name, latex):
+        self.name = name
+        self.alphabet = alphabet
+        self._index = 0
+        self.name = "i"
+        self.free = True
+        self.pos = "pos"
+
+
+# A dictionary that maps names of SymPy functions to arbitrary
+#       functions
+#       (e.g., ``{'sin': custom_sin}``).
+# {""}
+# f = implemented_function(Function('f'), lambda x: x+1) creates a new function f where Function('f') is a symbolic representation of f, and lambda x: x+1 is a Python lambda function
 ###################
 # Custom sympy functions, matrix operations for arrays and a few other things
 tp = lambda V, W: sp.tensorproduct(V, W)
@@ -12,13 +183,35 @@ dot = lambda V, W: tc(tp(V, W), (0, 1))
 norm = lambda u: sp.sqrt(dot(u, u))
 
 
-def dumbify(x):
+def alphaseq_symbols(start_letter="a", num_symbols=1):
+    """
+    Returns a list of sympy symbols starting from start_letter and incrementing by one.
+    """
+    return tuple(sp.Symbol(f"{chr(ord(start_letter) + i)}") for i in range(num_symbols))
+
+
+def dumbify(*x):
     """
     Produces a sympy.Dummy from a string or sympy.Symbol
     """
-    x_as_sympy = sp.sympify(x)
+    x_as_sympy = (sp.sympify(_) for _ in x)
+    x_as_dummy = (sp.Dummy(_.name, latex_name=sp.latex(_)) for _ in x_as_sympy)
+    if len(x) == 1:
+        return next(x_as_dummy)
+    else:
+        return tuple(x_as_dummy)
 
-    return sp.Dummy(x_as_sympy.name, latex_name=sp.latex(x_as_sympy))
+
+def unclashify(set1, set2, rename1=lambda x: x, rename2=lambda x: f"_{x}"):
+    set1and2 = set1 & set2
+    sub_dict = dict()
+    while set1and2:
+        s = set1and2.pop()
+
+    sub_dict = {s: dumbify(s) for s in set1and2}
+    for s in set1and2:
+        set1.remove(s)
+        set2.remove(s)
 
 
 def sym_sorted(syms, skip=[]):
@@ -35,7 +228,7 @@ def sym_sorted(syms, skip=[]):
     return sorted_syms
 
 
-def einsum(tstr, tensor_list):
+def _einsum(tstr, tensor_list):
     """
     symbolic einsum
 
@@ -91,6 +284,52 @@ def einsum(tstr, tensor_list):
     # _T = 1
     # for tens in tensor_list:
     #     _T = tp(_T, tens)
+    _T = sp.tensorproduct(*tensor_list)
+    T = sp.tensorcontraction(_T, *contraction_axes)
+    return T
+
+
+def einsum(tstr, tensor_list):
+    """
+    symbolic einsum
+
+    tstr='abc,ab->c'
+    tensor_list=[X,Y]
+    """
+    alphabet = "abcdefghijklmnopqrstuvwxyz"
+    index_list = []
+
+    tensor_indices = ""
+
+    for n, char in enumerate(tstr):
+        if char in alphabet:
+            tensor_indices += char
+        if char in ",-":
+            index_list.append(tensor_indices)
+            tensor_indices = ""
+        if char == ">":
+            pass
+    free_indices = tensor_indices
+
+    product_indices = ""
+    for ind in index_list:
+        product_indices += ind
+
+    dummy_indices = ""
+    for ind in product_indices:
+        if ind in dummy_indices + free_indices:
+            pass
+        else:
+            dummy_indices += ind
+
+    dummy_slots = {}
+    for ind in dummy_indices:
+        dummy_slots[ind] = []
+        for ind_num, prod_ind in enumerate(product_indices):
+            if ind == prod_ind:
+                dummy_slots[ind].append(ind_num)
+
+    contraction_axes = [axes for dummy, axes in dummy_slots.items()]
     _T = sp.tensorproduct(*tensor_list)
     T = sp.tensorcontraction(_T, *contraction_axes)
     return T
@@ -184,6 +423,551 @@ class Samples1D:
         Simplifies value_at_index using sympy.simplify or sympy.ratsimp.
     refresh(lamfun=True, lamfun_args=True)
         Refreshes numerical functions so they use current index,value_at_index,num_dict.
+    numerical_eval(k)
+        Returns numerical value at index k
+    symbolic_eval(k)
+        Returns value_at_index at index value at index k
+    sample_range(start, stop)
+        Yields numerical value_at_index for index in range(start, stop).
+    apply_index_transform(index_transform, refresh=True)
+        Applies index_transform to index.
+    apply_coord_transform(coord_transform, refresh=True)
+        Applies coord_transform to value_at_index.
+    __call__(k)
+        Returns numerical value_at_index at index k.
+    __getitem__(sym)
+        Returns numerical value of sym in num_dict.
+    __repr__()
+        Returns a string representation of the object.
+    __str__()
+        Returns a string representation of the object.
+    _repr_latex_()
+        Returns a latex representation of the object.
+    _lamfun(k, *lamfun_args)
+        Returns numerical value_at_index at index k.
+    _make_lamfun()
+        Returns a lambdified value_at_index.
+    _make_lamfun_args()
+        Returns a list of numerical values for symbolic parameters appearing in value_at_index sorted by sym_sorted().
+    """
+
+    ###########################################
+    # Class variables
+    ###########################################
+    # Initialization methods
+    def __init__(
+        self,
+        index,
+        value_at_index,
+        num_dict=dict(),
+        make_lamfun=True,
+        make_lamfun_args=True,
+    ):
+        self.index = index
+        self.value_at_index = value_at_index
+        self.num_dict = num_dict
+        if self.index in self.num_dict:
+            raise ValueError("Index cannot be in num_dict")
+        self.refresh(lamfun=make_lamfun, lamfun_args=make_lamfun_args)
+
+    @classmethod
+    def linspace(cls, start, stop, num=50):
+        k, a, b, n = sp.symbols("k a b n")
+        x = a + k * (b - a) / (n - 1)
+        num_dict = {
+            a: start,
+            b: stop,
+            n: num,
+        }
+        return cls(k, x, num_dict)
+
+    @classmethod
+    def linspacebc(cls, lower, upper, num=50, include_lower=True, include_upper=True):
+        k, a, b, n = sp.symbols("k a b n")
+        x = a + k * (b - a) / (n - 1)
+        num_dict = {
+            a: lower,
+            b: upper,
+            n: num,
+        }
+        s = cls(k, x, num_dict)
+        if not include_lower:
+            s.apply_index_transform(lambda k: k + 1)
+            s.apply_num_transform(n, lambda n: n + 1)
+        if not include_upper:
+            s.apply_num_transform(n, lambda n: n + 1)
+        return s
+
+    @classmethod
+    def expspace(cls, start, stop, num=50):
+        k, a, b, n = sp.symbols("k a b n")
+        x = a * (b / a) ** (k / (n - 1))
+        num_dict = {
+            a: start,
+            b: stop,
+            n: num,
+        }
+        return cls(k, x, num_dict)
+
+    @classmethod
+    def logspace(cls, start, stop, num=50):
+        k, a, b, n = sp.symbols("k a b n")
+        x = sp.exp(sp.log(a) + k * (sp.log(b) - sp.log(a)) / (n - 1))
+        num_dict = {
+            a: start,
+            b: stop,
+            n: num,
+        }
+        return cls(k, x, num_dict)
+
+    @classmethod
+    def geoseries(cls, seq_start, seq_ratio, num=50):
+        # k, a, r, n = sp.symbols("k a r n")
+        k, a, r, n = sp.symbols("k a r n")
+        x = a * (1 - r**k) / (1 - r)
+        num_dict = {
+            a: seq_start,
+            r: seq_ratio,
+            n: num,
+        }
+        return cls(k, x, num_dict)
+
+    @classmethod
+    def chebnodes(cls, seq_start, seq_ratio, num=50):
+        # k, a, r, n = sp.symbols("k a r n")
+        k, a, r, n = sp.symbols("k a r n")
+        x = a * (1 - r**k) / (1 - r)
+        num_dict = {
+            a: seq_start,
+            r: seq_ratio,
+            n: num,
+        }
+        return cls(k, x, num_dict)
+
+    @classmethod
+    def tanhsinhnodesweights(cls, h_sub, n_sub=50):
+        k, h, n = sp.symbols("k h n")
+        x = sp.tanh(sp.sinh(h * k) * sp.pi / 2)
+        w = (
+            h
+            * sp.pi
+            / 2
+            * sp.cosh(h * k) ** 2
+            / (sp.cosh(sp.pi / 2 * sp.sinh(h * k))) ** 2
+        )
+        num_dict = {h: h_sub, n: n_sub}
+        return cls(k, x, num_dict), cls(w, k, num_dict)
+
+    ###########################################
+    # Properties
+    # ----------
+    @property
+    def index(self):
+        """Index symbol"""
+        return self._index
+
+    @index.setter
+    def index(self, index):
+        if isinstance(index, sp.Symbol):
+            self._index = index
+        else:
+            self._index = sp.sympify(index)
+
+    @property
+    def value_at_index(self):
+        """Sample value in terms of index and symbolic parameters"""
+        return self._value_at_index
+
+    @value_at_index.setter
+    def value_at_index(self, value_at_index):
+        if isinstance(value_at_index, sp.Expr):
+            self._value_at_index = value_at_index
+        else:
+            self._value_at_index = sp.sympify(value_at_index)
+
+    @property
+    def num_dict(self):
+        return self._num_dict
+
+    @num_dict.setter
+    def num_dict(self, num_dict):
+        if isinstance(num_dict, dict):
+            self._num_dict = {sp.sympify(sym): num for sym, num in num_dict.items()}
+        else:
+            raise ValueError("num_dict must be a dictionary")
+
+    @property
+    def free_symbols(self):
+        return self.value_at_index.free_symbols - self.free_symbols(self.index)
+
+    @property
+    def lambdastr(self):
+        syms = [self.index] + sym_sorted(self.num_dict.keys())
+        if not set(syms) >= set(self.value_at_index.free_symbols):
+            raise ValueError("Mismatched symbols")
+        return lambdastr(syms, self.value_at_index)
+
+    # def lamfun(self):
+    #     syms = [self.index] + sym_sorted(self.num_dict.keys())
+    #     if not set(syms) >= set(self.value_at_index.free_symbols):
+    #         raise ValueError("Mismatched symbols")
+    #     return sp.lambdify(syms, self.value_at_index)
+
+    ###########################################
+    # Methods
+    # -------
+    def subs(self, sym_dict):
+        self.value_at_index = self.value_at_index.subs(sym_dict)
+
+    def update_num_dict(self, num_dict):
+        self._num_dict.update(num_dict)
+
+    def simplify(self, kind="simplify", **kwargs):
+        if kind == "simplify":
+            self.value_at_index = sp.simplify(self.value_at_index, **kwargs)
+        elif kind == "ratsimp":
+            self.value_at_index = sp.ratsimp(self.value_at_index, **kwargs)
+
+    def refresh(self, lamfun=True, lamfun_args=True):
+        self._lamfun = self._make_lamfun()
+        self._lamfun_args = self._make_lamfun_args()
+
+    def numerical_eval(self, k):
+        try:
+            return self._lamfun(k, *self._lamfun_args)
+        except Exception:
+            self.refresh()
+            return self._lamfun(k, *self._lamfun_args)
+
+    def symbolic_eval(self, k):
+        return sp.Lambda(self.index, self.value_at_index)(k)
+
+    def sample_range(self, start, stop):
+        for k in range(start, stop):
+            yield self.numerical_eval(k)
+
+    def apply_index_transform(self, index_transform):
+        self.subs({self.index: index_transform(self.index)})
+
+    def apply_coord_transform(self, coordinate_transform):
+        self.value_at_index = coordinate_transform(self.value_at_index)
+
+    def apply_num_transform(self, sym, num_transform):
+        self.update_num_dict({sym: num_transform(self.num_dict[sym])})
+
+    def sym_lamfun(self):
+        return sp.Lambda(self.index, self.value_at_index)
+
+    ###########################################
+    # Private/special methods
+    def __rep__(self):
+        return f"Samples({self.value_at_index}, {self.index}, {self.num_dict})"
+
+    def __str__(self):
+        return f"Samples({self.value_at_index}, {self.index}, {self.num_dict})"
+
+    def __call__(self, k):
+        return sp.Lambda(self.index, self.value_at_index)(k)
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            # Extract start, stop, and step from the slice
+            start = (
+                key.start if key.start is not None else 0
+            )  # Default start to 0 if not provided
+            stop = key.stop  # stop can be None, which is handled by range
+            step = (
+                key.step if key.step is not None else 1
+            )  # Default step to 1 if not provided
+            return np.array([self.numerical_eval(k) for k in range(start, stop, step)])
+        else:
+            return self.numerical_eval(key)
+
+    def _repr_latex_(self):
+        return f"${sp.latex(self.index)} \\mapsto {sp.latex(self.value_at_index)}$, ${sp.latex(self.num_dict)}$"
+
+    def _make_lamfun(self):
+        syms = [self.index] + sym_sorted(self.num_dict.keys())
+        if not set(syms) >= set(self.value_at_index.free_symbols):
+            raise ValueError("Mismatched symbols")
+        return sp.lambdify(syms, self.value_at_index)
+
+    def _make_lamfun_args(self):
+        return [self.num_dict[_] for _ in sym_sorted(self.num_dict.keys())]
+
+
+class Samples:
+    """
+    Coordinate samples with a dict(symbolic: numeric) parameters. Can initialize with class methods linspace, expspace, logspace, geoseries to create instances.
+
+    Args
+    ----
+    value_at_index: list of str or sympifiable expression
+        The value of sample at dummy index.
+    index: list of str or symbol
+        Symbol for dummy index
+    num_dict: dict
+        A dictionary of symbolic parameters and their numerical values. Keys must be sympifiable.
+    make_lamfun: bool
+        Whether to assign lamfun method.
+    make_lamfun_args: bool
+        Whether to assign lamfun_args attribute.
+
+    Attributes
+    ----------
+    index: sympy.Symbol
+        Symbol for dummy index
+    value_at_index: sympy.Expr
+        The value of sample at dummy index.
+    num_dict: dict
+        A dictionary of symbolic parameters appearing in value_at_index and their numerical values.
+    _lamfun_args: list
+        A list of numerical values for symbolic parameters appearing in value_at_index.
+
+    Methods
+    -------
+    subs(sym_dict)
+        Substitutes sym_dict into self.value_at_index.
+    update_num_dict(num_dict)
+        Updates self.num_dict with values in num_dict
+    simplify(kind="simplify", **kwargs)
+        Simplifies value_at_index using sympy.simplify or sympy.ratsimp.
+    refresh(lamfun=True, lamfun_args=True)
+        Refreshes numerical functions so they use current index,value_at_index,num_dict.
+    numerical_eval(expr)
+        Returns numerical value of expr by substituting values in num_dict.
+    sample_range(start, stop)
+        Yields numerical value_at_index for index in range(start, stop).
+    apply_index_transform(index_transform, refresh=True)
+        Applies index_transform to index.
+    apply_coord_transform(coord_transform, refresh=True)
+        Applies coord_transform to value_at_index.
+    __call__(k)
+        Returns numerical value_at_index at index k.
+    __getitem__(sym)
+        Returns numerical value of sym in num_dict.
+    __repr__()
+        Returns a string representation of the object.
+    __str__()
+        Returns a string representation of the object.
+    _repr_latex_()
+        Returns a latex representation of the object.
+    _lamfun(k, *lamfun_args)
+        Returns numerical value_at_index at index k.
+    _make_lamfun()
+        Returns a lambdified value_at_index.
+    _make_lamfun_args()
+        Returns a list of numerical values for symbolic parameters appearing in value_at_index sorted by sym_sorted().
+    """
+
+    ###########################################
+    # Initialization methods
+    def __init__(
+        self,
+        index,
+        value_at_index,
+        num_dict=dict(),
+        make_lamfun=True,
+        make_lamfun_args=True,
+    ):
+        self.index = index
+        self.value_at_index = value_at_index
+        self.num_dict = num_dict
+        if self.index in self.num_dict:
+            raise ValueError("Index cannot be in num_dict")
+        self.refresh(lamfun=make_lamfun, lamfun_args=make_lamfun_args)
+
+    @classmethod
+    def multlinspace(cls, start, stop, num=None):
+        if num is None:
+            num = len(start) * [50]
+        dim = len(start)
+        # index = sp.Array(alphaseq_symbols("i", dim))
+        index = sp.Array([sp.Symbol(f"i_{_}") for _ in range(dim)])
+        A = sp.Array([sp.Symbol(f"a_{_}") for _ in range(dim)])
+        B = sp.Array([sp.Symbol(f"b_{_}") for _ in range(dim)])
+        N = sp.Array([sp.Symbol(f"n_{_}") for _ in range(dim)])
+        value_at_index = sp.Array(
+            [A[_] + index[_] * (B[_] - A[_]) / (N[_] - 1) for _ in range(dim)]
+        )
+        num_dict = (
+            {sym: num for sym, num in zip(A, start)}
+            | {sym: num for sym, num in zip(B, stop)}
+            | {sym: num for sym, num in zip(N, num)}
+        )
+        return cls(index, value_at_index, num_dict)
+
+    @classmethod
+    def spherical_coords(cls, r, theta, num=None):
+        if num is None:
+            num = [50, 50, 50]
+
+        return cls(
+            [
+                r * sp.sin(theta) * sp.cos(phi),
+                r * sp.sin(theta) * sp.sin(phi),
+                r * sp.cos(theta),
+            ],
+            [theta, phi],
+        )
+
+    ###########################################
+    # Properties
+    # ----------
+    @property
+    def index(self):
+        """Index symbols"""
+        return self._index
+
+    @index.setter
+    def index(self, index):
+        if isinstance(index, sp.Array):
+            self._index = index
+        else:
+            self._index = sp.Array(sp.sympify(index))
+
+    @property
+    def value_at_index(self):
+        """Sample value in terms of index and symbolic parameters"""
+        return self._value_at_index
+
+    @value_at_index.setter
+    def value_at_index(self, value_at_index):
+        if isinstance(value_at_index, sp.Array):
+            self._value_at_index = value_at_index
+        else:
+            self._value_at_index = sp.Array(sp.sympify(value_at_index))
+
+    @property
+    def num_dict(self):
+        return self._num_dict
+
+    @num_dict.setter
+    def num_dict(self, num_dict):
+        if isinstance(num_dict, dict):
+            self._num_dict = {sp.sympify(sym): num for sym, num in num_dict.items()}
+        else:
+            raise ValueError("num_dict must be a dictionary")
+
+    @property
+    def free_symbols(self):
+        return self.value_at_index.free_symbols - self.free_symbols(self.index)
+
+    ###########################################
+    # Methods
+    # -------
+    def subs(self, sym_dict):
+        self.value_at_index = self.value_at_index.subs(sym_dict)
+
+    def update_num_dict(self, num_dict):
+        self._num_dict.update(num_dict)
+
+    def simplify(self, kind="simplify", **kwargs):
+        if kind == "simplify":
+            self.value_at_index = sp.simplify(self.value_at_index, **kwargs)
+        elif kind == "ratsimp":
+            self.value_at_index = sp.ratsimp(self.value_at_index, **kwargs)
+
+    def refresh(self, lamfun=True, lamfun_args=True):
+        self._lamfun = self._make_lamfun()
+        self._lamfun_args = self._make_lamfun_args()
+
+    def numerical_eval(self, expr):
+        if isinstance(expr, sp.Expr):
+            return expr.evalf(self.num_dict)
+        else:
+            return sp.sympify(expr).evalf(self.num_dict)
+
+    def sample_range(self, start, stop):
+        for k in range(start, stop):
+            yield self.numerical_eval(k)
+
+    def apply_index_transform(self, index_transform):
+        self.subs({k: v for k, v in zip(self.index, index_transform(*self.index))})
+
+    def apply_coord_transform(self, coordinate_transform):
+        self.value_at_index = coordinate_transform(*self.value_at_index)
+
+    ###########################################
+    # Private/special methods
+    def __rep__(self):
+        return f"Samples({self.value_at_index}, {self.index}, {self.num_dict})"
+
+    def __str__(self):
+        return f"Samples({self.value_at_index}, {self.index}, {self.num_dict})"
+
+    def __call__(self, *k):
+        return self._lamfun(*k, *self._lamfun_args)
+
+    def __getitem__(self, sym):
+        if isinstance(sym, sp.Symbol):
+            return self.num_dict[sym]
+        else:
+            return self.num_dict[sp.sympify(sym)]
+
+    def _repr_latex_(self):
+        return f"${sp.latex(self.index)} \\mapsto {sp.latex(self.value_at_index)}$, ${sp.latex(self.num_dict)}$"
+
+    def _make_lamfun(self):
+        syms = list(self.index) + sym_sorted(self.num_dict.keys())
+        if not set(syms) >= set(self.value_at_index.free_symbols):
+            raise ValueError("Mismatched symbols")
+        return sp.lambdify(syms, self.value_at_index)
+
+    def _make_lamfun_args(self):
+        return [self.num_dict[_] for _ in sym_sorted(self.num_dict.keys())]
+
+    def __mul__(self, other):
+        self_index = self.index
+        self_value_at_index = self.value_at_index
+        self_num_dict = self.num_dict
+        other_index = other.index
+        other_value_at_index = other.value_at_index
+        other_num_dict = other.num_dict
+
+
+############################################################
+############################################################
+
+
+class Samples2D:
+    """
+    Coordinate samples with a dict(symbolic: numeric) parameters. Can initialize with class methods linspace, expspace, logspace, geoseries to create instances.
+
+    Args
+    ----
+    value_at_index: list of str or sympifiable expression
+        The value of sample at dummy index.
+    index: list of str or symbol
+        Symbol for dummy index
+    num_dict: dict
+        A dictionary of symbolic parameters and their numerical values. Keys must be sympifiable.
+    make_lamfun: bool
+        Whether to assign lamfun method.
+    make_lamfun_args: bool
+        Whether to assign lamfun_args attribute.
+
+    Attributes
+    ----------
+    index: sympy.Symbol
+        Symbol for dummy index
+    value_at_index: sympy.Expr
+        The value of sample at dummy index.
+    num_dict: dict
+        A dictionary of symbolic parameters appearing in value_at_index and their numerical values.
+    _lamfun_args: list
+        A list of numerical values for symbolic parameters appearing in value_at_index.
+
+    Methods
+    -------
+    subs(sym_dict)
+        Substitutes sym_dict into self.value_at_index.
+    update_num_dict(num_dict)
+        Updates self.num_dict with values in num_dict
+    simplify(kind="simplify", **kwargs)
+        Simplifies value_at_index using sympy.simplify or sympy.ratsimp.
+    refresh(lamfun=True, lamfun_args=True)
+        Refreshes numerical functions so they use current index,value_at_index,num_dict.
     numerical_eval(expr)
         Returns numerical value of expr by substituting values in num_dict.
     sample_range(start, stop)
@@ -216,8 +1000,8 @@ class Samples1D:
     # Initialization methods
     def __init__(
         self,
-        value_at_index,
         index,
+        value_at_index,
         num_dict=dict(),
         make_lamfun=True,
         make_lamfun_args=True,
@@ -230,49 +1014,21 @@ class Samples1D:
         self.refresh(lamfun=make_lamfun, lamfun_args=make_lamfun_args)
 
     @classmethod
-    def linspace(cls, start, stop, num=50):
-        k, a, b, n = sp.symbols("k a b n")
-        x = a + k * (b - a) / (n - 1)
+    def rectspace(cls, xstart, ystart, xstop, ystop, xnum=50, ynum=50):
+        i, j, ax, bx, ay, by, nx, ny = sp.symbols("i j a_x b_x a_y b_y n_x n_y")
+        x = ax + i * (bx - ax) / (nx - 1)
+        y = ay + j * (by - ay) / (ny - 1)
+        X = sp.Array([x, y])
+        I = sp.Array([i, j])
         num_dict = {
-            a: start,
-            b: stop,
-            n: num,
+            ax: xstart,
+            bx: xstop,
+            nx: xnum,
+            ay: ystart,
+            by: ystop,
+            ny: ynum,
         }
-        return cls(x, k, num_dict)
-
-    @classmethod
-    def expspace(cls, start, stop, num=50):
-        k, a, b, n = sp.symbols("k a b n")
-        x = a * (b / a) ** (k / (n - 1))
-        num_dict = {
-            a: start,
-            b: stop,
-            n: num,
-        }
-        return cls(x, k, num_dict)
-
-    @classmethod
-    def logspace(cls, start, stop, num=50):
-        k, a, b, n = sp.symbols("k a b n")
-        x = sp.exp(sp.log(a) + k * (sp.log(b) - sp.log(a)) / (n - 1))
-        num_dict = {
-            a: start,
-            b: stop,
-            n: num,
-        }
-        return cls(x, k, num_dict)
-
-    @classmethod
-    def geoseries(cls, seq_start, seq_ratio, num=50):
-        # k, a, r, n = sp.symbols("k a r n")
-        k, a, r, n = sp.symbols("k a r n")
-        x = a * (1 - r**k) / (1 - r)
-        num_dict = {
-            a: seq_start,
-            r: seq_ratio,
-            n: num,
-        }
-        return cls(x, k, num_dict)
+        return cls(I, X, num_dict)
 
     ###########################################
     # Properties
@@ -284,10 +1040,10 @@ class Samples1D:
 
     @index.setter
     def index(self, index):
-        if isinstance(index, sp.Symbol):
+        if isinstance(index, sp.Array):
             self._index = index
         else:
-            self._index = sp.sympify(index)
+            self._index = sp.Array(sp.sympify(index))
 
     @property
     def value_at_index(self):
@@ -296,7 +1052,10 @@ class Samples1D:
 
     @value_at_index.setter
     def value_at_index(self, value_at_index):
-        self._value_at_index = sp.sympify(value_at_index)
+        if isinstance(value_at_index, sp.Array):
+            self._value_at_index = value_at_index
+        else:
+            self._value_at_index = sp.Array(sp.sympify(value_at_index))
 
     @property
     def num_dict(self):
@@ -304,18 +1063,23 @@ class Samples1D:
 
     @num_dict.setter
     def num_dict(self, num_dict):
-        _num_dict = dict()
-        self._num_dict = {sp.sympify(sym): num for sym, num in num_dict.items()}
+        if isinstance(num_dict, dict):
+            self._num_dict = {sp.sympify(sym): num for sym, num in num_dict.items()}
+        else:
+            raise ValueError("num_dict must be a dictionary")
+
+    @property
+    def free_symbols(self):
+        return self.value_at_index.free_symbols - self.free_symbols(self.index)
 
     ###########################################
     # Methods
     # -------
-    def subs(self, sym_dict=None):
+    def subs(self, sym_dict):
         self.value_at_index = self.value_at_index.subs(sym_dict)
 
     def update_num_dict(self, num_dict):
-        self.num_dict.update(num_dict)
-        self.refresh_lamfun()
+        self._num_dict.update(num_dict)
 
     def simplify(self, kind="simplify", **kwargs):
         if kind == "simplify":
@@ -329,19 +1093,19 @@ class Samples1D:
 
     def numerical_eval(self, expr):
         if isinstance(expr, sp.Expr):
-            return expr.subs(self.num_dict)
+            return expr.evalf(self.num_dict)
         else:
-            return sp.sympify(expr).subs(self.num_dict)
+            return sp.sympify(expr).evalf(self.num_dict)
 
     def sample_range(self, start, stop):
         for k in range(start, stop):
-            yield self(k)
+            yield self.numerical_eval(k)
 
     def apply_index_transform(self, index_transform):
-        self.subs({self.index: index_transform(self.index)})
+        self.subs({k: v for k, v in zip(self.index, index_transform(*self.index))})
 
     def apply_coord_transform(self, coordinate_transform):
-        self.value_at_index = coordinate_transform(self.value_at_index)
+        self.value_at_index = coordinate_transform(*self.value_at_index)
 
     ###########################################
     # Private/special methods
@@ -351,8 +1115,8 @@ class Samples1D:
     def __str__(self):
         return f"Samples({self.value_at_index}, {self.index}, {self.num_dict})"
 
-    def __call__(self, k):
-        return self._lamfun(k, *self._lamfun_args)
+    def __call__(self, i, j):
+        return self._lamfun(i, j, *self._lamfun_args)
 
     def __getitem__(self, sym):
         if isinstance(sym, sp.Symbol):
@@ -364,13 +1128,13 @@ class Samples1D:
         return f"${sp.latex(self.index)} \\mapsto {sp.latex(self.value_at_index)}$, ${sp.latex(self.num_dict)}$"
 
     def _make_lamfun(self):
-        syms = [self.index] + sym_sorted(self.num_dict.keys())
+        syms = list(self.index) + sym_sorted(self.num_dict.keys())
         if not set(syms) >= set(self.value_at_index.free_symbols):
             raise ValueError("Mismatched symbols")
         return sp.lambdify(syms, self.value_at_index)
 
     def _make_lamfun_args(self):
-        return [self[_] for _ in sym_sorted(self.num_dict.keys())]
+        return [self.num_dict[_] for _ in sym_sorted(self.num_dict.keys())]
 
 
 ############################################################

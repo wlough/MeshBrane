@@ -1,37 +1,29 @@
 from src.python.ply_tools import SphereFactory, TorusFactory
 from src.python.half_edge_mesh import HalfEdgeMesh
-from src.python.sym_tools import UniformCoordinateInterval, Samples1D, IndexTransform, sym_sorted
+from src.python.sym_tools import UniformCoordinateInterval, Samples1D, Samples2D, Samples, alphaseq_symbols
 import sympy as sp
 import numpy as np
+from sympy.abc import a, b, c, i, j, k, l, m, n, s, t, u, v, w, x, y, z
 
-S = Samples1D.linspace(3, 5.1, 33)
-S = Samples1D.geoseries(3, 5, 55)
-S.apply_coord_transform(lambda _: _**2)
+a, b, n = 1.1, 22.6, 55
+s = Samples1D.linspace(a, b, n)
+# s.apply_index_transform(lambda i: i+1)
+s(5)
 
+s
+S = [
+    [Samples1D.linspacebc(a, b, include_lower=bool(i), include_upper=bool(j), num=n) for j in range(2)]
+    for i in range(2)
+]
+s00 = Samples1D.linspacebc(a, b, include_lower=bool(0), include_upper=bool(0), num=n)
+s01 = Samples1D.linspacebc(a, b, include_lower=bool(0), include_upper=bool(1), num=n)
+s00 = Samples1D.linspacebc(a, b, include_lower=bool(1), include_upper=bool(0), num=n)
+s01 = Samples1D.linspacebc(a, b, include_lower=bool(1), include_upper=bool(1), num=n)
+
+S[0][0]
 
 # %%
-k, a, r, n = sp.symbols("k a r n")
-# np.einsum("ij,kjm->ikm",[[1,2],[3,4]], 2*[2*[[1,2]]])
-x = a * (1 - r**k) / (1 - r)
-num_dict = {
-    a: seq_start,
-    r: seq_ratio,
-    n: num,
-}
-self=Samples(x, k, num_dict, make_lamfun=False)
-syms = [self.index] + sym_sorted(self.num_dict.keys())
-if set(syms) > set(self.value_at_index.free_symbols):
-    raise ValueError("Mismatched symbols")
-set(syms)  set(self.value_at_index.free_symbols)
-Samples.index= k
-Samples.num_dict
-# %%
-set([1]) | set([2])
-x, xx, y, z = sp.symbols("x xx y z")
-np.linspace
-isinstance(x, sp.Expr)
-l = sym_sorted([z, x, y, xx], skip=[z, sp.Symbol("q")])
-sp.Subs()
+
 R = UniformCoordinateInterval(
     lower_bound=0,
     upper_bound=1,
@@ -64,3 +56,4 @@ Phi = UniformCoordinateInterval(
 R.numpy_samples - np.linspace(0, 1, 2**6 + 1)[1:]
 # Theta.numpy_samples-np.linspace(0,np.pi,2**6+2)[1:-1]*********
 Phi.numpy_samples - np.linspace(0, 2 * np.pi, 2**6 + 1)[:-1]
+# %%

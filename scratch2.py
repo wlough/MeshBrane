@@ -13,7 +13,7 @@ num_edges = [30, 120, 480, 1920, 7680, 30720, 122880, 491520, 1966080, 7864320]
 SphereBuilder.build_test_plys(num_refine=5)
 # %%
 
-from src.python.sym_diff import SymTorus, SymSphere
+from python.sym_tools import SymTorus, SymSphere
 from src.python.half_edge_mesh import HalfEdgeMesh
 import sympy as sp
 import numpy as np
@@ -37,7 +37,10 @@ sphere.gaussian_curvature_fun(th, ph)
 # %%
 H = sp.Array(
     [
-        [[x_i.diff(phi_j).diff(phi_k) for phi_k in sphere.thetaphi] for phi_j in sphere.thetaphi]
+        [
+            [x_i.diff(phi_j).diff(phi_k) for phi_k in sphere.thetaphi]
+            for phi_j in sphere.thetaphi
+        ]
         for x_i in sphere.xyz_thetaphi
     ]
 )
