@@ -387,7 +387,7 @@ def arg_left_action(Xsource, Xtarget):
     return [Xtarget.index(x) for x in Xsource]
 
 
-def argsort(X):
+def argsort(X, reverse=False):
     """
     Returns permutation of the indices of X, that sorts X. Equivalent to arg_right_action(Xsource, Xtarget) with Xsource=X and Xtarget=sorted(X).
 
@@ -401,7 +401,7 @@ def argsort(X):
     -------
     list of int : list of indices
     """
-    return sorted(range(len(X)), key=X.__getitem__)
+    return sorted(range(len(X)), key=X.__getitem__, reverse=reverse)
 
 
 def parity_of_argsort(X):

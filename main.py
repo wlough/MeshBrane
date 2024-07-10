@@ -57,3 +57,16 @@ R.numpy_samples - np.linspace(0, 1, 2**6 + 1)[1:]
 # Theta.numpy_samples-np.linspace(0,np.pi,2**6+2)[1:-1]*********
 Phi.numpy_samples - np.linspace(0, 2 * np.pi, 2**6 + 1)[:-1]
 # %%
+import tracemalloc
+
+tracemalloc.start()
+xx = [x**2 for x in range(1000)]
+# Place code here
+
+current, peak = tracemalloc.get_traced_memory()
+print(f"Current memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
+
+tracemalloc.stop()
+
+# %load_ext memory_profiler
+# %memit [x**2 for x in range(1000)]
