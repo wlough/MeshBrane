@@ -183,6 +183,12 @@ dot = lambda V, W: tc(tp(V, W), (0, 1))
 norm = lambda u: sp.sqrt(dot(u, u))
 
 
+def cross(u, v):
+    ux, uy, uz = u
+    vx, vy, vz = v
+    return sp.Array([uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx])
+
+
 def alphaseq_symbols(start_letter="a", num_symbols=1):
     """
     Returns a list of sympy symbols starting from start_letter and incrementing by one.
@@ -548,13 +554,7 @@ class Samples1D:
     def tanhsinhnodesweights(cls, h_sub, n_sub=50):
         k, h, n = sp.symbols("k h n")
         x = sp.tanh(sp.sinh(h * k) * sp.pi / 2)
-        w = (
-            h
-            * sp.pi
-            / 2
-            * sp.cosh(h * k) ** 2
-            / (sp.cosh(sp.pi / 2 * sp.sinh(h * k))) ** 2
-        )
+        w = h * sp.pi / 2 * sp.cosh(h * k) ** 2 / (sp.cosh(sp.pi / 2 * sp.sinh(h * k))) ** 2
         num_dict = {h: h_sub, n: n_sub}
         return cls(k, x, num_dict), cls(w, k, num_dict)
 
@@ -672,13 +672,9 @@ class Samples1D:
     def __getitem__(self, key):
         if isinstance(key, slice):
             # Extract start, stop, and step from the slice
-            start = (
-                key.start if key.start is not None else 0
-            )  # Default start to 0 if not provided
+            start = key.start if key.start is not None else 0  # Default start to 0 if not provided
             stop = key.stop  # stop can be None, which is handled by range
-            step = (
-                key.step if key.step is not None else 1
-            )  # Default step to 1 if not provided
+            step = key.step if key.step is not None else 1  # Default step to 1 if not provided
             return np.array([self.numerical_eval(k) for k in range(start, stop, step)])
         else:
             return self.numerical_eval(key)
@@ -787,9 +783,7 @@ class Samples:
         A = sp.Array([sp.Symbol(f"a_{_}") for _ in range(dim)])
         B = sp.Array([sp.Symbol(f"b_{_}") for _ in range(dim)])
         N = sp.Array([sp.Symbol(f"n_{_}") for _ in range(dim)])
-        value_at_index = sp.Array(
-            [A[_] + index[_] * (B[_] - A[_]) / (N[_] - 1) for _ in range(dim)]
-        )
+        value_at_index = sp.Array([A[_] + index[_] * (B[_] - A[_]) / (N[_] - 1) for _ in range(dim)])
         num_dict = (
             {sym: num for sym, num in zip(A, start)}
             | {sym: num for sym, num in zip(B, stop)}
@@ -1306,26 +1300,20 @@ class UniformCoordinateInterval:
         if self.include_lower:
             return self.lower_bound
         else:
-            return (
-                (self.num_samples - 1) * self.lower_bound + self.upper_bound
-            ) / self.num_samples
+            return ((self.num_samples - 1) * self.lower_bound + self.upper_bound) / self.num_samples
 
     @property
     def val_max(self):
         if self.include_upper:
             return self.upper_bound
         else:
-            return (
-                self.lower_bound + (self.num_samples - 1) * self.upper_bound
-            ) / self.num_samples
+            return (self.lower_bound + (self.num_samples - 1) * self.upper_bound) / self.num_samples
 
     def generate_samples(self, kind="valid"):
         if kind == "valid":
             return self.sample_range(0, self.num_samples.subs(self.subs))
         if kind == "closed":
-            return self.sample_range(
-                -self.start_shift, self.num_samples.subs(self.subs) + self.end_shift
-            )
+            return self.sample_range(-self.start_shift, self.num_samples.subs(self.subs) + self.end_shift)
 
     @property
     def numpy_arr(self, kind="valid"):
@@ -1355,15 +1343,10 @@ class CoordinateSystem3D:
         self.xyz_uvw = sp.Array([sp.sympify(coord_subs[_]) for _ in coords.split()])
         self.uvw_xyz = sp.Array([sp.sympify(coord_subs[_]) for _ in coords.split()])
 
-        self.jacobian = sp.Array(
-            [[x_i.diff(phi_j) for phi_j in self.thetaphi] for x_i in self.xyz_thetaphi]
-        )
+        self.jacobian = sp.Array([[x_i.diff(phi_j) for phi_j in self.thetaphi] for x_i in self.xyz_thetaphi])
         self.hessian = sp.Array(
             [
-                [
-                    [x_i.diff(phi_j).diff(phi_k) for phi_k in self.thetaphi]
-                    for phi_j in self.thetaphi
-                ]
+                [[x_i.diff(phi_j).diff(phi_k) for phi_k in self.thetaphi] for phi_j in self.thetaphi]
                 for x_i in self.xyz_thetaphi
             ]
         )
@@ -1410,9 +1393,7 @@ class SymTorus:
         self.theta, self.phi = sp.symbols("theta phi")
         self.num_subs = {self.R: R, self.r: sp.sympify(f"{R} / {R2r}")}
         self.R2r = R2r
-        self.implicit_rep_xyz = (
-            (sp.sqrt(self.x**2 + self.y**2) - self.R) ** 2 + self.z**2 - self.r**2
-        )
+        self.implicit_rep_xyz = (sp.sqrt(self.x**2 + self.y**2) - self.R) ** 2 + self.z**2 - self.r**2
         self.xyz_thetaphi = sp.Array(
             [
                 sp.cos(self.phi) * (self.R + sp.cos(self.theta) * self.r),
@@ -1429,34 +1410,19 @@ class SymTorus:
         # self.jacobian = sp.derive_by_array(self.xyz_thetaphi, self.thetaphi).reshape(
         #     3, 2
         # )
-        self.jacobian = sp.Array(
-            [[x_i.diff(phi_j) for phi_j in self.thetaphi] for x_i in self.xyz_thetaphi]
-        )
+        self.jacobian = sp.Array([[x_i.diff(phi_j) for phi_j in self.thetaphi] for x_i in self.xyz_thetaphi])
         # self.hessian = sp.derive_by_array(self.jacobian, self.thetaphi).reshape(3, 2, 2)
         self.hessian = sp.Array(
             [
-                [
-                    [x_i.diff(phi_j).diff(phi_k) for phi_k in self.thetaphi]
-                    for phi_j in self.thetaphi
-                ]
+                [[x_i.diff(phi_j).diff(phi_k) for phi_k in self.thetaphi] for phi_j in self.thetaphi]
                 for x_i in self.xyz_thetaphi
             ]
         )
-        self.implicit_fun = sp.lambdify(
-            self.xyz, self.implicit_rep_xyz.subs(self.num_subs)
-        )
-        self.parametric_fun = sp.lambdify(
-            self.thetaphi, self.xyz_thetaphi.subs(self.num_subs)
-        )
-        self.unit_normal_fun = sp.lambdify(
-            self.thetaphi, self.unit_normal.subs(self.num_subs)
-        )
-        self.mean_curvature_fun = sp.lambdify(
-            self.thetaphi, self.mean_curvature.subs(self.num_subs)
-        )
-        self.gaussian_curvature_fun = sp.lambdify(
-            self.thetaphi, self.gaussian_curvature.subs(self.num_subs)
-        )
+        self.implicit_fun = sp.lambdify(self.xyz, self.implicit_rep_xyz.subs(self.num_subs))
+        self.parametric_fun = sp.lambdify(self.thetaphi, self.xyz_thetaphi.subs(self.num_subs))
+        self.unit_normal_fun = sp.lambdify(self.thetaphi, self.unit_normal.subs(self.num_subs))
+        self.mean_curvature_fun = sp.lambdify(self.thetaphi, self.mean_curvature.subs(self.num_subs))
+        self.gaussian_curvature_fun = sp.lambdify(self.thetaphi, self.gaussian_curvature.subs(self.num_subs))
         self.orthonormal_frame_fun = sp.lambdify(self.thetaphi, self.orthonormal_frame)
 
     ############################################################################
@@ -1525,9 +1491,7 @@ class SymTorus:
 
     @property
     def gaussian_curvature(self):
-        return (self.L * self.G - 2 * self.M * self.F + self.N * self.E) / (
-            2 * (self.E * self.G - self.F**2)
-        )
+        return (self.L * self.G - 2 * self.M * self.F + self.N * self.E) / (2 * (self.E * self.G - self.F**2))
 
     ############################################################################
 
@@ -1554,34 +1518,19 @@ class SymSphere:
         # self.jacobian = sp.derive_by_array(self.xyz_thetaphi, self.thetaphi).reshape(
         #     3, 2
         # )
-        self.jacobian = sp.Array(
-            [[x_i.diff(phi_j) for phi_j in self.thetaphi] for x_i in self.xyz_thetaphi]
-        )
+        self.jacobian = sp.Array([[x_i.diff(phi_j) for phi_j in self.thetaphi] for x_i in self.xyz_thetaphi])
         # self.hessian = sp.derive_by_array(self.jacobian, self.thetaphi).reshape(3, 2, 2)
         self.hessian = sp.Array(
             [
-                [
-                    [x_i.diff(phi_j).diff(phi_k) for phi_k in self.thetaphi]
-                    for phi_j in self.thetaphi
-                ]
+                [[x_i.diff(phi_j).diff(phi_k) for phi_k in self.thetaphi] for phi_j in self.thetaphi]
                 for x_i in self.xyz_thetaphi
             ]
         )
-        self.implicit_fun = sp.lambdify(
-            self.xyz, self.implicit_rep_xyz.subs(self.num_subs)
-        )
-        self.parametric_fun = sp.lambdify(
-            self.thetaphi, self.xyz_thetaphi.subs(self.num_subs)
-        )
-        self.unit_normal_fun = sp.lambdify(
-            self.thetaphi, self.unit_normal.subs(self.num_subs)
-        )
-        self.mean_curvature_fun = sp.lambdify(
-            self.thetaphi, self.mean_curvature.subs(self.num_subs)
-        )
-        self.gaussian_curvature_fun = sp.lambdify(
-            self.thetaphi, self.gaussian_curvature.subs(self.num_subs)
-        )
+        self.implicit_fun = sp.lambdify(self.xyz, self.implicit_rep_xyz.subs(self.num_subs))
+        self.parametric_fun = sp.lambdify(self.thetaphi, self.xyz_thetaphi.subs(self.num_subs))
+        self.unit_normal_fun = sp.lambdify(self.thetaphi, self.unit_normal.subs(self.num_subs))
+        self.mean_curvature_fun = sp.lambdify(self.thetaphi, self.mean_curvature.subs(self.num_subs))
+        self.gaussian_curvature_fun = sp.lambdify(self.thetaphi, self.gaussian_curvature.subs(self.num_subs))
         self.orthonormal_frame_fun = sp.lambdify(self.thetaphi, self.orthonormal_frame)
 
     ############################################################################
@@ -1650,8 +1599,6 @@ class SymSphere:
 
     @property
     def gaussian_curvature(self):
-        return (self.L * self.G - 2 * self.M * self.F + self.N * self.E) / (
-            2 * (self.E * self.G - self.F**2)
-        )
+        return (self.L * self.G - 2 * self.M * self.F + self.N * self.E) / (2 * (self.E * self.G - self.F**2))
 
     ############################################################################
