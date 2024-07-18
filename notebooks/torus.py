@@ -1,31 +1,42 @@
 import sympy as sp
-from src.python.sym_tools import dot, cross
-from sympy.physics.vector import ReferenceFrame, vlatex, dynamicsymbols
-from sympy.vector import CoordSys3D, BaseVector, Point, Vector
-from sympy.plotting import plot, plot_implicit, plot3d, plot3d_parametric_surface
+from sympy.physics.vector import ReferenceFrame  # , vlatex
+from IPython.display import display, Latex
 
-# CSE = CoordSys3D(
-#     "E", vector_names=["ex", "ey", "ez"], variable_names=["x", "y", "z"]
-# )
-# x, y, z = sp.symbols("x y z")
+# from sympy.vector import CoordSys3D, BaseVector, Point, Vector
+# from sympy.plotting import plot, plot_implicit, plot3d, plot3d_parametric_surface
+
+
+def eq_tex_str(lhs, rhs, mode="inline"):
+    if mode == "inline":
+        tex_str = "$" + sp.latex(lhs) + " = " + sp.latex(rhs) + "$"
+    elif mode == "plain":
+        tex_str = sp.latex(lhs) + " = " + sp.latex(rhs)
+    elif mode == "equation":
+        tex_str = "\\begin{equation}" + sp.latex(lhs) + " = " + sp.latex(rhs) + "\\end{equation}"
+    elif mode == "equation*":
+        tex_str = "\\begin{equation*}" + sp.latex(lhs) + " = " + sp.latex(rhs) + "\\end{equation*}"
+
+    return tex_str
+
+
+# sp.init_printing()
+# %%
+##################################
+# Parameterization, orthonormal frame,...
+##################################
 OE = ReferenceFrame(
     "E", indices=["x", "y", "z"], latexs=[r"\bf{e}_x", r"\bf{e}_y", r"\bf{e}_z"], variables=["x", "y", "z"]
 )
-
 # major radius
 a = sp.symbols("a")
-a_num = 1
 # minor radius
 b = sp.symbols("b")
-a2b = 3
-b_num = sp.sympify(a_num) / a2b
 x, y, z = OE[0], OE[1], OE[2]  # OE.varlist  # sp.symbols("x y z")
 ex, ey, ez = OE["x"], OE["y"], OE["z"]
 # surface coordinates
 phi, psi = sp.symbols("phi psi")
-num_subs = {a: a_num, b: sp.sympify(f"{a_num} / {a2b}")}
 # implicit surface function
-implicit_rep_xyz = (sp.sqrt(x**2 + y**2) - a) ** 2 + z**2 - b**2
+implicit_fun = (sp.sqrt(x**2 + y**2) - a) ** 2 + z**2 - b**2
 # surface parameterization
 X = (a + sp.cos(psi) * b) * sp.cos(phi) * ex + (a + sp.cos(psi) * b) * sp.sin(phi) * ey + b * sp.sin(psi) * ez
 # coordinate basis vectors
@@ -36,60 +47,58 @@ X_psi = X.diff(psi, frame=OE)
 e_phi = -sp.sin(phi) * ex + sp.cos(phi) * ey
 # e_psi = X_psi.normalize().simplify()
 e_psi = -sp.sin(psi) * sp.cos(phi) * ex - sp.sin(psi) * sp.sin(phi) * ey + sp.cos(psi) * ez
+# normal vector
 n = (e_phi ^ e_psi).simplify()
-# f = [e_phi, e_psi, n]
-# %%
+# Metric and extrinsic curvature tensors
 dphi = sp.symbols(r"d\phi")
 dpsi = sp.symbols(r"d\psi")
 dX = X_phi * dphi + X_psi * dpsi
 dn = n.diff(phi, frame=OE) * dphi + n.diff(psi, frame=OE) * dpsi
 metric = (dX & dX).trigsimp()
 curvature = (-dX & dn).trigsimp()
-
+# fundamental forms
 E = metric.coeff(dphi**2).factor()
 F = metric.coeff(dphi).coeff(dpsi) / 2
 G = metric.coeff(dpsi**2)
-
 L = curvature.coeff(dphi**2).factor()
 M = curvature.coeff(dphi).coeff(dpsi) / 2
 N = curvature.coeff(dpsi**2)
-
 I = sp.Matrix([[E, F], [F, G]])
 II = sp.Matrix([[L, M], [M, N]])
 I_inv = sp.Matrix([[E, F], [F, G]]).inv().applyfunc(lambda _: _.factor())
+# Shape operator and mean/Gaussian curvatures
 shape = II @ I_inv
-
-H = shape.trace() / 2
+H = (shape.trace() / 2).factor()
 K = shape.det().factor()
-# first fundamental form
-E = (X_phi & X_phi).trigsimp()
-F = (X_phi & X_psi).trigsimp()
-G = (X_psi & X_psi).trigsimp()
-I = sp.Array([[E, F], [F, G]])
 
-X_phi_phi = X.diff(phi).diff(phi)
-X_phi_psi = X.diff(phi).diff(psi)
-X_psi_psi = X.diff(psi).diff(psi)
-L = (n & X_phi_phi).trigsimplify()
-M = (n & X_phi_psi).trigsimplify()
-N = (n & X_psi_psi).trigsimplify()
-II = sp.Array([[L, M], [M, N]])
-II_Iinv = sp.Array([[L / E, 0], [0, N / G]])
+
 # %%
-# H=(G*L-2*F*M+E*N)/(2*(E*G-F**2))
-# H = (G * L + E * N) / (2 * (E * G))
-K = L * N / (E * G)
-H = -(a + 2 * b * sp.cos(psi)) / (2 * b * (a + b * sp.cos(psi)))
+# print(some stuff)
+implicit_tex_str = eq_tex_str(implicit_fun, 0)
+parametric_tex_str = eq_tex_str(sp.Function(r"\bf{X}")(phi, psi), X)
+e_phi_tex = eq_tex_str(sp.Symbol(r"\bf{e}_\phi"), e_phi)
+e_psi_tex = eq_tex_str(sp.Symbol(r"\bf{e}_\psi"), e_psi)
+n_tex = eq_tex_str(sp.Symbol(r"\bf{n}"), n)
+I_str = eq_tex_str(sp.Matrix([[sp.Symbol("E"), sp.Symbol("F")], [sp.Symbol("F"), sp.Symbol("G")]]), I)
+II_str = eq_tex_str(sp.Matrix([[sp.Symbol("L"), sp.Symbol("M")], [sp.Symbol("M"), sp.Symbol("N")]]), II)
+H_str = eq_tex_str(sp.Symbol("H"), H)
+K_str = eq_tex_str(sp.Symbol("K"), K)
 
-
-#
-#
-#
-#
-#
-#
-#
-
+print("Torus\n-----")
+print("Implicit:")
+display(Latex(implicit_tex_str))
+print("Parametric:")
+display(Latex(parametric_tex_str))
+print("Frame:")
+display(Latex(e_phi_tex))
+display(Latex(e_psi_tex))
+display(Latex(n_tex))
+print("Fundamental forms:")
+display(Latex(I_str))
+display(Latex(II_str))
+print("Mean and Gaussian curvatures")
+display(Latex(H_str))
+display(Latex(K_str))
 # %%
 # from sympy.diffgeom.rn import R3, R3_origin, R3_r
 from sympy.diffgeom import Manifold, Patch, CoordSystem
