@@ -2,6 +2,7 @@ import sympy as sp
 from sympy.physics.vector import ReferenceFrame  # , vlatex
 from IPython.display import display, Latex
 
+# https://docs.sympy.org/latest/modules/plotting.html#sympy.plotting.plot.plot3d_parametric_line
 # from sympy.vector import CoordSys3D, BaseVector, Point, Vector
 # from sympy.plotting import plot, plot_implicit, plot3d, plot3d_parametric_surface
 
@@ -71,11 +72,17 @@ shape = II @ I_inv
 H = (shape.trace() / 2).factor()
 K = shape.det().factor()
 
-
+# Lame coefficients
+h_phi = (e_phi & X_phi).simplify()
+h_psi = (e_psi & X_psi).simplify()
+# area element
+J = h_phi * h_psi
 # %%
 # print(some stuff)
 implicit_tex_str = eq_tex_str(implicit_fun, 0)
 parametric_tex_str = eq_tex_str(sp.Function(r"\bf{X}")(phi, psi), X)
+X_phi_tex = eq_tex_str(sp.Symbol(r"\bf{X}_\phi"), X_phi)
+X_psi_tex = eq_tex_str(sp.Symbol(r"\bf{X}_\psi"), X_psi)
 e_phi_tex = eq_tex_str(sp.Symbol(r"\bf{e}_\phi"), e_phi)
 e_psi_tex = eq_tex_str(sp.Symbol(r"\bf{e}_\psi"), e_psi)
 n_tex = eq_tex_str(sp.Symbol(r"\bf{n}"), n)
@@ -83,16 +90,24 @@ I_str = eq_tex_str(sp.Matrix([[sp.Symbol("E"), sp.Symbol("F")], [sp.Symbol("F"),
 II_str = eq_tex_str(sp.Matrix([[sp.Symbol("L"), sp.Symbol("M")], [sp.Symbol("M"), sp.Symbol("N")]]), II)
 H_str = eq_tex_str(sp.Symbol("H"), H)
 K_str = eq_tex_str(sp.Symbol("K"), K)
+h_phi = eq_tex_str(sp.Symbol(r"h_\phi"), h_phi)
+h_psi = eq_tex_str(sp.Symbol(r"h_\psi"), h_psi)
 
 print("Torus\n-----")
 print("Implicit:")
 display(Latex(implicit_tex_str))
 print("Parametric:")
 display(Latex(parametric_tex_str))
+print("Coorinate basis:")
+display(Latex(X_phi_tex))
+display(Latex(X_psi_tex))
 print("Frame:")
 display(Latex(e_phi_tex))
 display(Latex(e_psi_tex))
 display(Latex(n_tex))
+print("Lame coefficients:")
+display(Latex(h_phi))
+display(Latex(h_psi))
 print("Fundamental forms:")
 display(Latex(I_str))
 display(Latex(II_str))
