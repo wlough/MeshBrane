@@ -1,5 +1,5 @@
 import sympy as sp
-from sympy.physics.vector import ReferenceFrame  # , vlatex
+from sympy.physics.vector import ReferenceFrame, outer  # , vlatex
 from IPython.display import display, Latex
 
 # https://docs.sympy.org/latest/modules/plotting.html#sympy.plotting.plot.plot3d_parametric_line
@@ -21,7 +21,7 @@ def eq_tex_str(lhs, rhs, mode="inline"):
 
 
 # sp.init_printing()
-# %%
+#
 ##################################
 # Parameterization, orthonormal frame,...
 ##################################
@@ -29,13 +29,37 @@ OE = ReferenceFrame(
     "E", indices=["x", "y", "z"], latexs=[r"\bf{e}_x", r"\bf{e}_y", r"\bf{e}_z"], variables=["x", "y", "z"]
 )
 # major radius
-a = sp.symbols("$a$")
+a = sp.symbols("a")
+
 # minor radius
-b = sp.symbols("$b$")
+b = sp.symbols("b")
 x, y, z = OE[0], OE[1], OE[2]  # OE.varlist  # sp.symbols("x y z")
 ex, ey, ez = OE["x"], OE["y"], OE["z"]
 # surface coordinates
 phi, psi = sp.symbols("phi psi")
+l = sp.symbols(r"\ell")
+h = sp.symbols("h")
+A = sp.sqrt(3) * l**2 / 12
+L = A * sp.exp(-(l**2) / (4 * h)) / (4 * sp.pi * h**2)
+
+Phi = sp.Array([2 * sp.pi * k / 6 for k in range(6)])
+E = [l * (sp.cos(phi) * ex + sp.sin(phi) * ey) for phi in Phi]
+P = 0 * outer(ex, ex)
+for ei in E:
+    P += L * outer(ei, ei)
+Mh = P.subs({h: psi * l**2}).to_matrix(OE)
+
+M = P.subs({h: A}).to_matrix(OE)
+M[0, 0].evalf()
+f = sp.lambdify([psi], Mh[0, 0])
+import numpy as np
+import matplotlib.pyplot as plt
+
+z = np.linspace(1e-6, 20 * np.sqrt(3) / 12)
+ff = f(z)
+plt.plot(z, ff)
+# %%
+
 # implicit surface function
 implicit_fun = (sp.sqrt(x**2 + y**2) - a) ** 2 + z**2 - b**2
 # surface parameterization
@@ -118,6 +142,7 @@ display(Latex(K_str))
 # from sympy.diffgeom.rn import R3, R3_origin, R3_r
 from sympy.diffgeom import Manifold, Patch, CoordSystem
 from sympy.physics.vector import ReferenceFrame
+import sympy as sp
 
 # R3_r.coord_functions()
 Euc3 = Manifold(r"$\mathbb{E}^3$", 3)
