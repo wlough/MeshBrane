@@ -1,13 +1,16 @@
 # don't mess with this one...
 
-from src.python.half_edge_mesh import HalfEdgeMesh, HeatLaplacian
+from src.python.half_edge_mesh import HalfEdgeMesh
+from src.python.half_edge_ops import HeatLaplacian
 from src.python.figs import log_log_fit
 import os
 import pickle
 import numpy as np
 
 
-def unit_sphere_mean_curvature_normal_compute(surfs=None, output_dir=None, rtol=1e-6, atol=1e-6):
+def unit_sphere_mean_curvature_normal_compute(
+    surfs=None, output_dir=None, rtol=1e-6, atol=1e-6
+):
     if surfs is None:
         surfs = [f"unit_sphere_{N:05d}" for N in [12, 42, 162, 642, 2562, 10242]]
     if output_dir is None:
@@ -21,7 +24,13 @@ def unit_sphere_mean_curvature_normal_compute(surfs=None, output_dir=None, rtol=
         data_path = f"{output_dir}/{surf}"
         ply = f"./data/ply/binary/{surf}.ply"
         m = HalfEdgeMesh.from_half_edge_ply(ply)
-        laplacian_kwargs = {"mesh": m, "rtol": rtol, "atol": atol, "data_path": data_path, "run_tests": True}
+        laplacian_kwargs = {
+            "mesh": m,
+            "rtol": rtol,
+            "atol": atol,
+            "data_path": data_path,
+            "run_tests": True,
+        }
         l = HeatLaplacian(**laplacian_kwargs)
         l.save()
         M.append(m)
@@ -87,6 +96,78 @@ def load_unit_sphere_mean_curvature_normal_compute(surfs=None, output_dir=None):
     )
 
 
+def recompute_all_the_things(m6=True, m12=True, m16=True):
+    if m6:
+        rtol, atol = 1e-6, 1e-6
+        (
+            Nvertices,
+            T_compute_weights_matrix,
+            T_compute_matrix,
+            T_apply,
+            lapY_error_max,
+            lapY_error_ave,
+            H,
+            H_max,
+            H_ave,
+            sparsity,
+            L,
+        ) = unit_sphere_mean_curvature_normal_compute(
+            surfs=[f"unit_sphere_{N:05d}" for N in [12, 42, 162, 642, 2562, 10242]],
+            output_dir="./output/heat_laplacian_tests/unit_sphere_1em6_precision",
+            rtol=rtol,
+            atol=atol,
+        )
+
+    if m12:
+        rtol, atol = 1e-12, 1e-12
+        (
+            Nvertices,
+            T_compute_weights_matrix,
+            T_compute_matrix,
+            T_apply,
+            lapY_error_max,
+            lapY_error_ave,
+            H,
+            H_max,
+            H_ave,
+            sparsity,
+            L,
+        ) = unit_sphere_mean_curvature_normal_compute(
+            surfs=[f"unit_sphere_{N:05d}" for N in [12, 42, 162, 642, 2562, 10242]],
+            output_dir="./output/heat_laplacian_tests/unit_sphere_1em12_precision",
+            rtol=rtol,
+            atol=atol,
+        )
+
+    if m16:
+        (
+            Nvertices,
+            T_compute_weights_matrix,
+            T_compute_matrix,
+            T_apply,
+            lapY_error_max,
+            lapY_error_ave,
+            H,
+            H_max,
+            H_ave,
+            sparsity,
+            L,
+        ) = unit_sphere_mean_curvature_normal_compute(
+            surfs=[f"unit_sphere_{N:05d}" for N in [12, 42, 162, 642, 2562, 10242]],
+            output_dir="./output/heat_laplacian_tests/unit_sphere_1em16_precision",
+            rtol=1e-16,
+            atol=1e-16,
+        )
+
+
+recompute_all_the_things(m6=False, m12=True, m16=False)
+# %%
+################################################
+# 1e-12 precision
+################################################
+output_dir = "./output/heat_laplacian_tests/unit_sphere_1em12_precision"
+
+# rtol, atol = 1e-12, 1e-12
 # (
 #     Nvertices,
 #     T_compute_weights_matrix,
@@ -101,16 +182,11 @@ def load_unit_sphere_mean_curvature_normal_compute(surfs=None, output_dir=None):
 #     L,
 # ) = unit_sphere_mean_curvature_normal_compute(
 #     surfs=[f"unit_sphere_{N:05d}" for N in [12, 42, 162, 642, 2562, 10242]],
-#     output_dir="./output/heat_laplacian_tests/unit_sphere_1em16_precision",
-#     rtol=1e-16,
-#     atol=1e-16,
+#     output_dir=output_dir,
+#     rtol=rtol,
+#     atol=atol,
 # )
 
-# %%
-################################################
-# 1e-12 precision
-################################################
-output_dir = "./output/heat_laplacian_tests/unit_sphere_1em12_precision"
 (
     Nvertices,
     T_compute_weights_matrix,
@@ -177,6 +253,27 @@ log_log_fit(**sparsity_kwargs)
 # 1e-6 precision
 ################################################
 output_dir = "./output/heat_laplacian_tests/unit_sphere_1em6_precision"
+
+# rtol, atol = 1e-6, 1e-6
+# (
+#     Nvertices,
+#     T_compute_weights_matrix,
+#     T_compute_matrix,
+#     T_apply,
+#     lapY_error_max,
+#     lapY_error_ave,
+#     H,
+#     H_max,
+#     H_ave,
+#     sparsity,
+#     L,
+# ) = unit_sphere_mean_curvature_normal_compute(
+#     surfs=[f"unit_sphere_{N:05d}" for N in [12, 42, 162, 642, 2562, 10242]],
+#     output_dir=output_dir,
+#     rtol=rtol,
+#     atol=atol,
+# )
+
 (
     Nvertices,
     T_compute_weights_matrix,
@@ -242,6 +339,27 @@ log_log_fit(**sparsity_kwargs)
 # 1e-16 precision
 ################################################
 output_dir = "./output/heat_laplacian_tests/unit_sphere_1em16_precision"
+
+# rtol, atol = 1e-16, 1e-16
+# (
+#     Nvertices,
+#     T_compute_weights_matrix,
+#     T_compute_matrix,
+#     T_apply,
+#     lapY_error_max,
+#     lapY_error_ave,
+#     H,
+#     H_max,
+#     H_ave,
+#     sparsity,
+#     L,
+# ) = unit_sphere_mean_curvature_normal_compute(
+#     surfs=[f"unit_sphere_{N:05d}" for N in [12, 42, 162, 642, 2562, 10242]],
+#     output_dir=output_dir,
+#     rtol=rtol,
+#     atol=atol,
+# )
+
 (
     Nvertices,
     T_compute_weights_matrix,
@@ -258,8 +376,8 @@ output_dir = "./output/heat_laplacian_tests/unit_sphere_1em16_precision"
 
 # %%
 error_ave_kwargs = {
-    "X": Nvertices[:],
-    "Y": lapY_error_ave[:],
+    "X": Nvertices[:4],
+    "Y": lapY_error_ave[:4],
     "Xlabel": "N",
     "Ylabel": "ave|$H-H*$|",
     "title": "Average error",
@@ -267,8 +385,8 @@ error_ave_kwargs = {
 log_log_fit(**error_ave_kwargs)
 # %%
 error_max_kwargs = {
-    "X": Nvertices,
-    "Y": lapY_error_max,
+    "X": Nvertices[:3],
+    "Y": lapY_error_max[:3],
     "Xlabel": "N",
     "Ylabel": "max|$H-H*$|",
     "title": "Max error",
@@ -276,8 +394,8 @@ error_max_kwargs = {
 log_log_fit(**error_max_kwargs)
 # %%
 weights_compute_time_kwargs = {
-    "X": Nvertices,
-    "Y": T_compute_weights_matrix,
+    "X": Nvertices[2:],
+    "Y": T_compute_weights_matrix[2:],
     "Xlabel": "N",
     "Ylabel": "T",
     "title": "Weights compute time",
@@ -285,8 +403,8 @@ weights_compute_time_kwargs = {
 log_log_fit(**weights_compute_time_kwargs)
 # %%
 matrix_compute_time_kwargs = {
-    "X": Nvertices,
-    "Y": T_compute_matrix,
+    "X": Nvertices[2:],
+    "Y": T_compute_matrix[2:],
     "Xlabel": "N",
     "Ylabel": "T",
     "title": "Laplacian compute time",
@@ -294,8 +412,8 @@ matrix_compute_time_kwargs = {
 log_log_fit(**matrix_compute_time_kwargs)
 # %%
 sparsity_kwargs = {
-    "X": Nvertices,
-    "Y": sparsity,
+    "X": Nvertices[3:],
+    "Y": sparsity[3:],
     "Xlabel": "N",
     "Ylabel": "S",
     "title": "Laplacian sparsity",

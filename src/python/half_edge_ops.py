@@ -569,6 +569,215 @@ class HeatLaplacian(LaplaceOperatorBase):
         )
 
 
+class HeatLaplacian2(LaplaceOperatorBase):
+    def __init__(
+        self, mesh, rtol=1e-6, atol=1e-6, compute=False, data_path=None, run_tests=False
+    ):
+        super().__init__(mesh)
+        self.data_path = data_path
+        self.rtol = rtol
+        self.atol = atol
+        self.num_vertices = mesh.num_vertices
+        self.Vindices = sorted(self.mesh.xyz_coord_V.keys())
+        self.Vdict = {v: i for i, v in enumerate(self.Vindices)}
+        if compute:
+            self.weights_matrix = self.compute_weights_matrix()
+            self.matrix = self.compute_matrix()
+        if run_tests:
+            self.run_unit_sphere_mean_curvature_normal_tests()
+
+    def save(self, data_path=None):
+        if data_path is not None:
+            self.data_path = data_path
+        if self.data_path is None:
+            raise ValueError("No path to save data.")
+        # with open(self.data_path, "wb") as f:
+        #     pickle.dump(self.__dict__, f)
+        with open(self.data_path + ".pickle", "wb") as f:
+            pickle.dump(self, f)
+
+    @lru_cache(maxsize=None)
+    def barcell_area(self, v):
+        return self.mesh.barcell_area(v)
+
+    @lru_cache(maxsize=None)
+    def meyercell_area(self, v):
+        return self.mesh.meyercell_area(v)
+
+    @lru_cache(maxsize=None)
+    def compute_weight(self, vi, vj):
+        # vi,vj = self.Vindices[i], self.Vindices[j]
+        ri, rj = self.mesh.xyz_coord_v(vi), self.mesh.xyz_coord_v(vj)
+        Ai, Aj = self.barcell_area(vi), self.barcell_area(vj)
+        # Ai, Aj = self.meyercell_area(vi), self.meyercell_area(vj)
+        wij = (
+            Aj * np.exp(-np.linalg.norm(rj - ri) ** 2 / (4 * Ai)) / (4 * np.pi * Ai**2)
+        )
+        return wij
+
+    def compute_weights_row(self, vi):
+        p = HalfEdgePatch.from_seed_vertex(vi, self.mesh)
+        V = p.V - {vi}
+        i = self.Vdict[vi]
+        wii = self.compute_weight(vi, vi)
+        data = [wii]
+        col_indices = [i]
+        for vj in V:
+            j = self.Vdict[vj]
+            wij = self.compute_weight(vi, vj)
+            data.append(wij)
+            col_indices.append(j)
+
+        norm_wi = np.linalg.norm(data)
+
+        while True:
+            V = p.expand_boundary()
+            new_data = []
+            new_col_indices = []
+            for vj in V:
+                j = self.Vdict[vj]
+                wij = self.compute_weight(vi, vj)
+                new_data.append(wij)
+                new_col_indices.append(j)
+
+            norm_dwi = np.linalg.norm(new_data)
+            data.extend(new_data)
+            col_indices.extend(new_col_indices)
+
+            if norm_dwi < self.rtol * norm_wi + self.atol:
+                break
+            if len(data) >= self.num_vertices:
+                break
+            norm_wi = np.linalg.norm(data)
+
+        return data, col_indices
+
+    def compute_weights_matrix(self):
+        """Construct the sparse Laplacian matrix using cached areas."""
+        t = time()
+        row_indices = []
+        col_indices = []
+        data = []
+
+        for vi, i in self.Vdict.items():
+            new_data, new_col_indices = self.compute_weights_row(vi)
+            data.extend(new_data)
+            col_indices.extend(new_col_indices)
+            row_indices.extend([i] * len(new_data))
+        # self.wrow_indices = row_indices
+        # self.wcol_indices = col_indices
+        # self.wdata = data
+        self.T_compute_weights_matrix = time() - t
+        return csr_matrix(
+            (data, (row_indices, col_indices)),
+            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
+        )
+
+    def compute_row(self, vi):
+        p = HalfEdgePatch.from_seed_vertex(vi, self.mesh)
+        V = p.V - {vi}
+        i = self.Vdict[vi]
+        Lii = 0.0
+        data = [Lii]
+        col_indices = [i]
+        for vj in V:
+            j = self.Vdict[vj]
+            wij = self.compute_weight(vi, vj)
+            data.append(wij)
+            col_indices.append(j)
+            data[0] -= wij
+
+        norm_Li = np.linalg.norm(data)
+
+        while True:
+            V = p.expand_boundary()
+            new_data = [0.0]
+            new_col_indices = [i]
+            for vj in V:
+                j = self.Vdict[vj]
+                wij = self.compute_weight(vi, vj)
+                new_data.append(wij)
+                new_col_indices.append(j)
+                new_data[0] -= wij
+            norm_dLi = np.linalg.norm(new_data)
+            data[0] += new_data[0]
+            data.extend(new_data[1:])
+            col_indices.extend(new_col_indices[1:])
+
+            if norm_dLi < self.rtol * norm_Li + self.atol:
+                break
+            if len(data) >= self.num_vertices:
+                break
+            norm_Li = np.linalg.norm(data)
+
+        return data, col_indices
+
+    def compute_matrix(self):
+        """Construct the sparse Laplacian matrix using cached areas."""
+        t = time()
+        row_indices = []
+        col_indices = []
+        data = []
+
+        for vi, i in self.Vdict.items():
+            new_data, new_col_indices = self.compute_row(vi)
+            data.extend(new_data)
+            col_indices.extend(new_col_indices)
+            row_indices.extend([i] * len(new_data))
+        self.T_compute_matrix = time() - t
+        return csr_matrix(
+            (data, (row_indices, col_indices)),
+            shape=(self.mesh.num_vertices, self.mesh.num_vertices),
+        )
+
+    def apply2array(self, Y):
+        return self.matrix.dot(Y)
+
+    def apply2dict(self, Y):
+        return self.matrix.dot([Y[v] for v in self.Vindices])
+
+    def apply(self, Y):
+        t = time()
+        # if isinstance(Y, dict):
+        #     lapY = self.apply2dict(Y)
+        # elif isinstance(Y, np.ndarray):
+        #     lapY = self.apply2array(Y)
+        # else:
+        #     raise ValueError("Argument must be dict or numpy.ndarray.")
+        lapY = 0 * Y
+        for i in self.Vindices:
+            x = self.mesh.xyz_coord_v(i)
+            Ai = self.mesh.barcell_area(i)
+            for f in self.mesh.F:
+                Af = self.mesh.area(f)
+                for j in self.mesh.generate_V_of_f(f):
+                    Y[i] += (
+                        (Af / 3)
+                        * np.exp(-np.linalg.norm(rj - ri) ** 2 / (4 * Ai))
+                        / (4 * np.pi * Ai**2)
+                    )
+        self.T_apply = time() - t
+
+        return lapY
+
+    def run_unit_sphere_mean_curvature_normal_tests(self):
+        # self.weights_matrix = 0
+        # self.matrix = self.compute_matrix()
+        self.Y = self.mesh.xyz_array
+        self.lapY = self.apply(self.Y)
+        self.lapY_actual = -2 * self.Y
+        self.lapY_error = np.linalg.norm(self.lapY - self.lapY_actual, axis=1)
+        self.lapY_error_max = np.linalg.norm(self.lapY_error, np.inf)
+        self.lapY_error_ave = np.mean(self.lapY_error)
+        self.H = 0.5 * np.linalg.norm(self.lapY, axis=1)
+        self.H_max = np.linalg.norm(self.H, np.inf)
+        self.H_ave = np.mean(self.H)
+        # self.sparsity = self.matrix.nnz / self.matrix.shape[0] ** 2
+        # self.weights_sparsity = (
+        #     self.weights_matrix.nnz / self.weights_matrix.shape[0] ** 2
+        # )
+
+
 class MeyerHeatLaplacian(LaplaceOperatorBase):
     def __init__(
         self, mesh, rtol=1e-6, atol=1e-6, compute=False, data_path=None, run_tests=False

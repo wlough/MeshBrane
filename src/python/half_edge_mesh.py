@@ -1,5 +1,6 @@
 from src.python.ply_tools import VertTri2HalfEdgeConverter
 import numpy as np
+import warnings
 
 # acceleration/extraplation for laplacian
 
@@ -437,21 +438,21 @@ class HalfEdgeMeshBase:
     #######################################################
     # Generators and data exporters
     @property
-    def V(self, sorted=False):
+    def Vkeys(self, sorted=False):
         if sorted:
             return sorted(self._xyz_coord_V.keys())
         else:
             return self._xyz_coord_V.keys()
 
     @property
-    def H(self, sorted=False):
+    def Hkeys(self, sorted=False):
         if sorted:
             return sorted(self._v_origin_H.keys())
         else:
             return self._v_origin_H.keys()
 
     @property
-    def F(self, sorted=False):
+    def Fkeys(self, sorted=False):
         if sorted:
             return sorted(self._h_bound_F.keys())
         else:
@@ -467,8 +468,16 @@ class HalfEdgeMeshBase:
             return np.array([self.xyz_coord_v(v) for v in self.xyz_coord_V.keys()])
 
     @property
-    def V_of_F(self):
-        return [list(self.generate_V_of_f(f)) for f in self.h_bound_F.keys()]
+    def V_of_F(self, sorted=False):
+        # return [list(self.generate_V_of_f(f)) for f in self.h_bound_F.keys()]
+        if sorted:
+            return np.array(
+                [list(self.generate_V_of_f(f)) for v in sorted(self.h_bound_F.keys())]
+            )
+        else:
+            return np.array(
+                [list(self.generate_V_of_f(f)) for f in self.h_bound_F.keys()]
+            )
 
     @property
     def data_lists(self):
@@ -886,6 +895,41 @@ class HalfEdgeMeshBase:
 
     ######################################################
     # to be deprecated
+    @property
+    def V(self, sorted=False):
+        warnings.warn(
+            "V is deprecated and will be replaced by Vkeys in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if sorted:
+            return sorted(self._xyz_coord_V.keys())
+        else:
+            return self._xyz_coord_V.keys()
+
+    @property
+    def H(self, sorted=False):
+        warnings.warn(
+            "H is deprecated and will be replaced by Hkeys in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if sorted:
+            return sorted(self._v_origin_H.keys())
+        else:
+            return self._v_origin_H.keys()
+
+    @property
+    def F(self, sorted=False):
+        warnings.warn(
+            "F is deprecated and will be replaced by Fkeys in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if sorted:
+            return sorted(self._h_bound_F.keys())
+        else:
+            return self._h_bound_F.keys()
 
 
 ######################################
@@ -1180,6 +1224,206 @@ class HalfEdgeMesh(HalfEdgeMeshBase):
             )
 
             self.update_hedge(hjm_prev, h_next=hjm)
+
+    ######################################################
+    # misc testing functions
+    def spherical_coord_v(self, v):
+        r = np.linalg.norm(self.xyz_coord_v(v))
+        theta = np.arccos(self.xyz_coord_v(v)[2] / r)
+        phi = np.arctan2(self.xyz_coord_v(v)[1], self.xyz_coord_v(v)[0])
+        return r, theta, phi
+
+    def spherical_coord_array(self, sorted=False):
+        if sorted:
+            return np.array(
+                [self.spherical_coord_v(v) for v in sorted(self.xyz_coord_V.keys())]
+            )
+        else:
+            return np.array(
+                [self.spherical_coord_v(v) for v in self.xyz_coord_V.keys()]
+            )
+
+    def average_face_area(self):
+        A = 0.0
+        for f in self.h_bound_F.keys():
+            A += self.area_f(f)
+        return A / self.num_faces
+
+    def average_dual_barcell_area(self):
+        A = 0.0
+        for v in self.xyz_coord_V.keys():
+            A += self.barcell_area(v)
+        return A / self.num_vertices
+
+    def run_unit_sphere_mean_curvature_normal_tests(self, timelike_param):
+        # timelike_param = [0.01 / 4, 0.04 / 4, 0.09 / 4]
+
+        self.timelike_param = timelike_param
+        self.mcvec_cotan = self.cotan_laplacian(self.xyz_array)
+        self.mcvec_belkin = [
+            self.belkin_laplacian(s, self.xyz_array) for s in timelike_param
+        ]
+        self.mcvec_actual = -2 * self.xyz_array
+
+        self.mcvec_cotan_L2error = np.linalg.norm(
+            (self.mcvec_cotan - self.mcvec_actual).ravel()
+        ) / np.linalg.norm(self.mcvec_actual.ravel())
+        self.mcvec_cotan_Lifntyerror = np.linalg.norm(
+            (self.mcvec_cotan - self.mcvec_actual).ravel(), np.inf
+        ) / np.linalg.norm(self.mcvec_actual.ravel(), np.inf)
+
+        self.mcvec_belkin_L2error = [
+            np.linalg.norm((mcvec - self.mcvec_actual).ravel())
+            / np.linalg.norm(self.mcvec_actual.ravel())
+            for mcvec in self.mcvec_belkin
+        ]
+        self.mcvec_belkin_Lifntyerror = [
+            np.linalg.norm((mcvec - self.mcvec_actual).ravel(), np.inf)
+            / np.linalg.norm(self.mcvec_actual.ravel(), np.inf)
+            for mcvec in self.mcvec_belkin
+        ]
+
+    def save(self, data_path=None):
+        import pickle
+
+        if data_path is not None:
+            self.data_path = data_path
+        if self.data_path is None:
+            raise ValueError("No path to save data.")
+        with open(self.data_path + ".pickle", "wb") as f:
+            pickle.dump(self, f)
+
+    ######################################################
+    # Laplace operators
+    def cotan_laplacian(self, Y):
+        """computes the cotan laplacian of Y at each vertex"""
+        Nv = self.num_vertices
+        lapY = np.zeros_like(Y)
+        for vi in range(Nv):
+            Atot = 0.0
+            ri = self.xyz_coord_v(vi)
+            yi = Y[vi]
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+            for hij in self.generate_H_out_v_clockwise(vi):
+                hijm1 = self.h_next_h(self.h_twin_h(hij))
+                hijp1 = self.h_twin_h(self.h_prev_h(hij))
+                vjm1 = self.v_head_h(hijm1)
+                vj = self.v_head_h(hij)
+                vjp1 = self.v_head_h(hijp1)
+
+                yj = Y[vj]
+
+                rjm1 = self.xyz_coord_v(vjm1)
+                rj = self.xyz_coord_v(vj)
+                rjp1 = self.xyz_coord_v(vjp1)
+
+                rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
+                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+                ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
+                rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
+                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
+                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+
+                Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
+                Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
+                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
+                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+
+                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
+
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
+
+                cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
+                cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
+
+                Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
+                lapY[vi] += (cot_thetam + cot_thetap) * (yj - yi) / 2
+            lapY[vi] /= Atot
+
+        return lapY
+
+    def belkin_laplacian_slow(self, s, Q):
+        """computes the heat kernel laplacian of Q at each vertex"""
+        Nv = self.num_vertices
+        Nf = self.num_faces
+        lapQ = np.zeros_like(Q)
+        for i in range(Nv):
+            x = self.xyz_coord_v(i)
+            qx = Q[i]
+            for f in range(Nf):
+                Af = self.area_f(f)
+                for j in self.generate_V_of_f(f):
+                    y = self.xyz_coord_v(j)
+                    qy = Q[j]
+                    lapQ[i] += (
+                        (1 / (4 * np.pi * s**2))
+                        * (Af / 3)
+                        * np.exp(-np.linalg.norm(x - y) ** 2 / (4 * s))
+                        * (qy - qx)
+                    )
+
+        return lapQ
+
+    def belkin_laplacian(self, s, Q):
+        """computes the heat kernel laplacian of Q at each vertex"""
+        V = self.xyz_array
+        A = np.array([self.barcell_area(v) for v in self.xyz_coord_V.keys()])
+        lapQ = np.array(
+            [
+                np.einsum(
+                    "y,y,y...->...",
+                    A,
+                    np.exp(-np.linalg.norm(V - x, axis=-1) ** 2 / (4 * s)),
+                    Q - q,
+                )
+                for x, q in zip(V, Q)
+            ]
+        ) / (4 * np.pi * s**2)
+
+        return lapQ
+
+    def belkin_gradient(self, s, Q):
+        """computes the heat kernel gradient of Q at each vertex"""
+        Nv = self.num_vertices
+        Nf = self.num_faces
+        Qshape = Q.shape
+        is_scalar = len(Qshape) == 1
+        if is_scalar:
+            nabQshape = (Nv, 3)
+        else:
+            vec_shape = Qshape[1:]
+            nabQshape = (Nv, 3, *vec_shape)
+        nabQ = np.zeros(nabQshape)
+        for i in range(Nv):
+            x = self.xyz_coord_v(i)
+            qx = Q[i]
+            for f in range(Nf):
+                Af = self.area_f(f)
+                for j in self.generate_V_of_f(f):
+                    y = self.xyz_coord_v(j)
+                    qy = Q[j]
+                    if is_scalar:
+                        nabQ[i] += (
+                            (1 / (8 * np.pi * s**2))
+                            * (Af / 3)
+                            * np.exp(-np.linalg.norm(x - y) ** 2 / (4 * s))
+                            * (y - x)
+                            * (qy - qx)
+                        )
+                    else:
+                        nabQ[i] += np.einsum(
+                            "3,...->3...",
+                            (1 / (4 * np.pi * s**2))
+                            * (Af / 3)
+                            * np.exp(-np.linalg.norm(x - y) ** 2 / (4 * s))
+                            * (y - x),
+                            (qy - qx),
+                        )
+
+        return nabQ
 
     ######################################################
     ######################################################

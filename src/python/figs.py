@@ -1,3 +1,4 @@
+# from matplotlib import rcParams
 import matplotlib.pyplot as plt
 import numpy as np
 from src.python.utilities import round_to
@@ -9,13 +10,20 @@ def get_plotsize(fig_cols=1, fig_frac=0.25):
     fig_cols: 1 or 2 columns of fig in paper
     fig_frac: ratio of plot with to total figure width
     """
-    col_width = 3.375  # prl column width
-    # col_width2 = 6.75
+    # col_width = 3.375  # prl column width
+    col_width = 6.75
     plot_width = fig_cols * col_width * fig_frac
     return plot_width
 
 
 def log_log_fit(X, Y, Xlabel="X", Ylabel="Y", title="", show=True, fig_path=None):
+    # plt.rcParams.update(
+    #     {
+    #         "text.usetex": True,
+    #         # "font.family": "sans-serif",
+    #         # "font.sans-serif": "Helvetica",
+    #     }
+    # )
     x, y = np.log(X), np.log(Y)
     a11 = x @ x
     a12 = sum(x)
@@ -28,7 +36,9 @@ def log_log_fit(X, Y, Xlabel="X", Ylabel="Y", title="", show=True, fig_path=None
     Ainv = np.array([[a22, -a12], [-a21, a11]]) / detA
     p, c = Ainv @ u
     f = p * x + c
-    fit_label = f"${Ylabel}=O\\left({Xlabel}" + "^{" + f"{round_to(p,n=3)}" + "}\\right)$"
+    fit_label = (
+        f"${Ylabel}=O\\left({Xlabel}" + "^{" + f"{round_to(p,n=3)}" + "}\\right)$"
+    )
     # fit_label = f"${Ylabel}\\sim{round_to(np.exp(c),n=3)}{Xlabel}" + "^{" + f"{round_to(p,n=3)}" + "}$"
     # fit_label = f"${round_to(c,n=3)}{Xlabel}" + "^{" + f"{round_to(p,n=3)}" + "}$"
     plt.plot(
