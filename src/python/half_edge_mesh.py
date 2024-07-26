@@ -1283,6 +1283,32 @@ class HalfEdgeMesh(HalfEdgeMeshBase):
             for mcvec in self.mcvec_belkin
         ]
 
+    def run_unit_torus_mean_curvature_normal_tests(self, timelike_param):
+        self.timelike_param = timelike_param
+        self.mcvec_cotan = self.cotan_laplacian(self.xyz_array)
+        self.mcvec_belkin = [
+            self.belkin_laplacian(s, self.xyz_array) for s in timelike_param
+        ]
+        self.mcvec_actual = -2 * self.xyz_array
+
+        self.mcvec_cotan_L2error = np.linalg.norm(
+            (self.mcvec_cotan - self.mcvec_actual).ravel()
+        ) / np.linalg.norm(self.mcvec_actual.ravel())
+        self.mcvec_cotan_Lifntyerror = np.linalg.norm(
+            (self.mcvec_cotan - self.mcvec_actual).ravel(), np.inf
+        ) / np.linalg.norm(self.mcvec_actual.ravel(), np.inf)
+
+        self.mcvec_belkin_L2error = [
+            np.linalg.norm((mcvec - self.mcvec_actual).ravel())
+            / np.linalg.norm(self.mcvec_actual.ravel())
+            for mcvec in self.mcvec_belkin
+        ]
+        self.mcvec_belkin_Lifntyerror = [
+            np.linalg.norm((mcvec - self.mcvec_actual).ravel(), np.inf)
+            / np.linalg.norm(self.mcvec_actual.ravel(), np.inf)
+            for mcvec in self.mcvec_belkin
+        ]
+
     def save(self, data_path=None):
         import pickle
 

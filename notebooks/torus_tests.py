@@ -3,17 +3,16 @@ import os
 import pickle
 import numpy as np
 
-# from src.python.mesh_viewer import MeshViewer
 
-
-def make_sphere_data(overwrite=False):
+def make_torus_data(overwrite=False):
     timelike_param = [0.01 / 4, 0.04 / 4, 0.09 / 4]
-    Nverts = [12, 42, 162, 642, 2562, 10242]
-    # Nverts = [12, 42, 162, 642]
-    surfs = [f"unit_sphere_{N:05d}" for N in Nverts]
-    output_dir = "./output/sphere_tests"
+    Nverts = [192, 768, 3072, 12288, 49152, 196608]
+    surfs = [f"torus_{N:06d}" for N in Nverts]
+    output_dir = "./output/torus_tests"
     if os.path.exists(output_dir) and overwrite:
         os.system(f"rm -r {output_dir}")
+    elif not os.path.exists(output_dir):
+        pass
     else:
         raise ValueError("Ahhhhhh")
     os.system(f"mkdir -p {output_dir}")
@@ -22,19 +21,19 @@ def make_sphere_data(overwrite=False):
         surf = surfs[_]
         print(f"running tests for {surf}")
         data_path = f"{output_dir}/{surf}"
-        ply = f"./data/ply/binary/{surf}.ply"
+        ply = f"./data/ply/binary/{surf}_he.ply"
         m = HalfEdgeMesh.from_half_edge_ply(ply)
-        m.run_unit_sphere_mean_curvature_normal_tests(timelike_param)
+        # m.run_unit_torus_mean_curvature_normal_tests(timelike_param)
         m.save(data_path)
         M.append(m)
     return M
 
 
-def load_spheres():
+def load_tori():
     Nverts = [12, 42, 162, 642, 2562, 10242]
     # Nverts = [12, 42, 162, 642]
-    surfs = [f"unit_sphere_{N:05d}" for N in Nverts]
-    output_dir = "./output/sphere_tests"
+    surfs = [f"unit_torus_{N:05d}" for N in Nverts]
+    output_dir = "./output/torus_tests"
     M = []
     for surf in surfs:
         data_path = f"{output_dir}/{surf}"
@@ -44,7 +43,7 @@ def load_spheres():
 
 
 def get_test_data():
-    M = load_spheres()
+    M = load_tori()
     timelike_param = np.array([m.timelike_param for m in M][0])
     mcvec_actual = [m.mcvec_actual for m in M]
     mcvec_cotan = [m.mcvec_cotan for m in M]
@@ -78,10 +77,10 @@ def get_test_data():
     )
 
 
-# M0 = make_sphere_data(overwrite=True)
+M = make_torus_data(overwrite=True)
 
 
-# Mall = load_spheres()
+# Mall = load_tori()
 # (
 #     timelike_param,
 #     mcvec_actual,
@@ -94,15 +93,16 @@ def get_test_data():
 #     num_vertices
 # ) = get_test_data(Mall)
 # %%
-# num = 3
+# from src.python.mesh_viewer import MeshViewer
+# num = 1
 # timelike_num = 2
-# M = Mall[:]
+#
 # num_vertices = [m.num_vertices for m in M]
 # spherical_arr = [m.spherical_coord_array() for m in M]
-# vfdat = [[m.xyz_array, -vec] for m, vec in zip(M, mcvec_belkin[timelike_num])]
+# # vfdat = [[m.xyz_array, -vec] for m, vec in zip(M, mcvec_belkin[timelike_num])]
 # m = M[num]
-# vfdat = [m.xyz_array, -mcvec_belkin[timelike_num][num]]
-# mv = MeshViewer(*m.data_lists, vector_field_data=[vfdat])
+# # vfdat = [m.xyz_array, -mcvec_belkin[timelike_num][num]]
+# mv = MeshViewer(*m.data_lists)#, vector_field_data=[vfdat])
 # mv.plot()
 # %%
 
@@ -120,6 +120,20 @@ def get_test_data():
 ############################################
 ############################################
 ############################################
+# %%
+m = M[1]
+a, b = 1.0, 1.0 / 3.0
+V = m.xyz_array
+X, Y, Z = V.T
+Rho = np.sqrt(X**2 + Y**2)
+Phi = np.arctan2(Y, X)
+Psi = np.arctan2(Z, Rho - a)
+x = (a + b * np.cos(Psi)) * np.cos(Phi)
+y = (a + b * np.cos(Psi)) * np.sin(Phi)
+z = b * np.sin(Psi)
+X - x
+Y - y
+Z - z
 # %%
 import numpy as np
 import matplotlib.pyplot as plt

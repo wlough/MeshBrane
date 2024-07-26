@@ -2,9 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from src.python.utilities import round_to, log_log_fit
 
-# Analysis of numerical experiments presented in
-# Belkin et al 2008 Discrete laplace operator on meshed surfaces
-
 
 def ten_pow(X, decimals=3):
     x = np.abs(X)
@@ -43,104 +40,6 @@ def to_scinotation_tex(X, decimals=3):
         for c, p in zip(coeff, pow)
     ]
     return xlabels
-
-
-def fig_subplots(
-    num_vertices,
-    parameter,
-    error_belkin,
-    error_cot,
-    suptitle="",
-    Xlabel="",
-    Ylabel="",
-    legendlabel="",
-):
-    pream = ""
-
-    plt.rcParams.update(
-        {
-            "text.latex.preamble": pream,
-            "figure.dpi": 300.0,
-            "xtick.direction": "in",
-            "xtick.labelsize": 12.0,
-            "xtick.labeltop": False,
-            "xtick.minor.ndivs": 4,
-            "xtick.minor.visible": True,
-            "xtick.top": True,
-            "ytick.direction": "in",
-            "ytick.labelsize": 12.0,
-            "ytick.minor.ndivs": 4,
-            "ytick.minor.visible": True,
-            "ytick.right": True,
-            "text.usetex": False,
-            "figure.titlesize": 18,
-            "axes.titlesize": 12,
-            "axes.labelsize": 12,
-            "lines.linewidth": 3,
-            "lines.markersize": 10,
-            "legend.frameon": False,
-            # "legend.loc": "best",
-        }
-    )
-    fig = plt.figure(figsize=(12, 8))
-    fig.suptitle(r"$" + f"{suptitle}" + r"$")
-    axs = [fig.add_subplot(2, 2, _ + 1) for _ in range(4)]
-
-    for _ in range(3):
-        param = parameter[_]
-        err = error_belkin[_]
-        ax = axs[_]
-        fit_dict = log_log_fit(num_vertices, err)
-        m = fit_dict["m"]
-        y_fit = fit_dict["F"]
-        y = fit_dict["logY"]
-        x = fit_dict["logX"]
-        fit_label = r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
-        ax.plot(
-            x,
-            y_fit,
-            label=fit_label,
-        )
-        ax.plot(x, y, "*")
-        ax.set_title(r"$s=" + f"{param}" + r"$")
-        ax.set_xlabel(r"$\text{Vertex count}\quad " + Xlabel + r"$")
-        ax.set_xticks(x)
-        ax.set_xticklabels(to_scinotation_tex(num_vertices))
-
-        ax.set_ylabel(r"$\text{Error}\quad " + Ylabel + r"$")
-        ax.set_yticks(y)
-        ax.set_yticklabels(to_scinotation_tex(err))
-        ax.legend()
-
-    err = error_cot
-    ax = axs[-1]
-    fit_dict = log_log_fit(num_vertices, err)
-    m = fit_dict["m"]
-    y_fit = fit_dict["F"]
-    y = fit_dict["logY"]
-    x = fit_dict["logX"]
-    title = "cotan"
-    # fit_label = (
-    #     f"${Ylabel}=O\\left({Xlabel}" + "^{" + f"{round_to(m, n=3)}" + "}\\right)$"
-    # )
-    fit_label = r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
-    ax.plot(
-        x,
-        y_fit,
-        label=fit_label,
-    )
-    ax.plot(x, y, "*")
-    ax.set_title(title)
-    ax.set_xlabel(r"$\text{Vertex count}\quad " + Xlabel + r"$")
-    ax.set_xticks(x)
-    ax.set_xticklabels(to_scinotation_tex(num_vertices))
-    ax.set_ylabel(r"$\text{Error}\quad " + Ylabel + r"$")
-    ax.set_yticks(y)
-    ax.set_yticklabels(to_scinotation_tex(err))
-    ax.legend()
-
-    plt.tight_layout()
-    plt.show()
 
 
 def fig_single(
