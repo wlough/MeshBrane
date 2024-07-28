@@ -46,7 +46,7 @@ Phi = sp.Array([2 * sp.pi * k / 6 for k in range(6)])
 E = [l * (sp.cos(phi) * ex + sp.sin(phi) * ey) for phi in Phi]
 P = 0 * outer(ex, ex)
 for ei in E:
-    P += L * outer(ei, ei)
+    P += L * outer(ei, ei) / 2
 Mh = P.subs({h: psi * l**2}).to_matrix(OE)
 
 M = P.subs({h: A}).to_matrix(OE)

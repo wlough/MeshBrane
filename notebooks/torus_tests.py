@@ -5,8 +5,9 @@ import numpy as np
 
 
 def make_torus_data(overwrite=False):
-    timelike_param = [0.01 / 4, 0.04 / 4, 0.09 / 4]
+    timelike_param = [0.0025, 0.00025, 0.000025]
     Nverts = [192, 768, 3072, 12288, 49152, 196608]
+    # Nverts = [192, 768, 3072, 12288]
     surfs = [f"torus_{N:06d}" for N in Nverts]
     output_dir = "./output/torus_tests"
     if os.path.exists(output_dir) and overwrite:
@@ -23,16 +24,16 @@ def make_torus_data(overwrite=False):
         data_path = f"{output_dir}/{surf}"
         ply = f"./data/ply/binary/{surf}_he.ply"
         m = HalfEdgeMesh.from_half_edge_ply(ply)
-        # m.run_unit_torus_mean_curvature_normal_tests(timelike_param)
+        m.run_unit_torus_mean_curvature_normal_tests(timelike_param)
         m.save(data_path)
         M.append(m)
     return M
 
 
 def load_tori():
-    Nverts = [12, 42, 162, 642, 2562, 10242]
-    # Nverts = [12, 42, 162, 642]
-    surfs = [f"unit_torus_{N:05d}" for N in Nverts]
+    Nverts = [192, 768, 3072, 12288, 49152, 196608]
+    Nverts = [192, 768, 3072, 12288, 49152]
+    surfs = [f"torus_{N:06d}" for N in Nverts]
     output_dir = "./output/torus_tests"
     M = []
     for surf in surfs:
@@ -57,9 +58,7 @@ def get_test_data():
     # num_M = len(M)
     num_timelike = len(timelike_param)
     mcvec_belkin = [[m.mcvec_belkin[_] for m in M] for _ in range(num_timelike)]
-    mcvec_belkin_L2error = np.array(
-        [[m.mcvec_belkin_L2error[_] for m in M] for _ in range(num_timelike)]
-    )
+    mcvec_belkin_L2error = np.array([[m.mcvec_belkin_L2error[_] for m in M] for _ in range(num_timelike)])
     mcvec_belkin_Lifntyerror = np.array(
         [[m.mcvec_belkin_Lifntyerror[_] for m in M] for _ in range(num_timelike)]
     )
@@ -77,33 +76,41 @@ def get_test_data():
     )
 
 
-M = make_torus_data(overwrite=True)
+# M = make_torus_data(overwrite=True)
 
 
-# Mall = load_tori()
-# (
-#     timelike_param,
-#     mcvec_actual,
-#     mcvec_cotan,
-#     mcvec_cotan_L2error,
-#     mcvec_cotan_Lifntyerror,
-#     mcvec_belkin,
-#     mcvec_belkin_L2error,
-#     mcvec_belkin_Lifntyerror,
-#     num_vertices
-# ) = get_test_data(Mall)
+M = load_tori()
+M[0].mcvec_belkin_L2error
+(
+    timelike_param,
+    mcvec_actual,
+    mcvec_cotan,
+    mcvec_cotan_L2error,
+    mcvec_cotan_Lifntyerror,
+    mcvec_belkin,
+    mcvec_belkin_L2error,
+    mcvec_belkin_Lifntyerror,
+    num_vertices,
+) = get_test_data()
+[m.average_face_area() for m in M]
 # %%
-# from src.python.mesh_viewer import MeshViewer
-# num = 1
-# timelike_num = 2
-#
-# num_vertices = [m.num_vertices for m in M]
-# spherical_arr = [m.spherical_coord_array() for m in M]
-# # vfdat = [[m.xyz_array, -vec] for m, vec in zip(M, mcvec_belkin[timelike_num])]
-# m = M[num]
-# # vfdat = [m.xyz_array, -mcvec_belkin[timelike_num][num]]
-# mv = MeshViewer(*m.data_lists)#, vector_field_data=[vfdat])
-# mv.plot()
+from src.python.mesh_viewer import MeshViewer
+
+num = 2
+timelike_num = 1
+
+num_vertices = [m.num_vertices for m in M]
+
+# mcvec_belkin = [[m.xyz_array, -vec] for m, vec in zip(M, mcvec_belkin[timelike_num])]
+m = M[num]
+
+vfdat = [m.xyz_array, -0.1 * m.mcvec_cotan]
+vfdat = [m.xyz_array, -0.1 * m.mcvec_actual]
+vfdat = [m.xyz_array, -0.1 * mcvec_belkin[timelike_num][num]]
+
+
+mv = MeshViewer(*m.data_lists, vector_field_data=[vfdat])
+mv.plot()
 # %%
 
 # err = mcvec_belkin_L2error[timelike_num][1:]
@@ -172,10 +179,7 @@ def to_scinotation_tex(X, decimals=3):
             coeff[_] = int(coeff[_])
         else:
             coeff[_] = np.round(coeff[_], decimals=decimals)
-    xlabels = [
-        r"$" + f"{c}" + r" \times " + r"10^{" + f"{p}" + r"}$"
-        for c, p in zip(coeff, pow)
-    ]
+    xlabels = [r"$" + f"{c}" + r" \times " + r"10^{" + f"{p}" + r"}$" for c, p in zip(coeff, pow)]
     return xlabels
 
 
@@ -296,13 +300,15 @@ def fig_single(
     #     "#d62728", #r
     # ]
     colors = [
-        "#2ca02c",  # g
-        "#1f77b4",  # b
-        "#d62728",  # r
-        "#ff7f0e",  # o
-    ]
-    markers = ["o", "*", "^", "s"]
-    linestyles = ["solid", "dashed", "dashdot", "dotted"]
+        "#2ca02c",
+        "#1f77b4",
+        "#d62728",
+        "#ff7f0e",
+        "#88BB44",
+        "#FFBBBB",
+    ]  # g  # b  # r  # o
+    markers = ["o", "*", "^", "s", "x", "o"]
+    linestyles = ["solid", "dashed", "dashdot", "dotted", "dotted", "dotted"]
     textsize = 14
     plt.rcParams.update(
         {
@@ -412,15 +418,15 @@ def fig_single(
 # Normalized L2 error for spherical mesh.
 ###############################################################
 parameter = timelike_param
-num_vertices = N_vertices[3:]
+num_vertices = N_vertices[1:]
 
 fun = r"{\bf{r}}(x)"
 err_tex = r"\varepsilon=\frac{||\mathcal{D} {\bf{r}}-\Delta {\bf{r}}||_{2}}{||\Delta {\bf{r}}||_{2}}"
 Xlabel = r"N"
 Ylabel = r"\varepsilon"
 suptitle = f"{fun}" + r",\quad" + err_tex
-error_cot = mcvec_cotan_L2error[3:]
-error_belkin = mcvec_belkin_L2error[:, 3:]
+error_cot = mcvec_cotan_L2error[1:]
+error_belkin = mcvec_belkin_L2error[:, 1:]
 plot_kwargs = {
     "num_vertices": num_vertices,
     "parameter": parameter,
@@ -431,21 +437,21 @@ plot_kwargs = {
     "Ylabel": Ylabel,
 }
 fig_single(**plot_kwargs)
-
+# plt.plot(np.log(num_vertices), np.log(error_cot))
 # %%
 ###############################################################
 # Normalized Linf error for spherical mesh.
 ###############################################################
 parameter = timelike_param
-num_vertices = N_vertices[3:]
+num_vertices = N_vertices[1:]
 
 fun = r"{\bf{r}}(x)"
 err_tex = r"\varepsilon=\frac{||\mathcal{D} {\bf{r}}-\Delta {\bf{r}}||_{\infty}}{||\Delta {\bf{r}}||_{\infty}}"
 Xlabel = r"N"
 Ylabel = r"\varepsilon"
 suptitle = f"{fun}" + r",\quad" + err_tex
-error_cot = mcvec_cotan_Lifntyerror[3:]
-error_belkin = mcvec_belkin_Lifntyerror[:, 3:]
+error_cot = mcvec_cotan_Lifntyerror[1:]
+error_belkin = mcvec_belkin_Lifntyerror[:, 1:]
 plot_kwargs = {
     "num_vertices": num_vertices,
     "parameter": parameter,
