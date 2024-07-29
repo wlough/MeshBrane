@@ -916,6 +916,37 @@ class SphereFactory:
             b.write_plys(level=level)
         print("Done.")
 
+    @classmethod
+    def from_unit_sphere_VF(cls, V, F):
+        b = cls()
+        b.V = list(V)
+        b.F = [list(F)]
+        b._num_vertices = [len(V)]
+        # b.v2h = [VertTri2HalfEdgeConverter.from_source_samples(V, F[-1])]
+        return b
+
+    @classmethod
+    def build_test_plys(cls, num_refine=5):
+        b = cls()
+        b.write_plys(level=0)
+        for level in range(1, num_refine + 1):
+            b.refine()
+            b.write_plys(level=level)
+        print("Done.")
+
+    @classmethod
+    def build_noisy_test_plys(cls, num_refine=5, noise_scale=0.01):
+        b = cls()
+        b._name = "noisy_unit_sphere"
+        b.V = [v + b.r * np.random.normal(0, noise_scale, 3) for v in b.V]
+        b.V = [b.r * v / np.linalg.norm(v) for v in b.V]
+        b.v2h = [VertTri2HalfEdgeConverter.from_source_samples(*b.VF())]
+        b.write_plys(level=0)
+        for level in range(1, num_refine + 1):
+            b.refine()
+            b.write_plys(level=level)
+        print("Done.")
+
 
 def VF_torus(p):
     p = 3
