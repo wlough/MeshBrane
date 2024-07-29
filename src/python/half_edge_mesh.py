@@ -1336,11 +1336,11 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
         """
         self.surfcoord_array = np.array(
             [
-                self.surfcoord_v(v) + np.random.normal(loc, scale, 2)
+                self.surfcoord_array[v] + np.random.normal(loc, scale, 2)
                 for v in self.xyz_coord_V.keys()
             ]
         )
-        self.recompute_from_surfcoord()
+        # self.recompute_from_surfcoord()
 
     def perturbation_edge_flip(self, p=0.1):
         Nh = self.num_edges
@@ -1533,6 +1533,102 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
         }
 
     def run_guckenberger_laplacian_mcvec_test(self):
+        mcvec = self.guckenberger_laplacian(self.xyz_array)
+        L2error = np.linalg.norm((mcvec - self.mcvec_actual).ravel()) / np.linalg.norm(
+            self.mcvec_actual.ravel()
+        )
+        Lifntyerror = np.linalg.norm(
+            (mcvec - self.mcvec_actual).ravel(), np.inf
+        ) / np.linalg.norm(self.mcvec_actual.ravel(), np.inf)
+        self.guckenberger_laplacian_mcvec_results = {
+            "mcvec": mcvec,
+            "L2error": L2error,
+            "Lifntyerror": Lifntyerror,
+        }
+
+    def run_noisy_belkin_laplacian_mcvec_fixed_param_test(self, s_list, loc=0, scale=0):
+        if scale != 0:
+            self.perturbation_gaussian_surfcoords(loc, scale)
+            self.xyz_coord_V = self.compute_xyz_from_surfcoord()
+            self.mean_curvature = self.compute_mean_curvature()
+            self.unit_normal = self.compute_unit_normal()
+        mcvec = np.array([self.belkin_laplacian(s, self.xyz_array) for s in s_list])
+        L2error = np.array(
+            [
+                np.linalg.norm((_ - self.mcvec_actual).ravel())
+                / np.linalg.norm(self.mcvec_actual.ravel())
+                for _ in mcvec
+            ]
+        )
+        Lifntyerror = np.array(
+            [
+                np.linalg.norm((_ - self.mcvec_actual).ravel(), np.inf)
+                / np.linalg.norm(self.mcvec_actual.ravel(), np.inf)
+                for _ in mcvec
+            ]
+        )
+        self.belkin_laplacian_mcvec_fixed_param_results = {
+            "s": np.array(s_list),
+            "mcvec": mcvec,
+            "L2error": L2error,
+            "Lifntyerror": Lifntyerror,
+        }
+
+    def run_noisy_belkin_laplacian_mcvec_average_face_area_test(self, loc=0, scale=0):
+        if scale != 0:
+            self.perturbation_gaussian_surfcoords(loc, scale)
+            self.xyz_coord_V = self.compute_xyz_from_surfcoord()
+            self.mean_curvature = self.compute_mean_curvature()
+            self.unit_normal = self.compute_unit_normal()
+        Af = self.average_face_area()
+        s_list = np.array([Af**2, Af, np.sqrt(Af)])
+        mcvec = np.array([self.belkin_laplacian(s, self.xyz_array) for s in s_list])
+        L2error = np.array(
+            [
+                np.linalg.norm((_ - self.mcvec_actual).ravel())
+                / np.linalg.norm(self.mcvec_actual.ravel())
+                for _ in mcvec
+            ]
+        )
+        Lifntyerror = np.array(
+            [
+                np.linalg.norm((_ - self.mcvec_actual).ravel(), np.inf)
+                / np.linalg.norm(self.mcvec_actual.ravel(), np.inf)
+                for _ in mcvec
+            ]
+        )
+        self.belkin_laplacian_mcvec_average_face_area_results = {
+            "s": np.array(s_list),
+            "mcvec": mcvec,
+            "L2error": L2error,
+            "Lifntyerror": Lifntyerror,
+        }
+
+    def run_noisy_cotan_laplacian_mcvec_test(self, loc=0, scale=0):
+        if scale != 0:
+            self.perturbation_gaussian_surfcoords(loc, scale)
+            self.xyz_coord_V = self.compute_xyz_from_surfcoord()
+            self.mean_curvature = self.compute_mean_curvature()
+            self.unit_normal = self.compute_unit_normal()
+        mcvec = self.cotan_laplacian(self.xyz_array)
+        L2error = np.linalg.norm((mcvec - self.mcvec_actual).ravel()) / np.linalg.norm(
+            self.mcvec_actual.ravel()
+        )
+        Lifntyerror = np.linalg.norm(
+            (mcvec - self.mcvec_actual).ravel(), np.inf
+        ) / np.linalg.norm(self.mcvec_actual.ravel(), np.inf)
+        self.cotan_laplacian_mcvec_results = {
+            "mcvec": mcvec,
+            "L2error": L2error,
+            "Lifntyerror": Lifntyerror,
+        }
+
+    def run_noisy_guckenberger_laplacian_mcvec_test(self, loc=0, scale=0):
+        if scale != 0:
+            self.perturbation_gaussian_surfcoords(loc, scale)
+            self.xyz_coord_V = self.compute_xyz_from_surfcoord()
+            self.mean_curvature = self.compute_mean_curvature()
+            self.unit_normal = self.compute_unit_normal()
         mcvec = self.guckenberger_laplacian(self.xyz_array)
         L2error = np.linalg.norm((mcvec - self.mcvec_actual).ravel()) / np.linalg.norm(
             self.mcvec_actual.ravel()

@@ -1,16 +1,35 @@
+from src.python.mesh_viewer import MeshViewer
+
+# %%
 from src.python.half_edge_mesh import HalfEdgeTestSphere
+from matplotlib import colormaps as plt_cmap
 import os
 import pickle
 import numpy as np
+import matplotlib.pyplot as plt
+from src.python.utilities import round_to, log_log_fit
+import itertools
 
-np.random.normal(0, 0.01, 3)
+# Define extended lists of possible colors, markers, and line styles
+colors = ["b", "g", "r", "c", "m", "y", "k", "orange", "purple", "brown", "pink", "gray", "olive", "cyan"]
+markers = ["o", "s", "^", "D", "v", "p", "*", "h", "H", "+", "x", "d", "|", "_"]
+linestyles = ["-", "--", "-.", ":", (0, (3, 1, 1, 1)), (0, (5, 10)), (0, (5, 1)), (0, (3, 5, 1, 5))]
+
+# Create a list of all possible combinations
+combinations = list(itertools.product(colors, markers, linestyles))
 
 
-# from src.python.mesh_viewer import MeshViewer
+# Function to get unique sequence of length n
+def get_unique_combinations(n):
+    if n > len(combinations):
+        raise ValueError("Requested more unique combinations than available")
+    return combinations[:n]
+
+
 def make_sphere_data(overwrite=False):
-    s_list = [0.0025, 0.01, 0.025]
+    # s_list = [0.0025, 0.01, 0.025]
     u = 10
-    # s_list = [u**-p for p in range(1, 6)]
+    s_list = [u**-p for p in range(1, 6)]
     Nverts = [12, 42, 162, 642, 2562, 10242]
     # Nverts = [12, 42, 162, 642]
     surfs = [f"unit_sphere_{N:05d}" for N in Nverts]
@@ -44,11 +63,43 @@ def make_sphere_data(overwrite=False):
     return M
 
 
-def load_spheres():
+def make_noisy_sphere_data(overwrite=False, loc=0, scale=0.01):
+    # s_list = [0.0025, 0.01, 0.025]
+    u = 10
+    s_list = [u**-p for p in range(1, 6)]
     Nverts = [12, 42, 162, 642, 2562, 10242]
     # Nverts = [12, 42, 162, 642]
     surfs = [f"unit_sphere_{N:05d}" for N in Nverts]
-    output_dir = "./output/sphere_tests3"
+    output_dir = "./output/noisy_sphere_tests"
+    if os.path.exists(output_dir) and overwrite:
+        os.system(f"rm -r {output_dir}")
+    elif not os.path.exists(output_dir):
+        pass
+    else:
+        raise ValueError("Ahhhhhh")
+    os.system(f"mkdir -p {output_dir}")
+    M = []
+    for _ in range(len(surfs)):
+        surf = surfs[_]
+        print(f"running tests for {surf}")
+        data_path = f"{output_dir}/{surf}"
+        ply = f"./data/ply/binary/{surf}.ply"
+        m = HalfEdgeTestSphere.from_half_edge_ply(ply, 1.0)
+
+        m.run_noisy_belkin_laplacian_mcvec_fixed_param_test(s_list, loc=loc, scale=scale)
+        m.run_noisy_belkin_laplacian_mcvec_average_face_area_test(loc=loc, scale=scale)
+        m.run_noisy_cotan_laplacian_mcvec_test(loc=loc, scale=scale)
+        m.run_noisy_guckenberger_laplacian_mcvec_test(loc=loc, scale=scale)
+        m.save(data_path)
+        M.append(m)
+    return M
+
+
+def load_spheres(output_dir="./output/sphere_tests3"):
+    Nverts = [12, 42, 162, 642, 2562, 10242]
+    # Nverts = [12, 42, 162, 642]
+    surfs = [f"unit_sphere_{N:05d}" for N in Nverts]
+    # output_dir = "./output/sphere_tests3"
     M = []
     for surf in surfs:
         data_path = f"{output_dir}/{surf}"
@@ -57,12 +108,13 @@ def load_spheres():
     return M
 
 
-def get_test_data(with_M=False):
-    M = load_spheres()
+def get_test_data(with_M=False, output_dir="./output/sphere_tests3"):
+    M = load_spheres(output_dir=output_dir)
     # belkin_laplacian_mcvec_fixed_param_results
     # cotan_laplacian_mcvec_results
     timelike_param = np.array([m.belkin_laplacian_mcvec_fixed_param_results["s"] for m in M][0])
     mcvec_actual = [m.mcvec_actual for m in M]
+
     mcvec_cotan = [m.cotan_laplacian_mcvec_results["mcvec"] for m in M]
     mcvec_cotan_L2error = np.array([m.cotan_laplacian_mcvec_results["L2error"] for m in M])
     mcvec_cotan_Lifntyerror = np.array([m.cotan_laplacian_mcvec_results["Lifntyerror"] for m in M])
@@ -85,81 +137,142 @@ def get_test_data(with_M=False):
             for _ in range(num_timelike)
         ]
     )
+
+    mcvec_belkin_afe = [m.belkin_laplacian_mcvec_average_face_area_results["mcvec"] for m in M]
+    mcvec_belkin_afe_L2error = np.array(
+        [m.belkin_laplacian_mcvec_average_face_area_results["L2error"] for m in M]
+    )
+    mcvec_belkin_afe_Lifntyerror = np.array(
+        [m.belkin_laplacian_mcvec_average_face_area_results["Lifntyerror"] for m in M]
+    )
+
+    # error_belkin_afe = run_noisy_belkin_laplacian_mcvec_average_face_area_test
+
     num_vertices = np.array([m.num_vertices for m in M])
     if with_M:
-        return (
-            timelike_param,
-            mcvec_actual,
-            mcvec_cotan,
-            mcvec_cotan_L2error,
-            mcvec_cotan_Lifntyerror,
-            mcvec_belkin,
-            mcvec_belkin_L2error,
-            mcvec_belkin_Lifntyerror,
-            num_vertices,
-            M,
-        )
+        return {
+            "timelike_param": timelike_param,
+            "mcvec_actual": mcvec_actual,
+            "mcvec_cotan": mcvec_cotan,
+            "mcvec_cotan_L2error": mcvec_cotan_L2error,
+            "mcvec_cotan_Lifntyerror": mcvec_cotan_Lifntyerror,
+            "mcvec_belkin": mcvec_belkin,
+            "mcvec_belkin_L2error": mcvec_belkin_L2error,
+            "mcvec_belkin_Lifntyerror": mcvec_belkin_Lifntyerror,
+            "mcvec_belkin_afe": mcvec_belkin_afe,
+            "mcvec_belkin_afe_L2error": mcvec_belkin_afe_L2error,
+            "mcvec_belkin_afe_Lifntyerror": mcvec_belkin_afe_Lifntyerror,
+            "N_vertices": num_vertices,
+            "M": M,
+        }
     else:
-        return (
-            timelike_param,
-            mcvec_actual,
-            mcvec_cotan,
-            mcvec_cotan_L2error,
-            mcvec_cotan_Lifntyerror,
-            mcvec_belkin,
-            mcvec_belkin_L2error,
-            mcvec_belkin_Lifntyerror,
-            num_vertices,
-        )
+        return {
+            "timelike_param": timelike_param,
+            "mcvec_actual": mcvec_actual,
+            "mcvec_cotan": mcvec_cotan,
+            "mcvec_cotan_L2error": mcvec_cotan_L2error,
+            "mcvec_cotan_Lifntyerror": mcvec_cotan_Lifntyerror,
+            "mcvec_belkin": mcvec_belkin,
+            "mcvec_belkin_L2error": mcvec_belkin_L2error,
+            "mcvec_belkin_Lifntyerror": mcvec_belkin_Lifntyerror,
+            "N_vertices": num_vertices,
+        }
 
 
-# M = make_sphere_data(overwrite=True)
-(
-    timelike_param,
-    mcvec_actual,
-    mcvec_cotan,
-    mcvec_cotan_L2error,
-    mcvec_cotan_Lifntyerror,
-    mcvec_belkin,
-    mcvec_belkin_L2error,
-    mcvec_belkin_Lifntyerror,
-    num_vertices,
-    M,
-) = get_test_data(with_M=True)
-# %%
-from src.python.mesh_viewer import MeshViewer
+def get_crange(samps, Nstd=2):
+    c0 = np.mean(samps)
+    sig = np.std(samps)
+    cmin = c0 - Nstd * sig
+    cmax = c0 + Nstd * sig
+    samps_clipped = np.clip(samps, cmin, cmax)
+    return samps_clipped, cmin, cmax
 
-num = 3
-timelike_num = 2
-# M = Mall[:]
-num_vertices = [m.num_vertices for m in M]
-vfdat = [[m.xyz_array, -vec] for m, vec in zip(M, mcvec_belkin[timelike_num])]
-m = M[num]
-vfdat = [m.xyz_array, -m.mcvec_actual + mcvec_belkin[timelike_num][num]]
-mv = MeshViewer(*m.data_lists, vector_field_data=[vfdat])
-mv.plot()
-type(m)
-# %%
 
-# err = mcvec_belkin_L2error[timelike_num][1:]
-# thing = [m.num_vertices for m in Mall][1:]
-#
-# error_ave_kwargs = {
-#     "X": thing,
-#     "Y": err,
-#     "Xlabel": "N",
-#     "Ylabel": "ave|$H-H*$|",
-#     "title": "Average error",
-# }
-# log_log_fit(**error_ave_kwargs)
-############################################
-############################################
-############################################
-# %%
-import numpy as np
-import matplotlib.pyplot as plt
-from src.python.utilities import round_to, log_log_fit
-import itertools
+def get_cmap(cmin=0.0, cmax=1.0, name="hsv"):
+    """
+    Returns a function that maps each index in 0, 1, ..., n-1 to a distinct
+    RGB color; the keyword argument name must be a standard mpl colormap name.
+
+    'Accent', 'Accent_r', 'Blues', 'Blues_r', 'BrBG', 'BrBG_r', 'BuGn',
+    'BuGn_r', 'BuPu', 'BuPu_r', 'CMRmap', 'CMRmap_r', 'Dark2', 'Dark2_r',
+    'GnBu', 'GnBu_r', 'Greens', 'Greens_r', 'Greys', 'Greys_r', 'OrRd',
+    'OrRd_r', 'Oranges', 'Oranges_r', 'PRGn', 'PRGn_r', 'Paired', 'Paired_r',
+    'Pastel1', 'Pastel1_r', 'Pastel2', 'Pastel2_r', 'PiYG', 'PiYG_r', 'PuBu',
+    'PuBuGn', 'PuBuGn_r', 'PuBu_r', 'PuOr', 'PuOr_r', 'PuRd', 'PuRd_r',
+    'Purples', 'Purples_r', 'RdBu', 'RdBu_r', 'RdGy', 'RdGy_r', 'RdPu',
+    'RdPu_r', 'RdYlBu', 'RdYlBu_r', 'RdYlGn', 'RdYlGn_r', 'Reds', 'Reds_r',
+    'Set1', 'Set1_r', 'Set2', 'Set2_r', 'Set3', 'Set3_r', 'Spectral',
+    'Spectral_r', 'Wistia', 'Wistia_r', 'YlGn', 'YlGnBu', 'YlGnBu_r', 'YlGn_r',
+    'YlOrBr', 'YlOrBr_r', 'YlOrRd', 'YlOrRd_r', 'afmhot', 'afmhot_r', 'autumn',
+    'autumn_r', 'binary', 'binary_r', 'bone', 'bone_r', 'brg', 'brg_r', 'bwr',
+    'bwr_r', 'cividis', 'cividis_r', 'cool', 'cool_r', 'coolwarm', 'coolwarm_r',
+    'copper', 'copper_r', 'cubehelix', 'cubehelix_r', 'flag', 'flag_r',
+    'gist_earth', 'gist_earth_r', 'gist_gray', 'gist_gray_r',
+    'gist_heat', 'gist_heat_r', 'gist_ncar', 'gist_ncar_r', 'gist_rainbow',
+    'gist_rainbow_r', 'gist_stern', 'gist_stern_r', 'gist_yarg', 'gist_yarg_r',
+    'gnuplot', 'gnuplot2', 'gnuplot2_r', 'gnuplot_r', 'gray', 'gray_r', 'hot',
+    'hot_r', 'hsv', 'hsv_r', 'inferno', 'inferno_r', 'jet', 'jet_r', 'magma',
+    'magma_r', 'nipy_spectral', 'nipy_spectral_r', 'ocean', 'ocean_r', 'pink',
+    'pink_r', 'plasma', 'plasma_r', 'prism', 'prism_r', 'rainbow', 'rainbow_r',
+    'seismic', 'seismic_r', 'spring', 'spring_r', 'summer', 'summer_r', 'tab10',
+    'tab10_r', 'tab20', 'tab20_r', 'tab20b', 'tab20b_r', 'tab20c', 'tab20c_r',
+    'terrain', 'terrain_r', 'turbo', 'turbo_r', 'twilight', 'twilight_r',
+    'twilight_shifted', 'twilight_shifted_r', 'viridis', 'viridis_r', 'winter',
+    'winter_r'
+
+    """
+    if cmax > cmin:
+        cnum = lambda x: (x - cmin) / (cmax - cmin)
+    else:
+        cnum = lambda x: 0 * x
+        print("bad min-max range")
+    cmap01 = plt_cmap[name]
+    my_cmap = lambda x: cmap01(cnum(float(x)))
+    return my_cmap
+
+
+def scalars_to_rgba(samples, cmin=None, cmax=None, name="coolwarm"):
+    if cmin is None:
+        cmin = np.min(samples)
+    if cmax is None:
+        cmax = np.max(samples)
+    # Nsamps = len(samples)
+    cmap = get_cmap(cmin=cmin, cmax=cmax, name=name)
+    rgba = np.array([cmap(_) for _ in samples])
+    return rgba
+
+
+def plot_surf_belkin_error(numv, nums):
+
+    m = M[numv]
+    vec_belkin = M[numv].belkin_laplacian_mcvec_fixed_param_results["mcvec"][nums]
+    vec_guckenberger = M[numv].guckenberger_laplacian_mcvec_results["mcvec"]
+    vec_cotan = M[numv].cotan_laplacian_mcvec_results["mcvec"]
+
+    vec = vec_cotan
+    vec = vec_belkin
+    vec = vec_guckenberger
+    scale_vec = 2.0
+    alpha = 0.4
+    # err_belkin = np.linalg.norm(vec_belkin - m.mcvec_actual, axis=-1)
+    # err_cotan = np.linalg.norm(vec_cotan - m.mcvec_actual, axis=-1)
+    err = np.linalg.norm(vec - m.mcvec_actual, axis=-1)
+    V_rgba = scalars_to_rgba(err)
+    # V_rgba = scalars_to_rgba([-m.valence_v(v) for v in m.Vkeys])
+    V_rgba[:, -1] = alpha
+    E_rgba = np.zeros((len(m._v_origin_H), 4))
+
+    vfdat = [m.xyz_array, scale_vec * (vec - m.mcvec_actual)]
+    mv_kwargs = {
+        "vector_field_data": [vfdat],
+        "V_rgba": V_rgba,
+        "color_by_V_rgba": True,
+        "E_rgba": E_rgba,
+        # "color_by_E_rgba": True,
+        "show_halfedges": False,
+    }
+    mv = MeshViewer(*m.data_lists, **mv_kwargs)
+    mv.plot()
 
 
 def ten_pow(X, decimals=3):
@@ -198,22 +311,6 @@ def to_scinotation_tex(X, decimals=3):
     return xlabels
 
 
-# Define extended lists of possible colors, markers, and line styles
-colors = ["b", "g", "r", "c", "m", "y", "k", "orange", "purple", "brown", "pink", "gray", "olive", "cyan"]
-markers = ["o", "s", "^", "D", "v", "p", "*", "h", "H", "+", "x", "d", "|", "_"]
-line_styles = ["-", "--", "-.", ":", (0, (3, 1, 1, 1)), (0, (5, 10)), (0, (5, 1)), (0, (3, 5, 1, 5))]
-
-# Create a list of all possible combinations
-combinations = list(itertools.product(colors, markers, line_styles))
-
-
-# Function to get unique sequence of length n
-def get_unique_combinations(n):
-    if n > len(combinations):
-        raise ValueError("Requested more unique combinations than available")
-    return combinations[:n]
-
-
 def fig_single(
     num_vertices,
     error_belkin,
@@ -234,14 +331,14 @@ def fig_single(
     #     "#2ca02c", #g
     #     "#d62728", #r
     # ]
-    colors = 2 * [
-        "#2ca02c",  # g
-        "#1f77b4",  # b
-        "#d62728",  # r
-        "#ff7f0e",  # o
-    ]
-    markers = 2 * ["o", "*", "^", "s"]
-    linestyles = 2 * ["solid", "dashed", "dashdot", "dotted"]
+    # colors = 2 * [
+    #     "#2ca02c",  # g
+    #     "#1f77b4",  # b
+    #     "#d62728",  # r
+    #     "#ff7f0e",  # o
+    # ]
+    # markers = 2 * ["o", "*", "^", "s"]
+    # linestyles = 2 * ["solid", "dashed", "dashdot", "dotted"]
     textsize = 14
     plt.rcParams.update(
         {
@@ -279,14 +376,38 @@ def fig_single(
     errmax = -np.inf
     n_fit = 0
 
-    error = error_belkin
-    parameter = parameter_belkin
-    for _ in range(len(error)):
-        param = parameter[_]
-        err = error[_]
-        color = colors[_]
-        marker = markers[_]
-        linestyle = linestyles[_]
+    if True:
+        error = error_belkin
+        parameter = parameter_belkin
+        for _ in range(len(error)):
+            param = parameter[_]
+            err = error[_]
+            color = colors[_]
+            marker = markers[_]
+            linestyle = linestyles[_]
+            fit_dict = log_log_fit(num_vertices, err)
+            m = fit_dict["m"]
+            y_fit = fit_dict["F"]
+            y = fit_dict["logY"]
+            x = fit_dict["logX"]
+            fit_label = r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+            ax.plot(x, y_fit, linestyle=linestyle, color=color, label=fit_label)
+            ax.plot(x, y, marker, color=color, label=r"$s_B=" + f"{param}" + r"$")
+
+            ymin = np.min([ymin, *y])
+            ymax = np.max([ymax, *y])
+            errmin = np.min([errmin, *err])
+            errmax = np.max([errmax, *err])
+            n_fit += 1
+
+    if True:
+        err = error_guckenberger
+        parameter = parameter_guckenberger
+        # for _ in range(n_fit+len(error)):
+
+        color = colors[n_fit]
+        marker = markers[n_fit]
+        linestyle = linestyles[n_fit]
         fit_dict = log_log_fit(num_vertices, err)
         m = fit_dict["m"]
         y_fit = fit_dict["F"]
@@ -294,7 +415,12 @@ def fig_single(
         x = fit_dict["logX"]
         fit_label = r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
         ax.plot(x, y_fit, linestyle=linestyle, color=color, label=fit_label)
-        ax.plot(x, y, marker, color=color, label=r"$s_B=" + f"{param}" + r"$")
+        sample_label = r" $s_G=("
+        for param in parameter:
+            sample_label += f"{round_to(param, n=3)}, "
+        sample_label = sample_label[:-2]
+        sample_label += r")$"
+        ax.plot(x, y, marker, color=color, label=sample_label)
 
         ymin = np.min([ymin, *y])
         ymax = np.max([ymax, *y])
@@ -302,52 +428,27 @@ def fig_single(
         errmax = np.max([errmax, *err])
         n_fit += 1
 
-    err = error_guckenberger
-    parameter = parameter_guckenberger
-    # for _ in range(n_fit+len(error)):
-
-    color = colors[n_fit]
-    marker = markers[n_fit]
-    linestyle = linestyles[n_fit]
-    fit_dict = log_log_fit(num_vertices, err)
-    m = fit_dict["m"]
-    y_fit = fit_dict["F"]
-    y = fit_dict["logY"]
-    x = fit_dict["logX"]
-    fit_label = r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
-    ax.plot(x, y_fit, linestyle=linestyle, color=color, label=fit_label)
-    sample_label = r" $s_G=("
-    for param in parameter:
-        sample_label += f"{round_to(param, n=3)}, "
-    sample_label = sample_label[:-2]
-    sample_label += r")$"
-    ax.plot(x, y, marker, color=color, label=sample_label)
-
-    ymin = np.min([ymin, *y])
-    ymax = np.max([ymax, *y])
-    errmin = np.min([errmin, *err])
-    errmax = np.max([errmax, *err])
-    n_fit += 1
-
     ax.set_xlabel(r"$\text{Vertex count}\quad " + Xlabel + r"$")
     ax.set_xticks(x)
     ax.set_xticklabels(to_scinotation_tex(num_vertices))
     ax.set_ylabel(r"$\text{Error}\quad " + Ylabel + r"$")
 
-    err = error_cot
-    color = colors[n_fit]
-    marker = markers[n_fit]
-    linestyle = linestyles[n_fit]
-    fit_dict = log_log_fit(num_vertices, err)
-    m = fit_dict["m"]
-    y_fit = fit_dict["F"]
-    y = fit_dict["logY"]
-    x = fit_dict["logX"]
+    if True:
+        err = error_cot
+        color = colors[n_fit]
+        marker = markers[n_fit]
+        linestyle = linestyles[n_fit]
+        fit_dict = log_log_fit(num_vertices, err)
+        m = fit_dict["m"]
+        y_fit = fit_dict["F"]
+        y = fit_dict["logY"]
+        x = fit_dict["logX"]
 
-    ymin = np.min([ymin, *y])
-    ymax = np.max([ymax, *y])
-    errmin = np.min([errmin, *err])
-    errmax = np.max([errmax, *err])
+        ymin = np.min([ymin, *y])
+        ymax = np.max([ymax, *y])
+        errmin = np.min([errmin, *err])
+        errmax = np.max([errmax, *err])
+
     # errminmax = np.linspace(errmin, errmax, 4)
     yminmax = np.linspace(ymin, ymax, 4)
     errminmax = np.exp(yminmax)
@@ -367,18 +468,25 @@ def fig_single(
     plt.show()
 
 
-(
-    timelike_param,
-    mcvec_actual,
-    mcvec_cotan,
-    mcvec_cotan_L2error,
-    mcvec_cotan_Lifntyerror,
-    mcvec_belkin,
-    mcvec_belkin_L2error,
-    mcvec_belkin_Lifntyerror,
-    N_vertices,
-    M,
-) = get_test_data(with_M=True)
+# M = make_sphere_data(overwrite=True)
+# test_data = get_test_data(with_M=True)
+# M = make_noisy_sphere_data(overwrite=True, loc=0, scale=0.01)
+output_dir = "./output/noisy_sphere_tests"
+test_data = get_test_data(with_M=True, output_dir=output_dir)
+
+timelike_param = test_data["timelike_param"]
+mcvec_actual = test_data["mcvec_actual"]
+mcvec_cotan = test_data["mcvec_cotan"]
+mcvec_cotan_L2error = test_data["mcvec_cotan_L2error"]
+mcvec_cotan_Lifntyerror = test_data["mcvec_cotan_Lifntyerror"]
+mcvec_belkin = test_data["mcvec_belkin"]
+mcvec_belkin_L2error = test_data["mcvec_belkin_L2error"]
+mcvec_belkin_Lifntyerror = test_data["mcvec_belkin_Lifntyerror"]
+mcvec_belkin_afe = test_data["mcvec_belkin_afe"]
+mcvec_belkin_afe_L2error = test_data["mcvec_belkin_afe_L2error"]
+mcvec_belkin_afe_Lifntyerror = test_data["mcvec_belkin_afe_Lifntyerror"]
+N_vertices = test_data["N_vertices"]
+M = test_data["M"]
 # %%
 ###############################################################
 # Normalized L2 error for spherical mesh.
@@ -393,6 +501,7 @@ n0 = 3
 num_vertices = N_vertices[n0:]
 
 error_belkin = mcvec_belkin_L2error[:, n0:]
+error_belkin_afe = run_noisy_belkin_laplacian_mcvec_average_face_area_test
 error_cot = np.array([*mcvec_cotan_L2error[n0:]])
 error_guckenberger = [m.guckenberger_laplacian_mcvec_results["L2error"] for m in M[n0:]]
 
@@ -440,3 +549,7 @@ plot_kwargs = {
     "Ylabel": Ylabel,
 }
 fig_single(**plot_kwargs)
+
+
+#########################################################
+# %%
