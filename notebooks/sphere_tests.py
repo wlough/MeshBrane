@@ -11,17 +11,22 @@ from src.python.half_edge_test import (
 )
 from src.python.half_edge_test import HalfEdgeTestSphere as TestSurf
 
-
+# check run_analyticdiffextrap_laplacian_mcvec_fixed_heat_param_test
 # %%
 _TEST_DIR_ = "./output/sphere_tests"
-_NUM_VERTS_ = [162, 642, 2562, 10242]  # [12, 42, 162, 642, 2562, 10242, 40962]
+_NUM_VERTS_ = [
+    # 162,
+    642,
+    2562,
+    10242,
+    # 40962,
+]  # [12, 42, 162, 642, 2562, 10242, 40962, 163842]
 _SURF_NAMES_ = [f"unit_sphere_{N:06d}_he" for N in _NUM_VERTS_]
 _SURF_PARAMS_ = [1.0]
 
 
 def run_mcvec_tests(
     run_name="mcvec0",
-    noise_scale=0.0,
     test_dir=_TEST_DIR_,
     surf_names=_SURF_NAMES_,
     surface_params=_SURF_PARAMS_,
@@ -44,16 +49,19 @@ def run_mcvec_tests(
         data_path = f"{output_dir}/{surf}"
         ply = f"./data/ply/binary/{surf}.ply"
         m = TestSurf.from_half_edge_ply(ply, *surface_params)
+        # print("run_belkin_laplacian_mcvec_fixed_heat_param_test")
+        # m.run_belkin_laplacian_mcvec_fixed_heat_param_test(fixed_heat_param_vals)
         print("run_belkin_laplacian_mcvec_fixed_heat_param_test")
-        m.run_belkin_laplacian_mcvec_fixed_heat_param_test(
-            fixed_heat_param_vals, scale=noise_scale
+        m.run_analyticdiffextrap_laplacian_mcvec_fixed_heat_param_test(
+            fixed_heat_param_vals
         )
+
         print("run_belkin_laplacian_mcvec_average_face_area_test")
-        m.run_belkin_laplacian_mcvec_average_face_area_test(scale=noise_scale)
+        m.run_belkin_laplacian_mcvec_average_face_area_test()
         print("run_cotan_laplacian_mcvec_test")
-        m.run_cotan_laplacian_mcvec_test(scale=noise_scale)
+        m.run_cotan_laplacian_mcvec_test()
         print("run_guckenberger_laplacian_mcvec_test")
-        m.run_guckenberger_laplacian_mcvec_test(scale=noise_scale)
+        m.run_guckenberger_laplacian_mcvec_test()
         m.save(data_path)
         M.append(m)
     print("Done")
@@ -81,7 +89,7 @@ def get_mcvec_test_results(run_name="mcvec0"):
     test_results = dict()
     M = load_test_surfs(run_name=run_name)
     test_results["M"] = M
-    test_results["noise_scale"] = M[0].cotan_laplacian_mcvec_results["noise_scale"]
+    # test_results["noise_scale"] = M[0].cotan_laplacian_mcvec_results["noise_scale"]
     test_results["num_vertices"] = np.array([m.num_vertices for m in M])
     test_results["mcvec_actual"] = [m.mcvec_actual for m in M]
     #########
@@ -672,17 +680,19 @@ def surf_mcvec3d(
 # %%
 # noise_scales = [0.0]
 # for n, noise_scale in enumerate(noise_scales):
-#     run_mcvec_tests(run_name=f"mcvec{n}", noise_scale=noise_scale, overwrite=True)
+# run_mcvec_tests(run_name="mcvec0", overwrite=True)
 
 results = get_mcvec_test_results(run_name="mcvec0")
-# m = results["M"][2]
+
 # mv = MeshViewer(*m.data_lists)
 # mv.plot()
 # %%
+
+# %%
 surf_error3d(
     results,
-    lap_method="cotan",
-    num_v=2,
+    lap_method="belkin_fixed",
+    num_v=0,
     num_fixed_s=0,
     num_afe_s=0,
     scale_vec=-1.0,

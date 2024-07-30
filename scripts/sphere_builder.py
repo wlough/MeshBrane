@@ -14,7 +14,7 @@ from src.python.ply_tools import SphereFactory
 # b.write_plys(level=0)
 # v2h = [VertTri2HalfEdgeConverter.from_source_samples(V, F[-1])]
 #
-# SphereFactory.build_test_plys(num_refine=5)
-SphereFactory.build_noisy_test_plys(num_refine=5, noise_scale=0.01)
+SphereFactory.build_test_plys(num_refine=5)
+# SphereFactory.build_noisy_test_plys(num_refine=5, noise_scale=0.01)
 # [12, 42, 162, 642, 2562, 10242]
 # [40968, 163872, 655488]

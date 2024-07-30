@@ -8,6 +8,8 @@ from src.python.half_edge_mesh import HalfEdgeMesh
 from src.python.mesh_viewer import MeshViewer
 from src.python.ply_tools import VertTri2HalfEdgeConverter
 from src.python.utilities import round_to, log_log_fit
+import concurrent.futures
+import multiprocessing as mp
 
 _COLORS_ = [
     "b",  # Blue
@@ -355,14 +357,66 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
 
         return lapY
 
-    def belkin_laplacian(self, s, Q):
+    def _cotan_laplacian(self, Q):
+        """
+        Computes the cotan Laplacian of Q at each vertex
+        """
+        Nv = self.num_vertices
+        lapQ = np.zeros_like(Q)
+        for vi in range(Nv):
+            Atot = 0.0
+            ri = self.xyz_coord_v(vi)
+            qi = Q[vi]
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+            for hij in self.generate_H_out_v_clockwise(vi):
+                hijm1 = self.h_next_h(self.h_twin_h(hij))
+                hijp1 = self.h_twin_h(self.h_prev_h(hij))
+                vjm1 = self.v_head_h(hijm1)
+                vj = self.v_head_h(hij)
+                vjp1 = self.v_head_h(hijp1)
+
+                qj = Q[vj]
+
+                rjm1 = self.xyz_coord_v(vjm1)
+                rj = self.xyz_coord_v(vj)
+                rjp1 = self.xyz_coord_v(vjp1)
+
+                rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
+                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+                ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
+                rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
+                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
+                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+
+                Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
+                Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
+                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
+                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+
+                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
+
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
+
+                cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
+                cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
+
+                Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
+                lapQ[vi] += (cot_thetam + cot_thetap) * (qj - qi) / 2
+            lapQ[vi] /= Atot
+
+        return lapQ
+
+    def belkin_laplacian(self, Q, s):
         """
         Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
         defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
         constant timelike parameter s.
         """
         V = self.xyz_array
-        A = np.array([self.barcell_area(v) for v in self.xyz_coord_V.keys()])
+        A = np.array([self.barcell_area(v) for v in self.Vkeys])
         lapQ = np.array(
             [
                 np.einsum(
@@ -376,6 +430,90 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
         ) / (4 * np.pi * s**2)
 
         return lapQ
+
+    def parallel_belkin_laplacian(self, Q, s):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
+        defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
+        constant timelike parameter s.
+        """
+        Vkeys = sorted(self.xyz_coord_V.keys())
+        V = self.xyz_array
+        A = np.array([self.barcell_area(v) for v in Vkeys])
+        lapQ = np.zeros_like(Q)
+
+        def compute_for_vertex(v):
+            return v, np.einsum(
+                "y,y,y...->...",
+                A,
+                np.exp(-np.linalg.norm(V - V[v], axis=-1) ** 2 / (4 * s)),
+                Q - Q[v],
+            ) / (4 * np.pi * s**2)
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = {executor.submit(compute_for_vertex, v): v for v in Vkeys}
+            for future in concurrent.futures.as_completed(futures):
+                v, lapQv = future.result()
+                lapQ[v] = lapQv
+
+        return lapQ
+
+    def multiprocessing_belkin_laplacian(self, Q, s):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
+        defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
+        constant timelike parameter s.
+        """
+        Vkeys = sorted(self.xyz_coord_V.keys())
+        V = self.xyz_array
+        A = np.array([self.barcell_area(v) for v in Vkeys])
+        lapQ = np.zeros_like(Q)
+
+        def compute_for_vertex(v):
+            return v, np.einsum(
+                "y,y,y...->...",
+                A,
+                np.exp(-np.linalg.norm(V - V[v], axis=-1) ** 2 / (4 * s)),
+                Q - Q[v],
+            ) / (4 * np.pi * s**2)
+
+        with mp.Pool(mp.cpu_count()) as pool:
+            results = pool.map(compute_for_vertex, Vkeys)
+            for v, lapQv in results:
+                lapQ[v] = lapQv
+
+        return lapQ
+
+    # def Avorcell_array(self):
+    #     def compute_for_vertex(v):
+    #         return v, self.vorcell_area(v)
+
+    #     vertex_indices = range(len(self.vertices))
+    #     vorcell_areas = {}
+
+    #     with concurrent.futures.ThreadPoolExecutor() as executor:
+    #         futures = {
+    #             executor.submit(compute_for_vertex, v): v for v in vertex_indices
+    #         }
+    #         for future in concurrent.futures.as_completed(futures):
+    #             v, area = future.result()
+    #             vorcell_areas[v] = area
+
+    #     return vorcell_areas
+    def parallelAbarcell_array(self):
+        def compute_for_vertex(v):
+            return v, self.barcell_area(v)
+
+        Vkeys = self.Vkeys
+        A = np.zeros(len(Vkeys))
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = {executor.submit(compute_for_vertex, v): v for v in Vkeys}
+            for future in concurrent.futures.as_completed(futures):
+                v, area = future.result()
+                A[v] = area
+
+        return A
 
     def guckenberger_laplacian(self, Q):
         """
@@ -401,7 +539,67 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
 
         return lapQ
 
-    def tdiff_laplacian(self, s, Q):
+    def analyticdiff_laplacian(self, Q, s):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using the analytic derivative wrt the time-like parameter s.
+
+        dH_ds(x,y) = (|x-y|^2/4s^2-1/s)*H(x,y)
+        """
+        V = self.xyz_array
+        A = np.array([self.barcell_area(v) for v in self.xyz_coord_V.keys()])
+        lapQ = np.array(
+            [
+                np.einsum(
+                    "y,y,y,y...->...",
+                    np.linalg.norm(V - x, axis=-1) ** 2 / (4 * s**2) - 1 / s,
+                    A,
+                    np.exp(-np.linalg.norm(V - x, axis=-1) ** 2 / (4 * s)),
+                    Q,
+                )
+                for x, q in zip(V, Q)
+            ]
+        ) / (4 * np.pi * s)
+
+        return lapQ
+
+    def analyticdiffextrap_laplacian(self, Q, s):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using the analytic derivative wrt the time-like parameter s.
+
+        dH_ds(x,y) = (|x-y|^2/4s^2-1/s)*H(x,y)
+        """
+        V = self.xyz_array
+        A = np.array([self.barcell_area(v) for v in self.xyz_coord_V.keys()])
+        lapQ1 = np.array(
+            [
+                np.einsum(
+                    "y,y,y,y...->...",
+                    np.linalg.norm(V - x, axis=-1) ** 2 / (4 * s**2) - 1 / s,
+                    A,
+                    np.exp(-np.linalg.norm(V - x, axis=-1) ** 2 / (4 * s)),
+                    Q,
+                )
+                for x, q in zip(V, Q)
+            ]
+        ) / (4 * np.pi * s)
+
+        s = s / 2
+        lapQ2 = np.array(
+            [
+                np.einsum(
+                    "y,y,y,y...->...",
+                    np.linalg.norm(V - x, axis=-1) ** 2 / (4 * s**2) - 1 / s,
+                    A,
+                    np.exp(-np.linalg.norm(V - x, axis=-1) ** 2 / (4 * s)),
+                    Q,
+                )
+                for x, q in zip(V, Q)
+            ]
+        ) / (4 * np.pi * s)
+
+        return 2 * lapQ2 - lapQ1
+
+    def findiff0_laplacian(self, Q, s):
         """
         Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
         defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
@@ -424,7 +622,7 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
         return lapQ
 
     # Gradient operators
-    def belkin_gradient(self, s, Q):
+    def belkin_gradient(self, Q, s):
         """computes the heat kernel gradient of Q at each vertex"""
         V = self.xyz_array
         A = np.array([self.barcell_area(v) for v in self.xyz_coord_V.keys()])
@@ -443,16 +641,14 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
 
         return gradQ
 
-    def run_belkin_laplacian_mcvec_fixed_heat_param_test(
-        self, heat_param_vals, loc=0, scale=0
-    ):
-        if scale != 0:
-            self.perturbation_gaussian_surfcoords(loc, scale)
-            self.xyz_coord_V = self.compute_xyz_from_surfcoord()
-            self.mean_curvature = self.compute_mean_curvature()
-            self.unit_normal = self.compute_unit_normal()
+    def run_belkin_laplacian_mcvec_fixed_heat_param_test(self, heat_param_vals):
+        # if scale != 0:
+        #     self.perturbation_gaussian_surfcoords(loc, scale)
+        #     self.xyz_coord_V = self.compute_xyz_from_surfcoord()
+        #     self.mean_curvature = self.compute_mean_curvature()
+        #     self.unit_normal = self.compute_unit_normal()
         mcvec = np.array(
-            [self.belkin_laplacian(s, self.xyz_array) for s in heat_param_vals]
+            [self.belkin_laplacian(self.xyz_array, s) for s in heat_param_vals]
         )
         L2error = np.array(
             [
@@ -473,21 +669,24 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
             "mcvec": mcvec,
             "L2error": L2error,
             "Linftyerror": Linftyerror,
-            "noise_scale": scale,
+            # "noise_scale": scale,
         }
         self.belkin_laplacian_mcvec_fixed_heat_param_results = results
         return results
 
-    def run_belkin_laplacian_mcvec_average_face_area_test(self, loc=0, scale=0):
-        if scale != 0:
-            self.perturbation_gaussian_surfcoords(loc, scale)
-            self.xyz_coord_V = self.compute_xyz_from_surfcoord()
-            self.mean_curvature = self.compute_mean_curvature()
-            self.unit_normal = self.compute_unit_normal()
-        Af = self.average_face_area()
-        heat_param_vals = np.array([np.sqrt(Af), Af, Af**2])
+    def run_analyticdiffextrap_laplacian_mcvec_fixed_heat_param_test(
+        self, heat_param_vals
+    ):
+        # if scale != 0:
+        #     self.perturbation_gaussian_surfcoords(loc, scale)
+        #     self.xyz_coord_V = self.compute_xyz_from_surfcoord()
+        #     self.mean_curvature = self.compute_mean_curvature()
+        #     self.unit_normal = self.compute_unit_normal()
         mcvec = np.array(
-            [self.belkin_laplacian(s, self.xyz_array) for s in heat_param_vals]
+            [
+                self.analyticdiffextrap_laplacian(self.xyz_array, s)
+                for s in heat_param_vals
+            ]
         )
         L2error = np.array(
             [
@@ -508,17 +707,53 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
             "mcvec": mcvec,
             "L2error": L2error,
             "Linftyerror": Linftyerror,
-            "noise_scale": scale,
+            # "noise_scale": scale,
+        }
+        # self.analyticdiffextrap_laplacian_mcvec_fixed_heat_param_results = results
+        self.belkin_laplacian_mcvec_fixed_heat_param_results = results
+        return results
+
+    def run_belkin_laplacian_mcvec_average_face_area_test(self):
+        # if scale != 0:
+        #     self.perturbation_gaussian_surfcoords(loc, scale)
+        #     self.xyz_coord_V = self.compute_xyz_from_surfcoord()
+        #     self.mean_curvature = self.compute_mean_curvature()
+        #     self.unit_normal = self.compute_unit_normal()
+        Af = self.average_face_area()
+        heat_param_vals = np.array([np.sqrt(Af), Af, Af**2])
+        mcvec = np.array(
+            [self.belkin_laplacian(self.xyz_array, s) for s in heat_param_vals]
+        )
+        L2error = np.array(
+            [
+                np.linalg.norm((_ - self.mcvec_actual).ravel())
+                / np.linalg.norm(self.mcvec_actual.ravel())
+                for _ in mcvec
+            ]
+        )
+        Linftyerror = np.array(
+            [
+                np.linalg.norm((_ - self.mcvec_actual).ravel(), np.inf)
+                / np.linalg.norm(self.mcvec_actual.ravel(), np.inf)
+                for _ in mcvec
+            ]
+        )
+        results = {
+            "heat_param": np.array(heat_param_vals),
+            "mcvec": mcvec,
+            "L2error": L2error,
+            "Linftyerror": Linftyerror,
+            # "noise_scale": scale,
         }
         self.belkin_laplacian_mcvec_average_face_area_results = results
         return results
 
-    def run_cotan_laplacian_mcvec_test(self, loc=0, scale=0):
-        if scale != 0:
-            self.perturbation_gaussian_surfcoords(loc, scale)
-            self.xyz_coord_V = self.compute_xyz_from_surfcoord()
-            self.mean_curvature = self.compute_mean_curvature()
-            self.unit_normal = self.compute_unit_normal()
+    def run_cotan_laplacian_mcvec_test(self):
+        # if scale != 0:
+        #     self.perturbation_gaussian_surfcoords(loc, scale)
+        #     self.xyz_coord_V = self.compute_xyz_from_surfcoord()
+        #     self.mean_curvature = self.compute_mean_curvature()
+        #     self.unit_normal = self.compute_unit_normal()
         mcvec = self.cotan_laplacian(self.xyz_array)
         L2error = np.linalg.norm((mcvec - self.mcvec_actual).ravel()) / np.linalg.norm(
             self.mcvec_actual.ravel()
@@ -530,17 +765,17 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
             "mcvec": mcvec,
             "L2error": L2error,
             "Linftyerror": Linftyerror,
-            "noise_scale": scale,
+            # "noise_scale": scale,
         }
         self.cotan_laplacian_mcvec_results = results
         return results
 
-    def run_guckenberger_laplacian_mcvec_test(self, loc=0, scale=0):
-        if scale != 0:
-            self.perturbation_gaussian_surfcoords(loc, scale)
-            self.xyz_coord_V = self.compute_xyz_from_surfcoord()
-            self.mean_curvature = self.compute_mean_curvature()
-            self.unit_normal = self.compute_unit_normal()
+    def run_guckenberger_laplacian_mcvec_test(self):
+        # if scale != 0:
+        #     self.perturbation_gaussian_surfcoords(loc, scale)
+        #     self.xyz_coord_V = self.compute_xyz_from_surfcoord()
+        #     self.mean_curvature = self.compute_mean_curvature()
+        #     self.unit_normal = self.compute_unit_normal()
         mcvec = self.guckenberger_laplacian(self.xyz_array)
         L2error = np.linalg.norm((mcvec - self.mcvec_actual).ravel()) / np.linalg.norm(
             self.mcvec_actual.ravel()
@@ -552,7 +787,7 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
             "mcvec": mcvec,
             "L2error": L2error,
             "Linftyerror": Linftyerror,
-            "noise_scale": scale,
+            # "noise_scale": scale,
         }
         self.guckenberger_laplacian_mcvec_results = results
         return results
@@ -620,7 +855,7 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
     #     self.timelike_param = timelike_param
     #     self.mcvec_cotan = self.cotan_laplacian(self.xyz_array)
     #     self.mcvec_belkin = [
-    #         self.belkin_laplacian(s, self.xyz_array) for s in timelike_param
+    #         self.belkin_laplacian(self.xyz_array, s) for s in timelike_param
     #     ]
 
     #     phi = np.arctan2(self.xyz_array[:, 1], self.xyz_array[:, 0])
@@ -742,7 +977,7 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
 
     def _run_belkin_laplacian_mcvec_fixed_param_test(self, heat_param_vals):
         mcvec = np.array(
-            [self.belkin_laplacian(s, self.xyz_array) for s in heat_param_vals]
+            [self.belkin_laplacian(self.xyz_array, s) for s in heat_param_vals]
         )
         L2error = np.array(
             [
@@ -771,7 +1006,7 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
         Af = self.average_face_area()
         heat_param_vals = np.array([Af**2, Af, np.sqrt(Af)])
         mcvec = np.array(
-            [self.belkin_laplacian(s, self.xyz_array) for s in heat_param_vals]
+            [self.belkin_laplacian(self.xyz_array, s) for s in heat_param_vals]
         )
         L2error = np.array(
             [
@@ -982,3 +1217,94 @@ class HalfEdgeTestTorus(HalfEdgeTestSurf):
         ny = np.sin(phi) * np.cos(psi)
         nz = np.sin(psi)
         return np.array([nx, ny, nz]).T
+
+
+class LaplaceOperator:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def apply(self, samples, *args, **kwargs):
+        return 0 * samples
+
+
+class BelkinLaplacian(LaplaceOperator):
+    def __init__(self):
+        super().__init__()
+
+    def apply(self, Q, *args):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
+        defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
+        constant timelike parameter s.
+        """
+        X, A, s = args
+        lapQ = np.array(
+            [
+                np.einsum(
+                    "y,y,y...->...",
+                    A,
+                    np.exp(-np.linalg.norm(X - x, axis=-1) ** 2 / (4 * s)),
+                    Q - q,
+                )
+                for x, q in zip(X, Q)
+            ]
+        ) / (4 * np.pi * s**2)
+
+        return lapQ
+
+
+class CotanLaplacian(LaplaceOperator):
+    def __init__(self):
+        super().__init__()
+
+    def apply(self, Q, *args):
+        """
+        Computes the cotan Laplacian of Q at each vertex
+        """
+        Nv = self.num_vertices
+        lapQ = np.zeros_like(Q)
+        for vi in range(Nv):
+            Atot = 0.0
+            ri = self.xyz_coord_v(vi)
+            qi = Q[vi]
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+            for hij in self.generate_H_out_v_clockwise(vi):
+                hijm1 = self.h_next_h(self.h_twin_h(hij))
+                hijp1 = self.h_twin_h(self.h_prev_h(hij))
+                vjm1 = self.v_head_h(hijm1)
+                vj = self.v_head_h(hij)
+                vjp1 = self.v_head_h(hijp1)
+
+                qj = Q[vj]
+
+                rjm1 = self.xyz_coord_v(vjm1)
+                rj = self.xyz_coord_v(vj)
+                rjp1 = self.xyz_coord_v(vjp1)
+
+                rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
+                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+                ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
+                rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
+                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
+                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+
+                Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
+                Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
+                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
+                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+
+                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
+
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
+
+                cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
+                cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
+
+                Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
+                lapQ[vi] += (cot_thetam + cot_thetap) * (qj - qi) / 2
+            lapQ[vi] /= Atot
+
+        return lapQ

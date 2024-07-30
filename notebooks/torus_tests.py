@@ -11,6 +11,7 @@ from src.python.half_edge_test import (
 )
 from src.python.half_edge_test import HalfEdgeTestTorus as TestSurf
 
+# need to switch s,Q->Q,s
 # %%
 _TEST_DIR_ = "./output/torus_tests"
 _NUM_VERTS_ = [192, 768, 3072, 12288]  # [192, 768, 3072, 12288, 49152, 196608]
