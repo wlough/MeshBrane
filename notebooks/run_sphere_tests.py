@@ -81,6 +81,6 @@ def load_test_surfs(
 # %%
 # noise_scales = [0.0]
 # for n, noise_scale in enumerate(noise_scales):
-run_mcvec_tests(run_name="mcvec", overwrite=True)
+# run_mcvec_tests(run_name="mcvec", overwrite=True)
 
 # results = get_mcvec_test_results(run_name="mcvec0")
