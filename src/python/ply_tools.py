@@ -2,6 +2,11 @@ from plyfile import PlyData, PlyElement, PlyListProperty  # , #PlyProperty
 import numpy as np
 from src.python.combinatorics import inverse
 import sympy as sp
+from src.python.jit_utils import (
+    jit_get_halfedge_index_of_twin,
+    jit_vf_samples_to_he_samples,
+    jit_refine_icososphere,
+)
 
 
 class PlySchema:
@@ -628,6 +633,17 @@ class VertTri2HalfEdgeConverter(PlyConverter):
         return cls(source_ply_data)
 
     @classmethod
+    def jit_from_source_samples(cls, *source_samples):
+        source_ply_schema = VertexTriListSchema()
+        source_ply_data = source_ply_schema.samples_to_ply_data(*source_samples)
+        c = cls()
+        c._source_ply_data = source_ply_data
+        c._source_samples = c.source_ply_schema.ply_data_to_samples(c.source_ply_data)
+        c._target_samples = c.jit_source_samples_to_target_samples(*c._source_samples)
+        c._target_ply_data = c.target_ply_schema.samples_to_ply_data(*c._target_samples)
+        return c
+
+    @classmethod
     def from_target_samples(cls, *target_samples):
         target_ply_schema = HalfEdgeSchema()
         pc = cls(
@@ -773,15 +789,42 @@ class VertTri2HalfEdgeConverter(PlyConverter):
         source_samples = (xyz_coord_V, F)
         return source_samples
 
+    def jit_index_of_twin(self, H, h):
+        return jit_get_halfedge_index_of_twin(H, h)
+
+    def jit_source_samples_to_target_samples(self, *source_samples):
+        _V, _F = source_samples
+        V = np.array(_V)  # [xyz.tolist() for xyz in _V]
+        F = np.array(_F)
+        # print(f"{V=}")
+        # print(f"{F=}")
+        return jit_vf_samples_to_he_samples(V, F)
+
 
 ##################################################
 class SphereFactory:
     """
-    icosahedron (20 triangles; 12 vertices)
+    subdivides icosahedron (20 triangles; 12 vertices) to create meshes of unit sphere
     """
 
-    def __init__(self):
-        self._name = "unit_sphere"
+    def __init__(self, name="unit_sphere", jit=False):
+        self._NUM_VERTICES_ = [
+            12,
+            42,
+            162,
+            642,
+            2562,
+            10242,
+            40962,
+            163842,
+            "...",
+            "...",
+            "...",
+            "...",
+            "...",
+        ]
+        self._name = name
+        self.jit = jit
         r = 1.0
         self.r = r
         phi = (1.0 + np.sqrt(5.0)) * 0.5  # golden ratio
@@ -829,7 +872,14 @@ class SphereFactory:
         self._num_vertices = [len(V0)]
         self.F = [F0]
         self.V = V0
-        self.v2h = [VertTri2HalfEdgeConverter.from_source_samples(*self.VF())]
+        # self.v2h = [VertTri2HalfEdgeConverter.from_source_samples(*self.VF())]
+        self.v2h = [self.v2h_from_source_samples()]
+
+    def v2h_from_source_samples(self):
+        if self.jit:
+            return VertTri2HalfEdgeConverter.jit_from_source_samples(*self.VF())
+        else:
+            return VertTri2HalfEdgeConverter.from_source_samples(*self.VF())
 
     def VF(self, level=-1):
         return self.V[: self.num_vertices(level)], self.F[level]
@@ -837,13 +887,17 @@ class SphereFactory:
     def num_vertices(self, level=-1):
         return self._num_vertices[level]
 
+    def next_num_vertices(self):
+        level = len(self._num_vertices)
+        return self._NUM_VERTICES_[level]
+
     @property
     def name(self):
         return self._name
 
-    def refine(self, convert_to_half_edge=True):
+    def py_refine(self, convert_to_half_edge=True):
         print(f"Refining {self.name}...")
-        print(f"num_vertices: {self.num_vertices()}-->...")
+        print(f"num_vertices: {self.num_vertices()}-->{self.next_num_vertices()}")
         F = []
         v_midpt_vv = dict()
         for tri in self.F[-1]:
@@ -880,7 +934,29 @@ class SphereFactory:
         self._num_vertices.append(len(self.V))
         if convert_to_half_edge:
             print("Converting to half-edge mesh...")
-            self.v2h.append(VertTri2HalfEdgeConverter.from_source_samples(*self.VF()))
+            # self.v2h.append(VertTri2HalfEdgeConverter.from_source_samples(*self.VF()))
+            self.v2h.append(self.v2h_from_source_samples())
+
+    def jit_refine(self, convert_to_half_edge=True):
+        print(f"Refining {self.name}...")
+        print(f"num_vertices: {self.num_vertices()}-->{self.next_num_vertices()}")
+        # selfV, F= jit_refine_icososphere(*self.VF(), self.r)
+        _V, _F = self.VF()
+        V, F = np.array(_V), np.array(_F, dtype=np.int32)
+        self.V, _F = jit_refine_icososphere(V, F, self.r)
+        self.F.append(_F)
+
+        self._num_vertices.append(len(self.V))
+        if convert_to_half_edge:
+            print("Converting to half-edge mesh...")
+            # self.v2h.append(VertTri2HalfEdgeConverter.from_source_samples(*self.VF()))
+            self.v2h.append(self.v2h_from_source_samples())
+
+    def refine(self, convert_to_half_edge=True):
+        if self.jit:
+            self.jit_refine(convert_to_half_edge=convert_to_half_edge)
+        else:
+            self.py_refine(convert_to_half_edge=convert_to_half_edge)
 
     def _write_plys(self, level=-1):
         ply_file = f"{self.name}_{self.num_vertices(level):05d}.ply"
@@ -908,13 +984,14 @@ class SphereFactory:
             print(f"Done writing {self.name} plys.")
 
     @classmethod
-    def build_test_plys(cls, num_refine=5):
-        b = cls()
+    def build_test_plys(cls, num_refine=5, jit=False, name="unit_sphere"):
+        b = cls(jit=jit, name=name)
         b.write_plys(level=0)
         for level in range(1, num_refine + 1):
             b.refine()
             b.write_plys(level=level)
         print("Done.")
+        return b
 
     @classmethod
     def from_unit_sphere_VF(cls, V, F):
@@ -924,15 +1001,6 @@ class SphereFactory:
         b._num_vertices = [len(V)]
         # b.v2h = [VertTri2HalfEdgeConverter.from_source_samples(V, F[-1])]
         return b
-
-    @classmethod
-    def build_test_plys(cls, num_refine=5):
-        b = cls()
-        b.write_plys(level=0)
-        for level in range(1, num_refine + 1):
-            b.refine()
-            b.write_plys(level=level)
-        print("Done.")
 
     @classmethod
     def build_noisy_test_plys(cls, num_refine=5, noise_scale=0.01):

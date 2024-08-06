@@ -28,7 +28,8 @@ def log_log_fit(X, Y):
     Ainv = np.array([[a22, -a12], [-a21, a11]]) / detA
     m, b = Ainv @ u
     F = m * logX + b
-    return {"m": m, "b": b, "F": F, "logX": logX, "logY": logY}
+    fun = lambda x: np.exp(b) * x**m
+    return {"m": m, "b": b, "F": F, "logX": logX, "logY": logY, "fun": fun}
 
 
 #############################################

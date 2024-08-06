@@ -466,6 +466,15 @@ class HalfEdgeMeshBase:
         )
 
     @property
+    def V_of_H(self):
+        return np.array(
+            [
+                [self.v_origin_h(h), self.v_head_h(h)]
+                for h in sorted(self.v_origin_H.keys())
+            ]
+        )
+
+    @property
     def data_lists(self):
         """
         Get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...

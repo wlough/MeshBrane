@@ -305,7 +305,7 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
                     self.flip_edge(h)
 
     # Laplace operators
-    def cotan_laplacian(self, Y):
+    def _cotan_laplacian(self, Y):
         """
         Computes the cotan Laplacian of Y at each vertex
         """
@@ -357,7 +357,7 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
 
         return lapY
 
-    def _cotan_laplacian(self, Q):
+    def cotan_laplacian(self, Q):
         """
         Computes the cotan Laplacian of Q at each vertex
         """
@@ -484,22 +484,6 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
 
         return lapQ
 
-    # def Avorcell_array(self):
-    #     def compute_for_vertex(v):
-    #         return v, self.vorcell_area(v)
-
-    #     vertex_indices = range(len(self.vertices))
-    #     vorcell_areas = {}
-
-    #     with concurrent.futures.ThreadPoolExecutor() as executor:
-    #         futures = {
-    #             executor.submit(compute_for_vertex, v): v for v in vertex_indices
-    #         }
-    #         for future in concurrent.futures.as_completed(futures):
-    #             v, area = future.result()
-    #             vorcell_areas[v] = area
-
-    #     return vorcell_areas
     def parallelAbarcell_array(self):
         def compute_for_vertex(v):
             return v, self.barcell_area(v)
@@ -566,7 +550,7 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
         """
         Computes the heat kernel Laplacian of Q at each vertex using the analytic derivative wrt the time-like parameter s.
 
-        dH_ds(x,y) = (|x-y|^2/4s^2-1/s)*H(x,y)
+        dH_ds(x,y) = (|x-y|^2/4s^2-1/s)*H(x,y)=(|x-y|^2/4s-1)*(1/s)*H(x,y)
         """
         V = self.xyz_array
         A = np.array([self.barcell_area(v) for v in self.xyz_coord_V.keys()])
@@ -596,6 +580,17 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
                 for x, q in zip(V, Q)
             ]
         ) / (4 * np.pi * s)
+        # lapQ1 = np.array(
+        #     [
+        #         np.einsum(
+        #             "y,y,y...->...",
+        #             A,
+        #             np.exp(-np.linalg.norm(V - x, axis=-1) ** 2 / (4 * s)),
+        #             Q - q,
+        #         )
+        #         for x, q in zip(V, Q)
+        #     ]
+        # ) / (4 * np.pi * s**2)
 
         return 2 * lapQ2 - lapQ1
 
@@ -1219,7 +1214,7 @@ class HalfEdgeTestTorus(HalfEdgeTestSurf):
         return np.array([nx, ny, nz]).T
 
 
-class LaplaceOperator:
+class LaplaceTestOperator:
     def __init__(self, *args, **kwargs):
         pass
 
@@ -1227,59 +1222,34 @@ class LaplaceOperator:
         return 0 * samples
 
 
-class BelkinLaplacian(LaplaceOperator):
-    def __init__(self):
+class CotanLaplacian(LaplaceTestOperator):
+    def __init__(self, mesh):
         super().__init__()
-
-    def apply(self, Q, *args):
-        """
-        Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
-        defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
-        constant timelike parameter s.
-        """
-        X, A, s = args
-        lapQ = np.array(
-            [
-                np.einsum(
-                    "y,y,y...->...",
-                    A,
-                    np.exp(-np.linalg.norm(X - x, axis=-1) ** 2 / (4 * s)),
-                    Q - q,
-                )
-                for x, q in zip(X, Q)
-            ]
-        ) / (4 * np.pi * s**2)
-
-        return lapQ
-
-
-class CotanLaplacian(LaplaceOperator):
-    def __init__(self):
-        super().__init__()
+        self.mesh = mesh
 
     def apply(self, Q, *args):
         """
         Computes the cotan Laplacian of Q at each vertex
         """
-        Nv = self.num_vertices
+        Nv = self.mesh.num_vertices
         lapQ = np.zeros_like(Q)
         for vi in range(Nv):
             Atot = 0.0
-            ri = self.xyz_coord_v(vi)
+            ri = self.mesh.xyz_coord_v(vi)
             qi = Q[vi]
             ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-            for hij in self.generate_H_out_v_clockwise(vi):
-                hijm1 = self.h_next_h(self.h_twin_h(hij))
-                hijp1 = self.h_twin_h(self.h_prev_h(hij))
-                vjm1 = self.v_head_h(hijm1)
-                vj = self.v_head_h(hij)
-                vjp1 = self.v_head_h(hijp1)
+            for hij in self.mesh.generate_H_out_v_clockwise(vi):
+                hijm1 = self.mesh.h_next_h(self.mesh.h_twin_h(hij))
+                hijp1 = self.mesh.h_twin_h(self.mesh.h_prev_h(hij))
+                vjm1 = self.mesh.v_head_h(hijm1)
+                vj = self.mesh.v_head_h(hij)
+                vjp1 = self.mesh.v_head_h(hijp1)
 
                 qj = Q[vj]
 
-                rjm1 = self.xyz_coord_v(vjm1)
-                rj = self.xyz_coord_v(vj)
-                rjp1 = self.xyz_coord_v(vjp1)
+                rjm1 = self.mesh.xyz_coord_v(vjm1)
+                rj = self.mesh.xyz_coord_v(vj)
+                rjp1 = self.mesh.xyz_coord_v(vjp1)
 
                 rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
                 rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
@@ -1308,3 +1278,136 @@ class CotanLaplacian(LaplaceOperator):
             lapQ[vi] /= Atot
 
         return lapQ
+
+
+class BelkinLaplacian(LaplaceTestOperator):
+    def __init__(self):
+        super().__init__()
+
+    def apply(self, Q, *args):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
+        defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
+        constant timelike parameter s.
+        """
+        X, A, s = args
+        lapQ = np.array(
+            [
+                np.einsum(
+                    "y,y,y...->...",
+                    A,
+                    np.exp(-np.linalg.norm(X - x, axis=-1) ** 2 / (4 * s)),
+                    Q - q,
+                )
+                for x, q in zip(X, Q)
+            ]
+        ) / (4 * np.pi * s**2)
+
+        return lapQ
+
+
+class GuckenbergerLaplacian(LaplaceTestOperator):
+    def __init__(self):
+        super().__init__()
+
+    def apply(self, Q, *args):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using 'Method D' from
+        Guckenberger et al 2016 'On the bending algorithms for soft objects in flows'.
+        This is a modification of Belkin et al's which replaces the constant time-like
+        parameter s with the mixed area of the dual cell at each vertex.
+        """
+        # V = self.xyz_array
+        # A = np.array([self.barcell_area(v) for v in self.xyz_coord_V.keys()])
+        # S = np.array([self.meyercell_area(v) for v in self.xyz_coord_V.keys()])
+        X, A, S = args
+        lapQ = np.array(
+            [
+                np.einsum(
+                    "y,y,y...->...",
+                    A / (4 * np.pi * s**2),
+                    np.exp(-np.linalg.norm(X - x, axis=-1) ** 2 / (4 * s)),
+                    Q - q,
+                )
+                for x, q, s in zip(X, Q, S)
+            ]
+        )
+
+        return lapQ
+
+
+class AnalyticDiffLaplacian(LaplaceTestOperator):
+    def __init__(self, mesh):
+        super().__init__(mesh)
+
+    def analyticdiffextrap_laplacian(self, Q, *args):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using the analytic derivative wrt the time-like parameter s.
+
+        dH_ds(x,y) = (|x-y|^2/4s^2-1/s)*H(x,y)
+        """
+        X, A, s = args
+        # V = self.xyz_array
+        # A = np.array([self.barcell_area(v) for v in self.xyz_coord_V.keys()])
+        lapQ1 = np.array(
+            [
+                np.einsum(
+                    "y,y,y,y...->...",
+                    np.linalg.norm(X - x, axis=-1) ** 2 / (4 * s**2) - 1 / s,
+                    A,
+                    np.exp(-np.linalg.norm(X - x, axis=-1) ** 2 / (4 * s)),
+                    Q,
+                )
+                for x, q in zip(X, Q)
+            ]
+        ) / (4 * np.pi * s)
+
+        s = s / 2
+        lapQ2 = np.array(
+            [
+                np.einsum(
+                    "y,y,y,y...->...",
+                    np.linalg.norm(X - x, axis=-1) ** 2 / (4 * s**2) - 1 / s,
+                    A,
+                    np.exp(-np.linalg.norm(X - x, axis=-1) ** 2 / (4 * s)),
+                    Q,
+                )
+                for x, q in zip(X, Q)
+            ]
+        ) / (4 * np.pi * s)
+
+        return 2 * lapQ2 - lapQ1
+
+
+def run_belkin_laplacian_mcvec_fixed_heat_param_test(self, heat_param_vals):
+    # if scale != 0:
+    #     self.perturbation_gaussian_surfcoords(loc, scale)
+    #     self.xyz_coord_V = self.compute_xyz_from_surfcoord()
+    #     self.mean_curvature = self.compute_mean_curvature()
+    #     self.unit_normal = self.compute_unit_normal()
+    mcvec = np.array(
+        [self.belkin_laplacian(self.xyz_array, s) for s in heat_param_vals]
+    )
+    L2error = np.array(
+        [
+            np.linalg.norm((_ - self.mcvec_actual).ravel())
+            / np.linalg.norm(self.mcvec_actual.ravel())
+            for _ in mcvec
+        ]
+    )
+    Linftyerror = np.array(
+        [
+            np.linalg.norm((_ - self.mcvec_actual).ravel(), np.inf)
+            / np.linalg.norm(self.mcvec_actual.ravel(), np.inf)
+            for _ in mcvec
+        ]
+    )
+    results = {
+        "heat_param": np.array(heat_param_vals),
+        "mcvec": mcvec,
+        "L2error": L2error,
+        "Linftyerror": Linftyerror,
+        # "noise_scale": scale,
+    }
+    self.belkin_laplacian_mcvec_fixed_heat_param_results = results
+    return results
