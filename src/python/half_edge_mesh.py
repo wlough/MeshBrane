@@ -1095,6 +1095,15 @@ class HalfEdgeMesh(HalfEdgeMeshBase):
         if self.h_bound_f(f1) == h4:
             self.update_face(f1, h_bound=h5)
 
+    def flip_non_delaunay(self):
+        flip_count = 0
+        for h in self.Hkeys:
+            if not self.h_is_locally_delaunay(h):
+                if self.h_is_flippable(h):
+                    self.flip_edge(h)
+                    flip_count += 1
+        return flip_count
+
     @property
     def v_new(self):
         return max(self._xyz_coord_V.keys()) + 1

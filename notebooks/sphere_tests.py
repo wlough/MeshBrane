@@ -97,12 +97,18 @@ def get_mcvec_test_results(run_name="mcvec0"):
     # Cotan #
     #########
     test_results["cotan_mcvec"] = [m.cotan_laplacian_mcvec_results["mcvec"] for m in M]
-    test_results["cotan_L2error"] = np.array([m.cotan_laplacian_mcvec_results["L2error"] for m in M])
-    test_results["cotan_Linftyerror"] = np.array([m.cotan_laplacian_mcvec_results["Linftyerror"] for m in M])
+    test_results["cotan_L2error"] = np.array(
+        [m.cotan_laplacian_mcvec_results["L2error"] for m in M]
+    )
+    test_results["cotan_Linftyerror"] = np.array(
+        [m.cotan_laplacian_mcvec_results["Linftyerror"] for m in M]
+    )
     #########################################################
     # Guckenberger with local heat_param=Meyer's mixed area #
     #########################################################
-    test_results["guckenberger_mcvec"] = [m.guckenberger_laplacian_mcvec_results["mcvec"] for m in M]
+    test_results["guckenberger_mcvec"] = [
+        m.guckenberger_laplacian_mcvec_results["mcvec"] for m in M
+    ]
     test_results["guckenberger_L2error"] = np.array(
         [m.guckenberger_laplacian_mcvec_results["L2error"] for m in M]
     )
@@ -112,7 +118,9 @@ def get_mcvec_test_results(run_name="mcvec0"):
     #######################################################
     # Belkin with fixed values for heat_param=[s0,s1,...] #
     #######################################################
-    num_heat_param = len(M[0].belkin_laplacian_mcvec_fixed_heat_param_results["heat_param"])
+    num_heat_param = len(
+        M[0].belkin_laplacian_mcvec_fixed_heat_param_results["heat_param"]
+    )
     test_results["belkin_fixed_mcvec"] = [
         [m.belkin_laplacian_mcvec_fixed_heat_param_results["mcvec"][n_param] for m in M]
         for n_param in range(num_heat_param)
@@ -125,13 +133,21 @@ def get_mcvec_test_results(run_name="mcvec0"):
     )
     test_results["belkin_fixed_L2error"] = np.array(
         [
-            [m.belkin_laplacian_mcvec_fixed_heat_param_results["L2error"][n_param] for m in M]
+            [
+                m.belkin_laplacian_mcvec_fixed_heat_param_results["L2error"][n_param]
+                for m in M
+            ]
             for n_param in range(num_heat_param)
         ]
     )
     test_results["belkin_fixed_Linftyerror"] = np.array(
         [
-            [m.belkin_laplacian_mcvec_fixed_heat_param_results["Linftyerror"][n_param] for m in M]
+            [
+                m.belkin_laplacian_mcvec_fixed_heat_param_results["Linftyerror"][
+                    n_param
+                ]
+                for m in M
+            ]
             for n_param in range(num_heat_param)
         ]
     )
@@ -139,26 +155,44 @@ def get_mcvec_test_results(run_name="mcvec0"):
     # Belkin with heat_param=[sqrt(Af), Af, Af**2] #
     # where Af=average face area                   #
     ################################################
-    num_heat_param = len(M[0].belkin_laplacian_mcvec_average_face_area_results["heat_param"])
+    num_heat_param = len(
+        M[0].belkin_laplacian_mcvec_average_face_area_results["heat_param"]
+    )
     test_results["belkin_afe_mcvec"] = [
-        [m.belkin_laplacian_mcvec_average_face_area_results["mcvec"][n_param] for m in M]
+        [
+            m.belkin_laplacian_mcvec_average_face_area_results["mcvec"][n_param]
+            for m in M
+        ]
         for n_param in range(num_heat_param)
     ]
     test_results["belkin_afe_heat_param"] = np.array(
         [
-            [m.belkin_laplacian_mcvec_average_face_area_results["heat_param"][n_param] for m in M]
+            [
+                m.belkin_laplacian_mcvec_average_face_area_results["heat_param"][
+                    n_param
+                ]
+                for m in M
+            ]
             for n_param in range(num_heat_param)
         ]
     )
     test_results["belkin_afe_L2error"] = np.array(
         [
-            [m.belkin_laplacian_mcvec_average_face_area_results["L2error"][n_param] for m in M]
+            [
+                m.belkin_laplacian_mcvec_average_face_area_results["L2error"][n_param]
+                for m in M
+            ]
             for n_param in range(num_heat_param)
         ]
     )
     test_results["belkin_afe_Linftyerror"] = np.array(
         [
-            [m.belkin_laplacian_mcvec_average_face_area_results["Linftyerror"][n_param] for m in M]
+            [
+                m.belkin_laplacian_mcvec_average_face_area_results["Linftyerror"][
+                    n_param
+                ]
+                for m in M
+            ]
             for n_param in range(num_heat_param)
         ]
     )
@@ -246,7 +280,9 @@ def single_plot_L2_fit(
             y_fit = fit_dict["F"]
             y = fit_dict["logY"]
             x = fit_dict["logX"]
-            fit_label = r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+            fit_label = (
+                r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+            )
             sample_label = r"$s_B=" + param_tex[_] + r"$"
             ax.plot(x, y_fit, linestyle=linestyle, color=color, label=fit_label)
             ax.plot(x, y, marker, color=color, label=sample_label)
@@ -284,7 +320,9 @@ def single_plot_L2_fit(
             y_fit = fit_dict["F"]
             y = fit_dict["logY"]
             x = fit_dict["logX"]
-            fit_label = r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+            fit_label = (
+                r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+            )
             sample_label = sample_labels[_]
             ax.plot(x, y_fit, linestyle=linestyle, color=color, label=fit_label)
             ax.plot(x, y, marker, color=color, label=sample_label)
@@ -429,7 +467,9 @@ def single_plot_Linfty_fit(
             y_fit = fit_dict["F"]
             y = fit_dict["logY"]
             x = fit_dict["logX"]
-            fit_label = r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+            fit_label = (
+                r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+            )
             sample_label = r"$s_B=" + param_tex[_] + r"$"
             ax.plot(x, y_fit, linestyle=linestyle, color=color, label=fit_label)
             ax.plot(x, y, marker, color=color, label=sample_label)
@@ -467,7 +507,9 @@ def single_plot_Linfty_fit(
             y_fit = fit_dict["F"]
             y = fit_dict["logY"]
             x = fit_dict["logX"]
-            fit_label = r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+            fit_label = (
+                r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+            )
             sample_label = sample_labels[_]
             ax.plot(x, y_fit, linestyle=linestyle, color=color, label=fit_label)
             ax.plot(x, y, marker, color=color, label=sample_label)
@@ -639,9 +681,9 @@ def surf_mcvec3d(
 # %%
 # noise_scales = [0.0]
 # for n, noise_scale in enumerate(noise_scales):
-run_mcvec_tests(run_name="mcvec0", overwrite=True)
+# run_mcvec_tests(run_name="mcvec0", overwrite=True)
 
-# results = get_mcvec_test_results(run_name="mcvec0")
+results = get_mcvec_test_results(run_name="mcvec")
 
 # mv = MeshViewer(*m.data_lists)
 # mv.plot()
@@ -701,7 +743,9 @@ single_plot_Linfty_fit(
 
 
 # %%
-def make_noisy_sphere_data(output_dir="./output/noisy_sphere_tests", overwrite=False, loc=0, scale=0.01):
+def make_noisy_sphere_data(
+    output_dir="./output/noisy_sphere_tests", overwrite=False, loc=0, scale=0.01
+):
     # heat_param_vals = [0.0025, 0.01, 0.025]
     u = 10
     heat_param_vals = [u**-p for p in range(1, 6)]
@@ -724,7 +768,9 @@ def make_noisy_sphere_data(output_dir="./output/noisy_sphere_tests", overwrite=F
         ply = f"./data/ply/binary/{surf}.ply"
         m = HalfEdgeTestSphere.from_half_edge_ply(ply, 1.0)
 
-        m.run_noisy_belkin_laplacian_mcvec_fixed_param_test(heat_param_vals, loc=loc, scale=scale)
+        m.run_noisy_belkin_laplacian_mcvec_fixed_param_test(
+            heat_param_vals, loc=loc, scale=scale
+        )
         m.run_noisy_belkin_laplacian_mcvec_average_face_area_test(loc=loc, scale=scale)
         m.run_noisy_cotan_laplacian_mcvec_test(loc=loc, scale=scale)
         m.run_noisy_guckenberger_laplacian_mcvec_test(loc=loc, scale=scale)
@@ -750,12 +796,18 @@ def get_test_data(with_M=False, output_dir="./output/sphere_tests3"):
     M = load_spheres(output_dir=output_dir)
     # belkin_laplacian_mcvec_fixed_param_results
     # cotan_laplacian_mcvec_results
-    timelike_param = np.array([m.belkin_laplacian_mcvec_fixed_param_results["s"] for m in M][0])
+    timelike_param = np.array(
+        [m.belkin_laplacian_mcvec_fixed_param_results["s"] for m in M][0]
+    )
     mcvec_actual = [m.mcvec_actual for m in M]
 
     mcvec_cotan = [m.cotan_laplacian_mcvec_results["mcvec"] for m in M]
-    mcvec_cotan_L2error = np.array([m.cotan_laplacian_mcvec_results["L2error"] for m in M])
-    mcvec_cotan_Linftyerror = np.array([m.cotan_laplacian_mcvec_results["Linftyerror"] for m in M])
+    mcvec_cotan_L2error = np.array(
+        [m.cotan_laplacian_mcvec_results["L2error"] for m in M]
+    )
+    mcvec_cotan_Linftyerror = np.array(
+        [m.cotan_laplacian_mcvec_results["Linftyerror"] for m in M]
+    )
 
     # _mcvec_belkin = [m.mcvec_belkin for m in M]
     # _mcvec_belkin_L2error = [m.mcvec_belkin_L2error for m in M]
@@ -764,10 +816,14 @@ def get_test_data(with_M=False, output_dir="./output/sphere_tests3"):
     # num_M = len(M)
     num_timelike = len(timelike_param)
     mcvec_belkin = [
-        [m.belkin_laplacian_mcvec_fixed_param_results["mcvec"][_] for m in M] for _ in range(num_timelike)
+        [m.belkin_laplacian_mcvec_fixed_param_results["mcvec"][_] for m in M]
+        for _ in range(num_timelike)
     ]
     mcvec_belkin_L2error = np.array(
-        [[m.belkin_laplacian_mcvec_fixed_param_results["L2error"][_] for m in M] for _ in range(num_timelike)]
+        [
+            [m.belkin_laplacian_mcvec_fixed_param_results["L2error"][_] for m in M]
+            for _ in range(num_timelike)
+        ]
     )
     mcvec_belkin_Linftyerror = np.array(
         [
@@ -776,7 +832,9 @@ def get_test_data(with_M=False, output_dir="./output/sphere_tests3"):
         ]
     )
 
-    mcvec_belkin_afe = [m.belkin_laplacian_mcvec_average_face_area_results["mcvec"] for m in M]
+    mcvec_belkin_afe = [
+        m.belkin_laplacian_mcvec_average_face_area_results["mcvec"] for m in M
+    ]
     mcvec_belkin_afe_L2error = np.array(
         [m.belkin_laplacian_mcvec_average_face_area_results["L2error"] for m in M]
     )
@@ -887,7 +945,9 @@ def fig_single(
             y_fit = fit_dict["F"]
             y = fit_dict["logY"]
             x = fit_dict["logX"]
-            fit_label = r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+            fit_label = (
+                r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+            )
             ax.plot(x, y_fit, linestyle=linestyle, color=color, label=fit_label)
             ax.plot(x, y, marker, color=color, label=r"$s_B=" + f"{param}" + r"$")
 
@@ -1001,7 +1061,9 @@ error_cot = np.array([*mcvec_cotan_L2error[n0:]])
 error_guckenberger = [m.guckenberger_laplacian_mcvec_results["L2error"] for m in M[n0:]]
 
 parameter_belkin = timelike_param
-parameter_guckenberger = [m.guckenberger_laplacian_mcvec_results["L2error"] for m in M[n0:]]
+parameter_guckenberger = [
+    m.guckenberger_laplacian_mcvec_results["L2error"] for m in M[n0:]
+]
 
 # error_heat = np.array([*error_belkin, error_guckenberger])
 

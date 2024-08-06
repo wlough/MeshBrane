@@ -6,6 +6,7 @@ from src.python.jit_utils import (
     jit_get_halfedge_index_of_twin,
     jit_vf_samples_to_he_samples,
     jit_refine_icososphere,
+    fib_sphere,
 )
 
 
@@ -805,24 +806,31 @@ class VertTri2HalfEdgeConverter(PlyConverter):
 class SphereFactory:
     """
     subdivides icosahedron (20 triangles; 12 vertices) to create meshes of unit sphere
+
+    after k refinements we have
+
+    |V|=10*4^k+2
+    |E|=30*4^k
+    |F|=20*4^k
     """
 
     def __init__(self, name="unit_sphere", jit=False):
-        self._NUM_VERTICES_ = [
-            12,
-            42,
-            162,
-            642,
-            2562,
-            10242,
-            40962,
-            163842,
-            "...",
-            "...",
-            "...",
-            "...",
-            "...",
-        ]
+        # self._NUM_VERTICES_ = [
+        #     12,
+        #     42,
+        #     162,
+        #     642,
+        #     2562,
+        #     10242,
+        #     40962,
+        #     163842,
+        #     "...",
+        #     "...",
+        #     "...",
+        #     "...",
+        #     "...",
+        # ]
+
         self._name = name
         self.jit = jit
         r = 1.0
@@ -889,7 +897,8 @@ class SphereFactory:
 
     def next_num_vertices(self):
         level = len(self._num_vertices)
-        return self._NUM_VERTICES_[level]
+        # return self._NUM_VERTICES_[level]
+        return 10 * 4**level + 2
 
     @property
     def name(self):
@@ -1006,6 +1015,19 @@ class SphereFactory:
     def build_noisy_test_plys(cls, num_refine=5, noise_scale=0.01):
         b = cls()
         b._name = "noisy_unit_sphere"
+        b.V = [v + b.r * np.random.normal(0, noise_scale, 3) for v in b.V]
+        b.V = [b.r * v / np.linalg.norm(v) for v in b.V]
+        b.v2h = [VertTri2HalfEdgeConverter.from_source_samples(*b.VF())]
+        b.write_plys(level=0)
+        for level in range(1, num_refine + 1):
+            b.refine()
+            b.write_plys(level=level)
+        print("Done.")
+
+    @classmethod
+    def build_fibonacci_test_plys(cls, num_refine=5, noise_scale=0.01):
+        b = cls()
+        b._name = "fibonacci_sphere"
         b.V = [v + b.r * np.random.normal(0, noise_scale, 3) for v in b.V]
         b.V = [b.r * v / np.linalg.norm(v) for v in b.V]
         b.v2h = [VertTri2HalfEdgeConverter.from_source_samples(*b.VF())]
