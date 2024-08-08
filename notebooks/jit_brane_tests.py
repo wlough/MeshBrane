@@ -1,29 +1,25 @@
 from src.python.jit_brane import HalfEdgeMeshBase as jhem
-from src.python.jit_brane import (
-    vertex_index_numba_type,
-    halfedge_index_numba_type,
-    face_index_numba_type,
-    boundary_index_numba_type,
-    xyz_numba_type,
-)
+from src.python.jit_brane import py2numba_half_edge_mesh_dicts
 from src.python.half_edge_mesh import HalfEdgeMesh as hem
-from numba.typed import Dict
-from numba.types import DictType
+from numba import jit
 import numpy as np
 
+
+np.int64(1)
 # from src.python.mesh_viewer import MeshViewer
 import os
 
 _TEST_DIR_ = "./output/jit_brane"
 _NUM_VERTS_ = [
     # 162,
-    642,
+    # 642,
     2562,
     # 10242,
     # 40962,
     # 163842,
 ]  # [12, 42, 162, 642, 2562, 10242, 40962, 163842]
 _SURF_NAMES_ = [f"sphere_{N:06d}_he" for N in _NUM_VERTS_]
+_SURF_NAMES_ = ["sphere_002562_he", "annulus", "hex_sector", "neovius"]
 
 
 def make_output_dir(overwrite=False):
@@ -36,78 +32,59 @@ def make_output_dir(overwrite=False):
     elif not os.path.exists(output_dir):
         pass
     else:
-        raise ValueError(f"{output_dir} already exists. Choose a different output_dir, or Set overwrite=True")
+        raise ValueError(
+            f"{output_dir} already exists. Choose a different output_dir, or Set overwrite=True"
+        )
     os.system(f"mkdir -p {output_dir}")
 
 
 def load_hem():
-    return [hem.from_half_edge_ply(f"./data/ply/binary/{name}.ply") for name in _SURF_NAMES_]
-
-
-def dict2numba(d, kt, vt):
-    D = Dict.empty(kt, vt)
-    for k, v in d.items():
-        D[k] = v
-    return D
-
-
-def hem_dicts2numbs(*py_dicts):
-    # [
-    #     xyz_coord_V,
-    #     h_out_V,
-    #     v_origin_H,
-    #     h_next_H,
-    #     h_twin_H,
-    #     f_left_H,
-    #     h_bound_F,
-    # ] = py_dicts
-    kv_types = [
-        (vertex_index_numba_type, xyz_numba_type),
-        (vertex_index_numba_type, halfedge_index_numba_type),
-        (halfedge_index_numba_type, vertex_index_numba_type),
-        (halfedge_index_numba_type, halfedge_index_numba_type),
-        (halfedge_index_numba_type, halfedge_index_numba_type),
-        (halfedge_index_numba_type, face_index_numba_type),
-        (face_index_numba_type, halfedge_index_numba_type),
+    return [
+        hem.from_half_edge_ply(f"./data/ply/binary/{name}.ply") for name in _SURF_NAMES_
     ]
-    numba_dicts = []
-    for d, (kt, vt) in zip(py_dicts, kv_types):
-        # D = Dict.empty(kt, vt)
-        # numba_dicts.append(D)
-        # for k,v in d.items():
-        #     D[k]=v
-        D = dict2numba(d, kt, vt)
-        numba_dicts.append(D)
-    return numba_dicts
 
 
 M = load_hem()
 m = M[0]
-numba_dicts = hem_dicts2numbs(*m.data_dicts)
+init_dicts = py2numba_half_edge_mesh_dicts(*m.data_dicts)
+jm = jhem(*init_dicts)
+# jm.run_tests()
+
+# dat = [np.array(_) for _ in m.data_lists]
+# mv = MeshViewer(*dat)
+# mv.plot()
+V,H,F = jm.patch_from_seed_vertex(3)
 # %%
-_xyz_coord_V = m._xyz_coord_V
-_h_out_V = m._h_out_V
-_v_origin_H = m._v_origin_H
-_h_next_H = m._h_next_H
-_h_twin_H = m._h_twin_H
-_f_left_H = m._f_left_H
-_h_bound_F = m._h_bound_F
-kv_types = [
-    (vertex_index_numba_type, xyz_numba_type),
-    (vertex_index_numba_type, halfedge_index_numba_type),
-    (halfedge_index_numba_type, vertex_index_numba_type),
-    (halfedge_index_numba_type, halfedge_index_numba_type),
-    (halfedge_index_numba_type, halfedge_index_numba_type),
-    (halfedge_index_numba_type, face_index_numba_type),
-    (face_index_numba_type, halfedge_index_numba_type),
-]
-kt, vt = kv_types[0]
-dir(vt)
-dir(vt.dtype)
-vt.dtype.dtype
-D = Dict.empty(kt, vt)
-D[0] = np.array([1.0, 0.0, 2.0], dtype=vt.dtype.dtype)
+d1=jm.xyz_coord_V.copy()
+d1[13]
+d1[13]=2*d1[13]
+jm.xyz_coord_V[13]
 # %%
-# init_arrs = m.data_lists
-# m.data_dicts
-# jm = jhem(*init_dicts)
+
+
+
+Q = jm.xyz_array
+lapQcotan=jm.cotan_laplacian(Q)
+lapQcotan1=jm.cotan_laplacian1(Q)
+np.linalg.norm(lapQcotan-lapQcotan1)
+jm.data_lists
+
+%timeit jm.cotan_laplacian(Q)
+%timeit jm.cotan_laplacian1(Q)
+
+#
+
+#
+
+#
+
+#
+
+#
+
+#
+
+#
+
+
+# %%

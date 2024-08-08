@@ -16,7 +16,7 @@ from numba.types import (
 )
 from numba.experimental import jitclass
 import pickle
-import time
+from time import time
 import os
 
 
@@ -113,7 +113,9 @@ def jit_vf_samples_to_he_samples(V, F):
     while need_twins:
         h = need_twins.pop()
         if _h_twin_H[h] == -2:  # if twin not set
-            h_twin = jit_get_halfedge_index_of_twin(_H, h)  # returns -1 if twin not found
+            h_twin = jit_get_halfedge_index_of_twin(
+                _H, h
+            )  # returns -1 if twin not found
             if h_twin == -1:  # if twin not found
                 h_twin = int32(h_count)
                 h_count += 1
@@ -247,7 +249,9 @@ def check_vf_list_orientation(V, F0):
 
 
 @jit(parallel=True)
-def cotan_laplacian(Q, xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H, h_bound_F):
+def cotan_laplacian(
+    Q, xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H, h_bound_F
+):
     """
     Computes the cotan Laplacian of Q at each vertex
     """
@@ -519,8 +523,12 @@ class SphereFactory:
 
     def write_plys(self, level=-1):
         if isinstance(level, int):
-            vf_path = f"./data/ply/binary/{self.name}_{self.num_vertices(level):06d}_vf.ply"
-            he_path = f"./data/ply/binary/{self.name}_{self.num_vertices(level):06d}_he.ply"
+            vf_path = (
+                f"./data/ply/binary/{self.name}_{self.num_vertices(level):06d}_vf.ply"
+            )
+            he_path = (
+                f"./data/ply/binary/{self.name}_{self.num_vertices(level):06d}_he.ply"
+            )
             print(f"Writing vertex-face ply to {vf_path}")
             self.v2h[level].write_source_ply(vf_path, use_ascii=False)
             print(f"Writing half-edge ply to {he_path}")
@@ -738,7 +746,9 @@ def load_refine_icososphere_and_save_output(
     save_name="refinement",
 ):
     # num_refine = 10
-    data_paths = [f"./{output_dir}/{save_name}_{n:06d}.pickle" for n in range(num_refine + 1)]
+    data_paths = [
+        f"./{output_dir}/{save_name}_{n:06d}.pickle" for n in range(num_refine + 1)
+    ]
     SF = []
     for data_path in data_paths:
         with open(data_path, "rb") as f:
