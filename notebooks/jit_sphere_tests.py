@@ -211,15 +211,9 @@ F_type = np.dtype([("vertex_indices", "int32", (3,))])
 vertex_index_numba_type = int32
 halfedge_index_numba_type = int32
 face_index_numba_type = int32
-xyz_numba_type = Array(
-    from_dtype(np.dtype([("x", "float64"), ("y", "float64"), ("z", "float64")])), 1, "C"
-)
-face_numba_type = Array(
-    from_dtype(np.dtype([("vertex_indices", "int32", (3,))])), 1, "C"
-)
-hedge_numba_type = Array(
-    from_dtype(np.dtype([("vertex_indices", "int32", (2,))])), 1, "C"
-)
+xyz_numba_type = Array(from_dtype(np.dtype([("x", "float64"), ("y", "float64"), ("z", "float64")])), 1, "C")
+face_numba_type = Array(from_dtype(np.dtype([("vertex_indices", "int32", (3,))])), 1, "C")
+hedge_numba_type = Array(from_dtype(np.dtype([("vertex_indices", "int32", (2,))])), 1, "C")
 
 xyz_coord_V_numba_type = DictType(vertex_index_numba_type, xyz_numba_type)
 h_out_V_numba_type = DictType(vertex_index_numba_type, halfedge_index_numba_type)

@@ -36,16 +36,12 @@ def make_output_dir(overwrite=False):
     elif not os.path.exists(output_dir):
         pass
     else:
-        raise ValueError(
-            f"{output_dir} already exists. Choose a different output_dir, or Set overwrite=True"
-        )
+        raise ValueError(f"{output_dir} already exists. Choose a different output_dir, or Set overwrite=True")
     os.system(f"mkdir -p {output_dir}")
 
 
 def load_hem():
-    return [
-        hem.from_half_edge_ply(f"./data/ply/binary/{name}.ply") for name in _SURF_NAMES_
-    ]
+    return [hem.from_half_edge_ply(f"./data/ply/binary/{name}.ply") for name in _SURF_NAMES_]
 
 
 def dict2numba(d, kt, vt):
