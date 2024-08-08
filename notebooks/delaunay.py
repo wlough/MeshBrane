@@ -3,8 +3,10 @@ from scipy.spatial import Delaunay
 from src.python.half_edge_mesh import HalfEdgeMesh
 from src.python.mesh_viewer import MeshViewer
 from src.python.jit_utils import check_vf_list_orientation, fib_sphere, uniform_sphere
+from numba import njit
 
 
+@njit
 def extract_surface_faces(tetrahedra):
     """
     Extract the 2D triangular faces on the surface from the 3D tetrahedra.
@@ -18,7 +20,8 @@ def extract_surface_faces(tetrahedra):
     face_count = {}
 
     def add_face(face):
-        face = tuple(sorted(face))
+        face = sorted(face)
+        face = (face[0], face[1], face[2])
         if face in face_count:
             face_count[face] += 1
         else:
@@ -37,11 +40,55 @@ def extract_surface_faces(tetrahedra):
     return surface_faces
 
 
+# from numba.typed import List, Dict, Tuple
+@njit
+def jit_extract_surface_faces(tetrahedra):
+    """
+    Extract the 2D triangular faces on the surface from the 3D tetrahedra.
+
+    Parameters:
+    tetrahedra (ndarray): An array of tetrahedra, each defined by four vertex indices.
+
+    Returns:
+    list: A list of unique surface faces, each defined by three vertex indices.
+    """
+    # Ntets = len(tetrahedra)
+    # Fcount = np.zeros(4 * Ntets)
+    face_count = {}
+
+    def add_face(face):
+        face = tuple(sorted(face))
+        if face in face_count:
+            face_count[face] += 1
+        else:
+            face_count[face] = 1
+
+    # List all faces of each tetrahedron
+    for tet in tetrahedra:
+        faces = [
+            (tet[0], tet[1], tet[2]),
+            (tet[0], tet[1], tet[3]),
+            (tet[0], tet[2], tet[3]),
+            (tet[1], tet[2], tet[3]),
+        ]
+        for face in faces:
+            if face in face_count:
+                face_count[face] += 1
+            else:
+                face_count[face] = 1
+
+    # Extract faces that appear exactly once
+    surface_faces = [face for face, count in face_count.items() if count == 1]
+
+    return surface_faces
+
+
 V = fib_sphere(10)
 V = fib_sphere(10)
 V = fib_sphere(10).tolist()
-F = Delaunay(V).simplices[:, 1:].tolist()
-
+tets = Delaunay(V).simplices
+extract_surface_faces(tets)
+# %%
 num_refine = 6
 Nv = np.array([10 * 4**k + 2 for k in range(num_refine)], dtype=np.int32)
 newNv = Nv[1:] - Nv[:-1]

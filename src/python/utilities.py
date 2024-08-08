@@ -1,4 +1,5 @@
 import numpy as np
+import warnings
 
 
 def round_to(x, n=3):
@@ -16,6 +17,12 @@ def log_log_fit(X, Y):
     """
     Computes linear best fit for log(X)-log(Y)
     """
+    warnings.warn(
+        "returned dict keys will be updated in a future version. "
+        "m->slope, b->intercept, F->fit_samples, fun->fit_fun. ",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     logX, logY = np.log(X), np.log(Y)
     a11 = logX @ logX
     a12 = sum(logX)
@@ -29,7 +36,18 @@ def log_log_fit(X, Y):
     m, b = Ainv @ u
     F = m * logX + b
     fun = lambda x: np.exp(b) * x**m
-    return {"m": m, "b": b, "F": F, "logX": logX, "logY": logY, "fun": fun}
+    return {
+        "m": m,
+        "b": b,
+        "F": F,
+        "logX": logX,
+        "logY": logY,
+        "fun": fun,
+        "slope": m,
+        "intercept": b,
+        "fit_samples": F,
+        "fit_fun": fun,
+    }
 
 
 #############################################

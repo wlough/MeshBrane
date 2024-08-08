@@ -1,5 +1,6 @@
 import sympy as sp
 from sympy.physics.vector import ReferenceFrame  # , vlatex
+from src.python.pretty_pictures import eq_tex_str
 from IPython.display import display, Latex
 
 # https://docs.sympy.org/latest/modules/plotting.html#sympy.plotting.plot.plot3d_parametric_line
@@ -8,29 +9,21 @@ from IPython.display import display, Latex
 # expr.rcall(*args)
 
 
-def eq_tex_str(lhs, rhs, mode="inline"):
-    if mode == "inline":
-        tex_str = "$" + sp.latex(lhs) + " = " + sp.latex(rhs) + "$"
-    elif mode == "plain":
-        tex_str = sp.latex(lhs) + " = " + sp.latex(rhs)
-    elif mode == "equation":
-        tex_str = (
-            "\\begin{equation}"
-            + sp.latex(lhs)
-            + " = "
-            + sp.latex(rhs)
-            + "\\end{equation}"
-        )
-    elif mode == "equation*":
-        tex_str = (
-            "\\begin{equation*}"
-            + sp.latex(lhs)
-            + " = "
-            + sp.latex(rhs)
-            + "\\end{equation*}"
-        )
-
-    return tex_str
+# def eq_tex_str(lhs, rhs, mode="inline"):
+#     if mode == "inline":
+#         tex_str = "$" + latex(lhs) + " = " + latex(rhs) + "$"
+#     elif mode == "plain":
+#         tex_str = latex(lhs) + " = " + latex(rhs)
+#     elif mode == "equation":
+#         tex_str = (
+#             "\\begin{equation}" + latex(lhs) + " = " + latex(rhs) + "\\end{equation}"
+#         )
+#     elif mode == "equation*":
+#         tex_str = (
+#             "\\begin{equation*}" + latex(lhs) + " = " + latex(rhs) + "\\end{equation*}"
+#         )
+#
+#     return tex_str
 
 
 # sp.init_printing()
@@ -38,12 +31,33 @@ def eq_tex_str(lhs, rhs, mode="inline"):
 ##################################
 # Parameterization, orthonormal frame,...
 ##################################
+# ambient cartesian frame
 OE = ReferenceFrame(
     "E",
     indices=["x", "y", "z"],
     latexs=[r"\bf{e}_x", r"\bf{e}_y", r"\bf{e}_z"],
     variables=["x", "y", "z"],
 )
+# surface adapted orthonormal frame
+F = ReferenceFrame(
+    "F",
+    indices=["theta", "phi", "eta"],
+    latexs=[r"\bf{e}_\theta", r"\bf{e}_\phi", r"\bf{n}"],
+    variables=["theta", "phi", "eta"],
+)
+theta, phi, eta = F[0], F[1], F[2]  # OE.varlist  # sp.symbols("x y z")
+e_theta, e_phi, e_eta = F["theta"], F["phi"], F["eta"]
+# Lame coefficients
+h_theta = sp.Function(r"\text{h}_{\theta}")(theta, phi)
+h_phi = sp.Function(r"\text{h}_{\phi}")(theta, phi)
+X_theta = h_theta * e_theta
+X_phi = h_phi * e_phi
+
+# Metric and extrinsic curvature tensors
+dphi = sp.symbols(r"\text{d}\phi")
+dtheta = sp.symbols(r"\text{d}\theta")
+dX = X_theta * dtheta + X_phi * dphi
+# %%
 # radius
 a = sp.symbols("a")
 x, y, z = OE[0], OE[1], OE[2]  # OE.varlist  # sp.symbols("x y z")
