@@ -1,9 +1,28 @@
-# from src.python.ply_tools import VertTri2HalfEdgeConverter
-import numpy as np
-import warnings
+from src.python.ply_tools import VertTri2HalfEdgeConverter
+from src.python.jit_brane_utils import (
+    _NUMPY_FLOAT_,
+    _NUMPY_INT_,
+    xyz_coord_V_numba_type,
+    h_out_V_numba_type,
+    v_origin_H_numba_type,
+    h_next_H_numba_type,
+    h_twin_H_numba_type,
+    f_left_H_numba_type,
+    h_bound_F_numba_type,
+    h_comp_B_numba_type,
+    jit_vf_samples_to_he_samples,
+    half_edge_arrays_to_dicts,
+    half_edge_dicts_to_arrays,
+)
 from numba import jit, prange
+import numpy as np
+
+# import warnings
+
+# from numba import jit, prange
 from numba.experimental import jitclass
-from numba import from_dtype, typeof
+
+# from numba import from_dtype, typeof
 from numba.typed import (
     # List,
     Dict,
@@ -12,128 +31,16 @@ from numba.typed import (
 from numba.types import (
     unicode_type,
     # boolean,
-    int32,
-    int64,
-    float64,
-    ListType,
-    DictType,
-    Array,
+    # int32,
+    # int64,
+    # float64,
+    # ListType,
+    # DictType,
+    # Array,
 )
 
-_NUMPY_INT_ = np.int64
-_NUMPY_FLOAT_ = np.float64
-_NUMBA_INT_ = from_dtype(_NUMPY_INT_)
-_NUMBA_FLOAT_ = from_dtype(_NUMPY_FLOAT_)
-# _NUMBA_INT_ = int64
-# _NUMBA_FLOAT_ = float64
-# import os
-# # Enable Numba's debug mode
-# os.environ['NUMBA_DEBUG'] = '1'
 
-xyz_ply_numba_type = Array(
-    from_dtype(
-        np.dtype(
-            [
-                ("x", _NUMPY_FLOAT_),
-                ("y", _NUMPY_FLOAT_),
-                ("z", _NUMPY_FLOAT_),
-            ]
-        )
-    ),
-    1,
-    "C",
-)
-face_ply_numba_type = Array(
-    from_dtype(np.dtype([("vertex_indices", _NUMPY_INT_, (3,))])), 1, "C"
-)
-hedge_ply_numba_type = Array(
-    from_dtype(np.dtype([("vertex_indices", _NUMPY_INT_, (2,))])), 1, "C"
-)
-
-vertex_index_numba_type = _NUMBA_INT_
-halfedge_index_numba_type = _NUMBA_INT_
-face_index_numba_type = _NUMBA_INT_
-boundary_index_numba_type = _NUMBA_INT_
-xyz_numba_type = Array(_NUMBA_FLOAT_, 1, "C")
-
-
-xyz_coord_V_numba_type = DictType(vertex_index_numba_type, xyz_numba_type)
-h_out_V_numba_type = DictType(vertex_index_numba_type, halfedge_index_numba_type)
-v_origin_H_numba_type = DictType(halfedge_index_numba_type, vertex_index_numba_type)
-h_next_H_numba_type = DictType(halfedge_index_numba_type, halfedge_index_numba_type)
-h_twin_H_numba_type = DictType(halfedge_index_numba_type, halfedge_index_numba_type)
-f_left_H_numba_type = DictType(halfedge_index_numba_type, face_index_numba_type)
-h_bound_F_numba_type = DictType(face_index_numba_type, halfedge_index_numba_type)
-h_comp_B_numba_type = DictType(boundary_index_numba_type, halfedge_index_numba_type)
-
-
-def py2numba_dict(d, kt, vt, safe=True):
-    n_keys = len(d)
-    D = Dict.empty(kt, vt, n_keys=n_keys)
-    if safe:
-        try:
-            kv = d.items()
-        except TypeError:
-            kv = enumerate(d)
-        for _k, _v in kv:
-            k = kt(_k)
-            try:
-                v = vt(_v)
-            except NotImplementedError:
-                v = _v
-            D[k] = v
-    else:
-        try:
-            D.update(d)
-        except TypeError:
-            kv = enumerate(d)
-            for _k, _v in kv:
-                k = kt(_k)
-                try:
-                    v = vt(_v)
-                except NotImplementedError:
-                    v = _v
-                D[k] = v
-    return D
-
-
-def py2numba_half_edge_mesh_dicts(
-    xyz_coord_V,
-    h_out_V,
-    v_origin_H,
-    h_next_H,
-    h_twin_H,
-    f_left_H,
-    h_bound_F,
-    safe=True,
-):
-    py_dicts = [
-        xyz_coord_V,
-        h_out_V,
-        v_origin_H,
-        h_next_H,
-        h_twin_H,
-        f_left_H,
-        h_bound_F,
-    ]
-    kv_types = [
-        (vertex_index_numba_type, xyz_numba_type),
-        (vertex_index_numba_type, halfedge_index_numba_type),
-        (halfedge_index_numba_type, vertex_index_numba_type),
-        (halfedge_index_numba_type, halfedge_index_numba_type),
-        (halfedge_index_numba_type, halfedge_index_numba_type),
-        (halfedge_index_numba_type, face_index_numba_type),
-        (face_index_numba_type, halfedge_index_numba_type),
-    ]
-    numba_dicts = []
-
-    for d, (kt, vt) in zip(py_dicts, kv_types):
-        D = py2numba_dict(d, kt, vt, safe=safe)
-        numba_dicts.append(D)
-    return numba_dicts
-
-
-hemb_spec = [
+half_edge_mesh_spec = [
     ("_name", unicode_type),
     ("_xyz_coord_V", xyz_coord_V_numba_type),
     ("_h_out_V", h_out_V_numba_type),
@@ -146,7 +53,91 @@ hemb_spec = [
 ]
 
 
-@jitclass(hemb_spec)
+@jit(parallel=True)
+def pcotan_laplacian(self, Q):
+    """
+    Computes the cotan Laplacian of Q at each vertex
+    """
+    Nv = self.num_vertices
+    lapQ = np.zeros_like(Q)
+    for vi in prange(Nv):
+        Atot = 0.0
+        ri = self.xyz_coord_v(vi)
+        qi = Q[vi]
+        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+        for hij in self.generate_H_out_v_clockwise(vi):
+            hijm1 = self.h_next_h(self.h_twin_h(hij))
+            hijp1 = self.h_twin_h(self.h_prev_h(hij))
+            vjm1 = self.v_head_h(hijm1)
+            vj = self.v_head_h(hij)
+            vjp1 = self.v_head_h(hijp1)
+
+            qj = Q[vj]
+
+            rjm1 = self.xyz_coord_v(vjm1)
+            rj = self.xyz_coord_v(vj)
+            rjp1 = self.xyz_coord_v(vjp1)
+
+            rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
+            rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+            rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+            ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+            ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
+            rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
+            ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
+            rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+
+            Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
+            Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
+            Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
+            Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+            Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+
+            cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
+
+            cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
+
+            cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
+            cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
+
+            Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
+            lapQ[vi] += (cot_thetam + cot_thetap) * (qj - qi) / 2
+        lapQ[vi] /= Atot
+
+    return lapQ
+
+
+@jit(parallel=True)
+def pbelkin_laplacian(self, Q, s):
+    """
+    Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
+    defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
+    constant timelike parameter s.
+    """
+    # V = self.xyz_array
+    Vkeys = sorted(self.xyz_coord_V)
+    Nv = len(Vkeys)
+    # A = np.array([self.barcell_area(v) for v in Vkeys])
+    lapQ = np.zeros_like(Q)
+    for _i in prange(Nv):
+        i = Vkeys[_i]
+        qx = Q[_i]
+        x = self.xyz_coord_v(i)
+        ax = self.barcell_area(i)
+        for _j in range(Nv):
+            j = Vkeys[_j]
+            qy = Q[_j]
+            y = self.xyz_coord_v(j)
+            lapQ[_i] += (
+                ax
+                * (qy - qx)
+                * np.exp(-np.linalg.norm(y - x) ** 2 / (4 * s))
+                / (4 * np.pi * s)
+            )
+    return lapQ
+
+
+@jitclass(half_edge_mesh_spec)
 class HalfEdgeMeshBase:
     """
     h_bound_F-->h_adjacent_F
@@ -254,9 +245,9 @@ class HalfEdgeMeshBase:
         self.generate_H_next_h(h)
         self.generate_V_of_f(f)
         # Data exporters
-        self.Vkeys
-        self.Hkeys
-        self.Fkeys
+        # self.Vkeys
+        # self.Hkeys
+        # self.Fkeys
         self.xyz_array
         # self.V_of_F
         # self.V_of_H
@@ -289,65 +280,6 @@ class HalfEdgeMeshBase:
         self.num_boundaries
         self.genus
         self.euler_characteristic
-
-    # Initilization methods
-    # @classmethod
-    # def from_vert_face_list(cls, xyz_coord_V, vvv_of_F):
-    #     """
-    #     Initialize a half-edge mesh from vertex/face data.
-
-    #     Parameters:
-    #     ----------
-    #     xyz_coord_V : list of numpy.array
-    #         xyz_coord_V[i] = xyz coordinates of vertex i
-    #     vvv_of_F : list of lists of integers
-    #         vvv_of_F[j] = [v0, v1, v2] = vertices in face j.
-
-    #     Returns:
-    #     -------
-    #         HalfEdgeMesh: An instance of the HalfEdgeMesh class with the given vertices and faces.
-    #     """
-    #     return cls(
-    #         *VertTri2HalfEdgeConverter.from_source_samples(
-    #             xyz_coord_V, vvv_of_F
-    #         ).target_samples
-    #     )
-
-    # @classmethod
-    # def from_vertex_face_ply(cls, ply_path):
-    #     """Initialize a half-edge mesh from a ply file containing vertex/face data.
-
-    #     Args:
-    #         ply_path (str): path to ply file
-
-    #     Returns:
-    #         HalfEdgeMesh: An instance of the HalfEdgeMesh class with data from the ply file.
-    #     """
-    #     return cls(*VertTri2HalfEdgeConverter.from_source_ply(ply_path).target_samples)
-
-    # @classmethod
-    # def from_half_edge_ply(cls, ply_path):
-    #     """Initialize a half-edge mesh from a ply file containing half-edge mesh data.
-
-    #     Args:
-    #         ply_path (str): path to ply file
-
-    #     Returns:
-    #         HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
-    #     """
-    #     return cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).target_samples)
-
-    # @classmethod
-    # def from_half_edge_ply_no_bdry_twin(cls, ply_path):
-    #     """Initialize a half-edge mesh from a ply file containing half-edge mesh data using the h_twin = -1 convention for boundary edges.
-
-    #     Args:
-    #         ply_path (str): path to ply file
-
-    #     Returns:
-    #         HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
-    #     """
-    #     return cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).source_samples)
 
     #######################################################
     # Fundamental accessors
@@ -694,23 +626,23 @@ class HalfEdgeMeshBase:
 
     #######################################################
     # Data exporters
-    @property
-    def Vkeys(self):
-        return sorted(self._xyz_coord_V.keys())
+    # @property
+    # def Vkeys(self):
+    #     return sorted(self._xyz_coord_V.keys())
 
-    @property
-    def Hkeys(self):
-        return sorted(self._v_origin_H.keys())
+    # @property
+    # def Hkeys(self):
+    #     return sorted(self._v_origin_H.keys())
 
-    @property
-    def Fkeys(self):
-        return sorted(self._h_bound_F.keys())
+    # @property
+    # def Fkeys(self):
+    #     return sorted(self._h_bound_F.keys())
 
     @property
     def xyz_array(self):
         Vkeys = sorted(self.xyz_coord_V.keys())
         Nv = len(Vkeys)
-        xyz_array = np.zeros((Nv, 3))
+        xyz_array = np.zeros((Nv, 3), _NUMPY_FLOAT_)
         for i, v in enumerate(Vkeys):
             xyz_array[i] = self.xyz_coord_v(v)
         return xyz_array
@@ -735,50 +667,36 @@ class HalfEdgeMeshBase:
     #         V_of_H[i] = [self.v_origin_h(h), self.v_head_h(h)]
     #     return V_of_F
 
-    # @property
-    # def data_lists(self):
-    #     """
-    #     Get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...
-    #     """
-    #     V = sorted(self._xyz_coord_V.keys())
-    #     H = sorted(self._v_origin_H.keys())
-    #     F = sorted(self._h_bound_F.keys())
+    @property
+    def data_arrays(self):
+        """
+        Get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...
+        """
 
-    #     xyz_coord_V = [self.xyz_coord_v(v) for v in V]
-    #     h_out_V = [H.index(self.h_out_v(v)) for v in V]
-    #     v_origin_H = [V.index(self.v_origin_h(h)) for h in H]
-    #     h_next_H = [H.index(self.h_next_h(h)) for h in H]
-    #     h_twin_H = [H.index(self.h_twin_h(h)) for h in H]
-    #     f_left_H = [
-    #         self.f_left_h(h) if self.f_left_h(h) < 0 else F.index(self.f_left_h(h))
-    #         for h in H
-    #     ]
-    #     h_bound_F = [H.index(self.h_bound_f(f)) for f in F]
+        return half_edge_dicts_to_arrays(
+            self.xyz_coord_V,
+            self.h_out_V,
+            self.v_origin_H,
+            self.h_next_H,
+            self.h_twin_H,
+            self.f_left_H,
+            self.h_bound_F,
+        )
 
-    #     return (
-    #         xyz_coord_V,
-    #         h_out_V,
-    #         v_origin_H,
-    #         h_next_H,
-    #         h_twin_H,
-    #         f_left_H,
-    #         h_bound_F,
-    #     )
-
-    # @property
-    # def data_dicts(self):
-    #     """
-    #     get dicts of vertex positions and connectivity data and required to reconstruct mesh or write to ply file
-    #     """
-    #     return (
-    #         self.xyz_coord_V,
-    #         self.h_out_V,
-    #         self.v_origin_H,
-    #         self.h_next_H,
-    #         self.h_twin_H,
-    #         self.f_left_H,
-    #         self.h_bound_F,
-    #     )
+    @property
+    def data_dicts(self):
+        """
+        get dicts of vertex positions and connectivity data and required to reconstruct mesh or write to ply file
+        """
+        return (
+            self.xyz_coord_V,
+            self.h_out_V,
+            self.v_origin_H,
+            self.h_next_H,
+            self.h_twin_H,
+            self.f_left_H,
+            self.h_bound_F,
+        )
 
     ######################################################
     # The star St(s) of a k-simplex s consists of: s and all (n>k)-simplices that contain s.
@@ -1155,60 +1073,262 @@ class HalfEdgeMeshBase:
 
         return lapQ
 
-    def cotan_laplacian1(self, Q):
+    def pcotan_laplacian(self, Q):
         """
         Computes the cotan Laplacian of Q at each vertex
         """
-        Nv = self.num_vertices
-        lapQ = np.zeros_like(Q)
+        return pcotan_laplacian(self, Q)
+
+    def belkin_laplacian(self, Q, s):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
+        defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
+        constant timelike parameter s.
+        """
+        Fkeys = self.h_bound_F.keys()
         Vkeys = sorted(self.xyz_coord_V.keys())
-        for i in range(Nv):
-            vi = Vkeys[i]
-            Atot = 0.0
-            ri = self.xyz_coord_v(vi)
-            qi = Q[i]
-            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-            for hij in self.generate_H_out_v_clockwise(vi):
-                hijm1 = self.h_next_h(self.h_twin_h(hij))
-                hijp1 = self.h_twin_h(self.h_prev_h(hij))
-                vjm1 = self.v_head_h(hijm1)
-                vj = self.v_head_h(hij)
-                vjp1 = self.v_head_h(hijp1)
-                #
-                j = Vkeys.index(vj)
-                qj = Q[j]
-                #
-                rjm1 = self.xyz_coord_v(vjm1)
-                rj = self.xyz_coord_v(vj)
-                rjp1 = self.xyz_coord_v(vjp1)
-
-                rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
-                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
-                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
-                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
-                ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
-                rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
-                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
-                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
-
-                Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
-                Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
-                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
-                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
-                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
-
-                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
-
-                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
-
-                cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
-                cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
-
-                Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
-                lapQ[i] += (cot_thetam + cot_thetap) * (qj - qi) / 2
-            lapQ[i] /= Atot
-
+        lapQ = np.zeros_like(Q)
+        for i in Vkeys:
+            x = self.xyz_coord_v(i)
+            qx = Q[i]
+            for f in Fkeys:
+                af = self.area_f(f)
+                for j in self.generate_V_of_f(f):
+                    qy = Q[j]
+                    y = self.xyz_coord_v(j)
+                    lapQ[i] += (
+                        (af / 3)
+                        * (qy - qx)
+                        * np.exp(-np.linalg.norm(y - x) ** 2 / (4 * s))
+                        / (4 * np.pi * s)
+                    )
         return lapQ
+
+    def obelkin_laplacian(self, Q, s):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
+        defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
+        constant timelike parameter s.
+        """
+        # V = self.xyz_array
+        Vkeys = sorted(self.xyz_coord_V)
+        Nv = len(Vkeys)
+        # A = np.array([self.barcell_area(v) for v in Vkeys])
+        lapQ = np.zeros_like(Q)
+        for _i in range(Nv):
+            i = Vkeys[_i]
+            qx = Q[_i]
+            x = self.xyz_coord_v(i)
+            ax = self.barcell_area(i)
+            for _j in range(Nv):
+                j = Vkeys[_j]
+                qy = Q[_j]
+                y = self.xyz_coord_v(j)
+                lapQ[_i] += (
+                    ax
+                    * (qy - qx)
+                    * np.exp(-np.linalg.norm(y - x) ** 2 / (4 * s))
+                    / (4 * np.pi * s)
+                )
+        return lapQ
+
+    def pbelkin_laplacian(self, Q, s):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
+        defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
+        constant timelike parameter s.
+        """
+        return pbelkin_laplacian(self, Q, s)
 
     ######################################################
     # to be deprecated
+
+
+class HalfEdgeMeshBuilder:
+    """
+    h_bound_F-->h_adjacent_F
+    Dict-based half-edge mesh data structure
+    ----------------------------------------
+    HalfEdgeMesh uses two basic data types: numpy.arrays of Cartesian coordinates for vertex position and integer-valued labels for vertices/half-edges/faces. Mesh connectivity data are stored as dicts of vertex/half-edge/face labels. Each data dict has a name of the form "a_description_B", where "a" denotes the type of object associated with the dict elements ("xyz" for position, "v" for vertex, "h" for half-edge, or "f" for face), "B" denotes the type of object associated with the dict indices ("V" for vertex, "H" for half-edge, or "F" for face), and "description" is a description of information represented by the dict. For example, "_v_origin_H" is a dict of vertices at the origin of each half-edge. The i-th element of data dict "a_description_B" can be accessed using the "a_description_b(i)" method.
+
+    Properties
+    ----------
+    xyz_coord_V : dict of numpy.array
+        _xyz_coord_V[i] = xyz coordinates of vertex i
+    h_out_V : dict of int
+        _h_out_V[i] = some outgoing half-edge incident on vertex i
+    v_origin_H : dict of int
+        _v_origin_H[j] = vertex at the origin of half-edge j
+    h_next_H : dict of int
+        _h_next_H[j] next half-edge after half-edge j in the face cycle
+    h_twin_H : dict of int
+        _h_twin_H[j] = half-edge antiparalel to half-edge j
+    f_left_H : dict of int
+        _f_left_H[j] = face to the left of half-edge j
+    h_bound_F : dict of int
+        _h_bound_F[k] = some half-edge on the ccw boudary of face k
+    h_comp_B : dict of int
+        _h_comp_B[n] = half-edge in complement boundary n of the mesh
+
+    Initialization
+    ---------------
+    The HalfEdgeMesh class can be initialized in several ways:
+    - Directly from half-edge mesh data dicts:
+        HalfEdgeMesh(xyz_coord_V,
+                     h_out_V,
+                     v_origin_H,
+                     h_next_H,
+                     h_twin_H,
+                     f_left_H,
+                     h_bound_F)
+    - From a dict of vertex positions and a dict of face vertices:
+        HalfEdgeMesh.from_vert_face_dict(xyz_coord_V, vvv_of_F)
+    - From a ply file (binary/ascii) containing vertex/face data:
+        HalfEdgeMesh.from_vertex_face_ply(ply_path)
+        * See HalfEdgeMeshBuilder for more details about ply format.
+    - From a ply file (binary/ascii) containing half-edge mesh data:
+        HalfEdgeMesh.from_half_edge_ply(ply_path)
+        * See HalfEdgeMeshBuilder for more details about ply format.
+    - From C-Glass binary data:
+        HalfEdgeMesh.from_cglass_binary(data)
+        * To be implemented...
+    """
+
+    def __init__(
+        self,
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+        # h_comp_B=None,
+        # mesh_class=HalfEdgeMeshBase,
+    ):
+        # self.mesh_class = mesh_class
+        # Nv = len(xyz_coord_V)
+        self.xyz_coord_V_array = np.array(xyz_coord_V, dtype=_NUMPY_FLOAT_)
+        # self.xyz_coord_V_array = np.zeros((Nv, 3), dtype=_NUMPY_FLOAT_)
+        self.h_out_V_array = np.array(h_out_V, dtype=_NUMPY_INT_)
+        self.v_origin_H_array = np.array(v_origin_H, dtype=_NUMPY_INT_)
+        self.h_next_H_array = np.array(h_next_H, dtype=_NUMPY_INT_)
+        self.h_twin_H_array = np.array(h_twin_H, dtype=_NUMPY_INT_)
+        self.f_left_H_array = np.array(f_left_H, dtype=_NUMPY_INT_)
+        self.h_bound_F_array = np.array(h_bound_F, dtype=_NUMPY_INT_)
+
+        (
+            self.xyz_coord_V,
+            self.h_out_V,
+            self.v_origin_H,
+            self.h_next_H,
+            self.h_twin_H,
+            self.f_left_H,
+            self.h_bound_F,
+        ) = half_edge_arrays_to_dicts(
+            self.xyz_coord_V_array,
+            self.h_out_V_array,
+            self.v_origin_H_array,
+            self.h_next_H_array,
+            self.h_twin_H_array,
+            self.f_left_H_array,
+            self.h_bound_F_array,
+        )
+        # if h_comp_B is None:
+        #     self.h_comp_B = self.find_h_comp_B()
+        # else:
+        #     self.h_comp_B = h_comp_B
+
+    #######################################################
+    # Initilization methods
+    @classmethod
+    def from_vert_face_list(cls, xyz_coord_V, vvv_of_F):
+        """
+        Initialize a half-edge mesh from vertex/face data.
+
+        Parameters:
+        ----------
+        xyz_coord_V : list of numpy.array
+            xyz_coord_V[i] = xyz coordinates of vertex i
+        vvv_of_F : list of lists of integers
+            vvv_of_F[j] = [v0, v1, v2] = vertices in face j.
+
+        Returns:
+        -------
+            HalfEdgeMesh: An instance of the HalfEdgeMesh class with the given vertices and faces.
+        """
+        HEarr = jit_vf_samples_to_he_samples(xyz_coord_V, vvv_of_F)
+        HEdict = half_edge_arrays_to_dicts(*HEarr)
+        c = cls(*HEarr)
+        return c.mesh_class(*HEdict)
+
+    @classmethod
+    def from_vertex_face_ply(cls, ply_path):
+        """Initialize a half-edge mesh from a ply file containing vertex/face data.
+
+        Args:
+            ply_path (str): path to ply file
+
+        Returns:
+            HalfEdgeMesh: An instance of the HalfEdgeMesh class with data from the ply file.
+        """
+        c = cls(
+            *VertTri2HalfEdgeConverter.jit_from_source_samples(ply_path).target_samples
+        )
+        return c.build()
+
+    @classmethod
+    def from_half_edge_ply(cls, ply_path):
+        """Initialize a half-edge mesh from a ply file containing half-edge mesh data.
+
+        Args:
+            ply_path (str): path to ply file
+
+        Returns:
+            HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
+        """
+        c = cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).target_samples)
+        return c.build()
+
+    @classmethod
+    def builder_from_half_edge_ply(cls, ply_path):
+        """Initialize a half-edge mesh from a ply file containing half-edge mesh data.
+
+        Args:
+            ply_path (str): path to ply file
+
+        Returns:
+            HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
+        """
+        c = cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).target_samples)
+        return c
+
+    @property
+    def numba_dicts(self):
+        return (
+            self.xyz_coord_V,
+            self.h_out_V,
+            self.v_origin_H,
+            self.h_next_H,
+            self.h_twin_H,
+            self.f_left_H,
+            self.h_bound_F,
+        )
+
+    @property
+    def numpy_arrays(self):
+        return (
+            self.xyz_coord_V_array,
+            self.h_out_V_array,
+            self.v_origin_H_array,
+            self.h_next_H_array,
+            self.h_twin_H_array,
+            self.f_left_H_array,
+            self.h_bound_F_array,
+        )
+
+    def build(self):
+        # return self.mesh_class(*self.numba_dicts)
+        HEdicts = self.numba_dicts
+        # return HalfEdgeMeshBase(*self.numba_dicts)
+        return HalfEdgeMeshBase(*HEdicts)
