@@ -3,7 +3,8 @@ import numpy as np
 import concurrent.futures
 import warnings
 
-# acceleration/extraplation for laplacian
+_NUMPY_INT_ = np.int64
+_NUMPY_FLOAT_ = np.float64
 
 
 class HalfEdgeMeshBase:
@@ -81,6 +82,21 @@ class HalfEdgeMeshBase:
 
     #######################################################
     # Initilization methods
+    @classmethod
+    def from_data_arrays(cls, path):
+        """Initialize a half-edge mesh from npz file containing data arrays."""
+        data = np.load(path)
+        return cls(
+            data["xyz_coord_V"],
+            data["h_out_V"],
+            data["v_origin_H"],
+            data["h_next_H"],
+            data["h_twin_H"],
+            data["f_left_H"],
+            data["h_bound_F"],
+            data["h_comp_B"],
+        )
+
     @classmethod
     def from_vert_face_list(cls, xyz_coord_V, vvv_of_F):
         """
@@ -241,13 +257,26 @@ class HalfEdgeMeshBase:
         if isinstance(value, dict):
             self._h_comp_B = value
         elif hasattr(value, "__iter__"):
-            self._h_comp_B = dict(enumerate(value))
+            self._h_comp_B = {-(_key + 1): val for _key, val in enumerate(value)}
+
         else:
             raise TypeError("h_comp_B must be a dictionary or an iterable.")
 
     #######################################################
     # Combinatorial maps #
     #######################################################
+    def xyz_coord_v(self, v):
+        """
+        get array of xyz coordinates of vertex v
+
+        Args:
+            v (int): vertex index
+
+        Returns:
+            numpy.array: xyz coordinates
+        """
+        return self._xyz_coord_V[v]
+
     def h_out_v(self, v):
         """
         get index of an outgoing half-edge incident on vertex v
@@ -314,6 +343,17 @@ class HalfEdgeMeshBase:
             int: half-edge index
         """
         return self._h_twin_H[h]
+
+    def h_comp_b(self, b):
+        """get index of a half-edge contained in boundary b
+
+        Args:
+            b (int): boundary index
+
+        Returns:
+            int: half-edge index
+        """
+        return self._h_comp_B[b]
 
     # Derived combinatorial maps
     def v_head_h(self, h):
@@ -448,10 +488,7 @@ class HalfEdgeMeshBase:
 
     @property
     def Fkeys(self):
-        if sorted:
-            return sorted(self._h_bound_F.keys())
-        else:
-            return self._h_bound_F.keys()
+        return sorted(self._h_bound_F.keys())
 
     @property
     def xyz_array(self):
@@ -475,24 +512,64 @@ class HalfEdgeMeshBase:
         )
 
     @property
-    def data_lists(self):
+    def data_arrays(self):
         """
         Get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...
-        """
-        V = sorted(self._xyz_coord_V.keys())
-        H = sorted(self._v_origin_H.keys())
-        F = sorted(self._h_bound_F.keys())
 
-        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
-        h_out_V = [H.index(self.h_out_v(v)) for v in V]
-        v_origin_H = [V.index(self.v_origin_h(h)) for h in H]
-        h_next_H = [H.index(self.h_next_h(h)) for h in H]
-        h_twin_H = [H.index(self.h_twin_h(h)) for h in H]
-        f_left_H = [
-            self.f_left_h(h) if self.f_left_h(h) < 0 else F.index(self.f_left_h(h))
-            for h in H
-        ]
-        h_bound_F = [H.index(self.h_bound_f(f)) for f in F]
+        new_Xkeys_old[key_old] = old_Xkeys_new.index(key_old)
+        """
+        old_Vkeys_new = sorted(self._xyz_coord_V.keys())
+        old_Hkeys_new = sorted(self._v_origin_H.keys())
+        old_Fkeys_new = sorted(self._h_bound_F.keys())
+
+        new_Vkeys_old = {val: key for key, val in enumerate(old_Vkeys_new)}
+        new_Hkeys_old = {val: key for key, val in enumerate(old_Hkeys_new)}
+        new_Fkeys_old = {val: key for key, val in enumerate(old_Fkeys_new)}
+        ##
+        # oldBkeys = [-b1, -b2, -b3, ...]
+        # newBkeys = [-1, -2, -3, ...]
+        oldBkeys = sorted(self.h_comp_B.keys(), reverse=True)
+        new_Bkeys_old = {val: -(_key + 1) for _key, val in enumerate(oldBkeys)}
+        # add boundary keys as negative face keys
+        new_Fkeys_old.update(new_Bkeys_old)
+        ##
+        xyz_coord_V = np.array(
+            [self.xyz_coord_v(v) for v in old_Vkeys_new], dtype=_NUMPY_FLOAT_
+        )
+        h_out_V = np.array(
+            [new_Hkeys_old[self.h_out_v(v)] for v in old_Vkeys_new], dtype=_NUMPY_INT_
+        )
+        v_origin_H = np.array(
+            [new_Vkeys_old[self.v_origin_h(h)] for h in old_Hkeys_new],
+            dtype=_NUMPY_INT_,
+        )
+        h_next_H = np.array(
+            [new_Hkeys_old[self.h_next_h(h)] for h in old_Hkeys_new], dtype=_NUMPY_INT_
+        )
+        h_twin_H = np.array(
+            [new_Hkeys_old[self.h_twin_h(h)] for h in old_Hkeys_new], dtype=_NUMPY_INT_
+        )
+        ###
+        # oldBkeys = sorted(self.h_comp_B.keys(), reverse=True)
+        # new_Bkeys = [-(_key + 1) for _key, val in enumerate(old_Bkeys)]
+        # old_Bkeys_new = {n: o for o, n in zip(old_Bkeys, new_Bkeys)}
+        # new_Bkeys_old = {o: n for o, n in zip(old_Bkeys, new_Bkeys)}
+        # new_Bkeys_old = {val: -(_key + 1) for _key, val in enumerate(old_Bkeys_new)}
+        # new_Bkeys_old = {val: -(_key + 1) for _key, val in enumerate(oldBkeys)}
+        h_comp_B = np.array(
+            [new_Hkeys_old[self.h_comp_b(b)] for b in oldBkeys], dtype=_NUMPY_INT_
+        )
+        ###
+        # f_left_H = np.array([self.f_left_h(h) for h in old_Hkeys_new])
+        # f_left_H = np.array(
+        #     [new_Bkeys_old[f] if f < 0 else new_Fkeys_old[f] for f in f_left_H]
+        # )
+        f_left_H = np.array(
+            [new_Fkeys_old[self.f_left_h(h)] for h in old_Hkeys_new], dtype=_NUMPY_INT_
+        )
+        h_bound_F = np.array(
+            [new_Hkeys_old[self.h_bound_f(f)] for f in old_Fkeys_new], dtype=_NUMPY_INT_
+        )
 
         return (
             xyz_coord_V,
@@ -502,6 +579,36 @@ class HalfEdgeMeshBase:
             h_twin_H,
             f_left_H,
             h_bound_F,
+            h_comp_B,
+        )
+
+    def save_data_arrays(self, path):
+        """
+        Save data arrays to npz file
+
+        Args:
+            path (str): path to save file
+        """
+        (
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+            h_comp_B,
+        ) = self.data_arrays
+        np.savez(
+            path,
+            xyz_coord_V=xyz_coord_V,
+            h_out_V=h_out_V,
+            v_origin_H=v_origin_H,
+            h_next_H=h_next_H,
+            h_twin_H=h_twin_H,
+            f_left_H=f_left_H,
+            h_bound_F=h_bound_F,
+            h_comp_B=h_comp_B,
         )
 
     @property
@@ -660,18 +767,6 @@ class HalfEdgeMeshBase:
 
     ######################################################
     # Geometry
-    def xyz_coord_v(self, v):
-        """
-        get array of xyz coordinates of vertex v
-
-        Args:
-            v (int): vertex index
-
-        Returns:
-            numpy.array: xyz coordinates
-        """
-        return self._xyz_coord_V[v]
-
     def xyz_com_f(self, f):
         h0 = self.h_bound_f(f)
         h1 = self.h_next_h(h0)
@@ -925,6 +1020,43 @@ class HalfEdgeMeshBase:
             return sorted(self._h_bound_F.keys())
         else:
             return self._h_bound_F.keys()
+
+    @property
+    def data_lists(self):
+        """
+        Get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...
+        """
+        warnings.warn(
+            "data_lists is deprecated and will be replaced by data_arrays in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        V = sorted(self._xyz_coord_V.keys())
+        H = sorted(self._v_origin_H.keys())
+        F = sorted(self._h_bound_F.keys())
+
+        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
+        h_out_V = [H.index(self.h_out_v(v)) for v in V]
+        v_origin_H = [V.index(self.v_origin_h(h)) for h in H]
+        h_next_H = [H.index(self.h_next_h(h)) for h in H]
+        h_twin_H = [H.index(self.h_twin_h(h)) for h in H]
+        f_left_H = [self.f_left_h(h) for h in H]
+        f_left_H = [f if f < 0 else F.index(f) for f in f_left_H]
+        # f_left_H = [
+        #     self.f_left_h(h) if self.f_left_h(h) < 0 else F.index(self.f_left_h(h))
+        #     for h in H
+        # ]
+        h_bound_F = [H.index(self.h_bound_f(f)) for f in F]
+
+        return (
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+        )
 
 
 ######################################
@@ -1277,5 +1409,3 @@ class HalfEdgeMesh(HalfEdgeMeshBase):
         VF = V[vvvF]
         vecAf = np.einsum("ijk,lmn,fjm,fkn->fl", eps, eps, VF, VF) / 4
         return np.linalg.norm(vecAf, axis=-1)
-
-

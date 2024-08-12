@@ -521,6 +521,65 @@ class SphereFactory:
         self.t_refine.append(t)
         self.refine_level += 1
 
+    def save_data_arrays(self, path, level=-1):
+        """
+        Save data arrays to npz file
+
+        Args:
+            path (str): path to save file
+        """
+        (
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+        ) = self.HE(level=level)
+        h_comp_B = np.array([])
+        np.savez(
+            path,
+            xyz_coord_V=xyz_coord_V,
+            h_out_V=h_out_V,
+            v_origin_H=v_origin_H,
+            h_next_H=h_next_H,
+            h_twin_H=h_twin_H,
+            f_left_H=f_left_H,
+            h_bound_F=h_bound_F,
+            h_comp_B=h_comp_B,
+        )
+
+    def pickle_data_arrays(self, path, level=-1):
+        """
+        Save data arrays to pickle file
+
+        Args:
+            path (str): path to save file
+        """
+        (
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+        ) = self.HE(level=level)
+        h_comp_B = np.array([])
+        data = {
+            "xyz_coord_V": xyz_coord_V,
+            "h_out_V": h_out_V,
+            "v_origin_H": v_origin_H,
+            "h_next_H": h_next_H,
+            "h_twin_H": h_twin_H,
+            "f_left_H": f_left_H,
+            "h_bound_F": h_bound_F,
+            "h_comp_B": h_comp_B,
+        }
+        with open(path, "wb") as f:
+            pickle.dump(data, f)
+
     def write_plys(self, level=-1):
         if isinstance(level, int):
             vf_path = (
@@ -755,3 +814,46 @@ def load_refine_icososphere_and_save_output(
             sf = pickle.load(f)
         SF.append(sf)
     return SF
+
+
+def save_new_from_old():
+    SF = load_refine_icososphere_and_save_output(
+        9,
+        output_dir="./output/sphere_builder",
+        save_name="refinement",
+    )
+    SF[-1].num_vertices()
+    sf_old = SF[-1]
+    sf_new = SphereFactory()
+
+    sf_new._num_vertices = sf_old._num_vertices
+    sf_new.refine_level = 9
+    sf_new.V = sf_old.V
+    sf_new.h_out_V = [np.array(arr, dtype=np.int32) for arr in sf_old.h_out_V]
+    sf_new.v_origin_H = [np.array(arr, dtype=np.int32) for arr in sf_old.v_origin_H]
+    sf_new.h_next_H = [np.array(arr, dtype=np.int32) for arr in sf_old.h_next_H]
+    sf_new.h_twin_H = [np.array(arr, dtype=np.int32) for arr in sf_old.h_twin_H]
+    sf_new.f_left_H = [np.array(arr, dtype=np.int32) for arr in sf_old.f_left_H]
+    sf_new.h_bound_F = [np.array(arr, dtype=np.int32) for arr in sf_old.h_bound_F]
+    levels = [_ for _ in range(10)]
+    _NUM_VERTS_ = [
+        12,
+        42,
+        162,
+        642,
+        2562,
+        10242,
+        40962,
+        163842,
+        655362,
+        2621442,
+    ]  # [12, 42, 162, 642, 2562, 10242, 40962, 163842]
+    # _SURF_NAMES_ = [f"unit_sphere_{N:07d}" for N in _NUM_VERTS_]
+    paths = [f"./data/half_edge_arrays/_unit_sphere_{N:07d}" for N in _NUM_VERTS_]
+    for level, path in enumerate(paths):
+        path_pickle = path + ".pickle"
+        path_npz = path + ".npz"
+        print(path_npz)
+        sf_new.save_data_arrays(path_npz, level=level)
+        print(path_pickle)
+        sf_new.pickle_data_arrays(path_pickle, level=level)

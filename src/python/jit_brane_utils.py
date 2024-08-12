@@ -122,7 +122,7 @@ def py2numba_half_edge_mesh_dicts(
 
 
 @jit
-def rekey_half_edge_dicts(
+def _rekey_half_edge_dicts(
     xyz_coord_V,
     h_out_V,
     v_origin_H,
@@ -199,6 +199,110 @@ def rekey_half_edge_dicts(
 
 
 @jit
+def rekey_half_edge_dicts(
+    xyz_coord_V,
+    h_out_V,
+    v_origin_H,
+    h_next_H,
+    h_twin_H,
+    f_left_H,
+    h_bound_F,
+    h_comp_B,
+):
+    """
+    Reorders and updates keys to be contiguous integers starting
+    """
+    Nv = len(xyz_coord_V)
+    Nh = len(h_next_H)
+    Nf = len(h_bound_F)
+    Nb = len(h_comp_B)
+    old_V_new = sorted(xyz_coord_V.keys())
+    new_V_old = {val: key for key, val in enumerate(old_V_new) if val != key}
+    old_H_new = sorted(h_next_H.keys())
+    new_H_old = {val: key for key, val in enumerate(old_H_new) if val != key}
+    old_F_new = sorted(h_bound_F.keys())
+    new_F_old = {val: key for key, val in enumerate(old_F_new) if val != key}
+    ##
+    # oldBkeys = [-b1, -b2, -b3, ...]
+    # newBkeys = [-1, -2, -3, ...]
+    oldBkeys = sorted(h_comp_B.keys(), reverse=True)
+    newBkeys = np.array(
+        [-(_key + 1) for _key, val in enumerate(old_Bkeys)], dtype=_NUMPY_INT_
+    )
+    new_B_old = {
+        k_old: k_new for k_old, k_new in zip(oldBkeys, newBkeys) if k_old != k_new
+    }
+    new_F_old.update(new_B_old)
+    for _k_old, _k_new in new_V_old.items():
+        k_old = _k_old
+        k_new = _k_new
+        xyz = xyz_coord_V.pop(k_old)
+        xyz_coord_V[k_new] = xyz
+        h_out_v_old = h_out_V.pop(k_old)
+        if h_out_v_old in new_H_old:
+            h_out_v = new_H_old[h_out_v_old]
+            h_out_V[k_new] = h_out_v
+        else:
+            h_out_V[k_new] = h_out_v_old
+    for _k_old, _k_new in new_H_old.items():
+        k_old = _k_old
+        k_new = _k_new
+        v_origin_h_old = v_origin_H.pop(k_old)
+        if v_origin_h_old in new_V_old:
+            v_origin_h = new_V_old[v_origin_h_old]
+            v_origin_H[k_new] = v_origin_h
+        else:
+            v_origin_H[k_new] = v_origin_h_old
+        h_next_h_old = h_next_H.pop(k_old)
+        if h_next_h_old in new_H_old:
+            h_next_h = new_H_old[h_next_h_old]
+            h_next_H[k_new] = h_next_h
+        else:
+            h_next_H[k_new] = h_next_h_old
+        h_twin_h_old = h_twin_H.pop(k_old)
+        if h_twin_h_old in new_H_old:
+            h_twin_h = new_H_old[h_twin_h_old]
+            h_twin_H[k_new] = h_twin_h
+        else:
+            h_twin_H[k_new] = h_twin_h_old
+        f_left_h_old = f_left_H.pop(k_old)
+        if f_left_h_old in new_F_old:
+            f_left_h = new_F_old[f_left_h_old]
+            f_left_H[k_new] = f_left_h
+        else:
+            f_left_H[k_new] = f_left_h_old
+    for _k_old, _k_new in new_F_old.items():
+        k_old = _k_old
+        k_new = _k_new
+        h_bound_f_old = h_bound_F.pop(k_old)
+        if h_bound_f_old in new_H_old:
+            h_bound_f = new_H_old[h_bound_f_old]
+            h_bound_F[k_new] = h_bound_f
+        else:
+            h_bound_F[k_new] = h_bound_f_old
+
+    for _k_old, _k_new in new_B_old.items():
+        k_old = _k_old
+        k_new = _k_new
+        h_comp_b_old = h_comp_B.pop(k_old)
+        if h_comp_b_old in new_H_old:
+            h_comp_b = new_H_old[h_comp_b_old]
+            h_comp_B[k_new] = h_comp_b
+        else:
+            h_comp_B[k_new] = h_comp_b_old
+    return (
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+        h_comp_B,
+    )
+
+
+@jit
 def half_edge_arrays_to_dicts(
     xyz_coord_V_array,
     h_out_V_array,
@@ -207,10 +311,12 @@ def half_edge_arrays_to_dicts(
     h_twin_H_array,
     f_left_H_array,
     h_bound_F_array,
+    h_comp_B_array,
 ):
     Nv = len(xyz_coord_V_array)
     Nh = len(h_next_H_array)
     Nf = len(h_bound_F_array)
+    Nb = len(h_comp_B_array)
     xyz_coord_V = Dict.empty(vertex_index_numba_type, xyz_numba_type, n_keys=Nv)
     h_out_V = Dict.empty(vertex_index_numba_type, halfedge_index_numba_type, n_keys=Nv)
     v_origin_H = Dict.empty(
@@ -224,6 +330,9 @@ def half_edge_arrays_to_dicts(
     )
     f_left_H = Dict.empty(halfedge_index_numba_type, face_index_numba_type, n_keys=Nh)
     h_bound_F = Dict.empty(face_index_numba_type, halfedge_index_numba_type, n_keys=Nf)
+    h_comp_B = Dict.empty(
+        boundary_index_numba_type, halfedge_index_numba_type, n_keys=Nb
+    )
     for _k in range(Nv):
         k = vertex_index_numba_type(_k)
         xyz_coord_V[k] = xyz_coord_V_array[_k]
@@ -237,6 +346,9 @@ def half_edge_arrays_to_dicts(
     for _k in range(Nf):
         k = face_index_numba_type(_k)
         h_bound_F[k] = halfedge_index_numba_type(h_bound_F_array[_k])
+    for _k in range(Nb):
+        k = boundary_index_numba_type(-(_k + 1))
+        h_comp_B[k] = halfedge_index_numba_type(h_comp_B_array[_k])
     return (
         xyz_coord_V,
         h_out_V,
@@ -245,11 +357,12 @@ def half_edge_arrays_to_dicts(
         h_twin_H,
         f_left_H,
         h_bound_F,
+        h_comp_B,
     )
 
 
 @jit(parallel=True)
-def _half_edge_dicts_to_arrays(
+def half_edge_dicts_to_arrays_old(
     xyz_coord_V,
     h_out_V,
     v_origin_H,
@@ -354,19 +467,19 @@ def half_edge_dicts_to_arrays(
 
     for v_arr in prange(Nv):
         v_dic = dic_V_arr[v_arr]
-        v_dic = vertex_index_numba_type(v_arr)
+        v_dic = vertex_index_numba_type(v_dic)
         xyz_coord_V_array[v_arr] = xyz_coord_V[v_dic]
         h_out_V_array[v_arr] = h_out_V[v_dic]  #
     for h_arr in prange(Nh):
         h_dic = dic_H_arr[h_arr]
-        h_dic = halfedge_index_numba_type(h_arr)
+        h_dic = halfedge_index_numba_type(h_dic)
         v_origin_H_array[h_arr] = v_origin_H[h_dic]
         h_next_H_array[h_arr] = h_next_H[h_dic]
         h_twin_H_array[h_arr] = h_twin_H[h_dic]
         f_left_H_array[h_arr] = f_left_H[h_dic]
     for f_arr in prange(Nf):
         f_dic = dic_F_arr[f_arr]
-        f_dic = face_index_numba_type(f_arr)
+        f_dic = face_index_numba_type(f_dic)
         h_bound_F_array[f_arr] = h_bound_F[f_dic]
 
     return (
@@ -500,6 +613,69 @@ def jit_vf_samples_to_he_samples(V, F):
         f_left_H,
         h_bound_F,
     )
+
+
+#######################################################
+@jit
+def generate_H_next_h(h, h_next_H):
+    """Generate half-edges in the face/boundary cycle containing half-edge h"""
+    h_start = h
+    while True:
+        yield h
+        h = h_next_H[h]
+        if h == h_start:
+            break
+
+
+@jit
+def generate_H_bound_f(f, h_bound_F, h_next_H):
+    """Generate half-edges on the boundary of face f"""
+    h = h_bound_F[f]
+    h_start = h
+    while True:
+        yield h
+        h = h_next_H[h]
+        if h == h_start:
+            break
+
+
+@jit
+def find_h_comp_B_array(
+    xyz_coord_V,
+    h_out_V,
+    v_origin_H,
+    h_next_H,
+    h_twin_H,
+    f_left_H,
+    h_bound_F,
+):
+    """
+    Find a half-edge in each boundary of mesh
+    self.h_bound_F
+    self.generate_H_bound_f
+    self.interior_boundary_contains_h
+    self.h_twin_h
+    self.f_left_h
+    self.generate_H_next_h
+    """
+    h_comp_B = dict()
+    complement_boundary_contains_H = set()
+    F_need2check = set(f_left_H)  # set of faces that need to be checked
+    while F_need2check:
+        f = F_need2check.pop()
+        for h in generate_H_bound_f(f, h_bound_F, h_next_H):
+            if f_left_H[h_twin_H[h]] < 0:
+                complement_boundary_contains_H.add(h_twin_H[h])
+    while complement_boundary_contains_H:
+        h = complement_boundary_contains_H.pop()
+        bdry = f_left_H[h]
+        h_comp_B[bdry] = h
+        for h in generate_H_next_h(h, h_next_H):
+            complement_boundary_contains_H.discard(h)
+    Nb = len(h_comp_B)
+    Bkeys = sorted(h_comp_B.keys(), reverse=True)
+    h_comp_B_array = np.array([h_comp_B[b] for b in Bkeys], dtype=_NUMPY_INT_)
+    return h_comp_B_array
 
 
 #######################################################

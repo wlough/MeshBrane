@@ -413,6 +413,22 @@ class HalfEdgeTestSurf(HalfEdgeMesh):
             *surface_params,
         )
 
+    @classmethod
+    def from_data_arrays(cls, path, *surface_params):
+        """Initialize a half-edge mesh from npz file containing data arrays."""
+        data = np.load(path)
+        return cls(
+            data["xyz_coord_V"],
+            data["h_out_V"],
+            data["v_origin_H"],
+            data["h_next_H"],
+            data["h_twin_H"],
+            data["f_left_H"],
+            data["h_bound_F"],
+            # data["h_comp_B"],
+            *surface_params,
+        )
+
     #######################################################
     def save(self, data_path=None):
         import pickle

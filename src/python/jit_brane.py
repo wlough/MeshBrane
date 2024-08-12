@@ -13,31 +13,13 @@ from src.python.jit_brane_utils import (
     jit_vf_samples_to_he_samples,
     half_edge_arrays_to_dicts,
     half_edge_dicts_to_arrays,
+    find_h_comp_B_array,
 )
 from numba import jit, prange
 import numpy as np
-
-# import warnings
-
-# from numba import jit, prange
 from numba.experimental import jitclass
-
-# from numba import from_dtype, typeof
-from numba.typed import (
-    # List,
-    Dict,
-    # Tuple,
-)
-from numba.types import (
-    unicode_type,
-    # boolean,
-    # int32,
-    # int64,
-    # float64,
-    # ListType,
-    # DictType,
-    # Array,
-)
+from numba.typed import Dict
+from numba.types import unicode_type
 
 
 half_edge_mesh_spec = [
@@ -114,27 +96,81 @@ def pbelkin_laplacian(self, Q, s):
     defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
     constant timelike parameter s.
     """
-    # V = self.xyz_array
-    Vkeys = sorted(self.xyz_coord_V)
-    Nv = len(Vkeys)
-    # A = np.array([self.barcell_area(v) for v in Vkeys])
+    Fkeys = self.h_bound_F.keys()
+    Af = self.area_F()
+    F = self.V_of_F
+    V = self.xyz_array
+    Nv = len(V)
     lapQ = np.zeros_like(Q)
-    for _i in prange(Nv):
-        i = Vkeys[_i]
-        qx = Q[_i]
-        x = self.xyz_coord_v(i)
-        ax = self.barcell_area(i)
-        for _j in range(Nv):
-            j = Vkeys[_j]
-            qy = Q[_j]
-            y = self.xyz_coord_v(j)
-            lapQ[_i] += (
-                ax
-                * (qy - qx)
-                * np.exp(-np.linalg.norm(y - x) ** 2 / (4 * s))
-                / (4 * np.pi * s)
-            )
+    for i in prange(Nv):
+        for f in Fkeys:
+            for j in F[f]:
+                lapQ[i] += (
+                    (Af[f] / 3)
+                    * (Q[j] - Q[i])
+                    * np.exp(
+                        -(
+                            (V[j, 0] - V[i, 0]) ** 2
+                            + (V[j, 1] - V[i, 1]) ** 2
+                            + (V[j, 2] - V[i, 2]) ** 2
+                        )
+                        / (4 * s)
+                    )
+                    / (4 * np.pi * s**2)
+                )
     return lapQ
+
+
+@jit(parallel=True)
+def pguckenberger_laplacian(self, Q):
+    """
+    Computes the heat kernel Laplacian of Q at each vertex using 'Method D' from
+    Guckenberger et al 2016 'On the bending algorithms for soft objects in flows'.
+    This is a modification of Belkin et al's which replaces the constant time-like
+    parameter s with the area the dual cell at each vertex.
+    """
+    Fkeys = self.h_bound_F.keys()
+    Af = self.area_F()
+    Av = self.barcell_area_V()
+    F = self.V_of_F
+    V = self.xyz_array
+    Nv = len(V)
+    lapQ = np.zeros_like(Q)
+    for i in prange(Nv):
+        for f in Fkeys:
+            for j in F[f]:
+                lapQ[i] += (
+                    (Af[f] / 3)
+                    * (Q[j] - Q[i])
+                    * np.exp(
+                        -(
+                            (V[j, 0] - V[i, 0]) ** 2
+                            + (V[j, 1] - V[i, 1]) ** 2
+                            + (V[j, 2] - V[i, 2]) ** 2
+                        )
+                        / (4 * Av[i])
+                    )
+                    / (4 * np.pi * Av[i] ** 2)
+                )
+    return lapQ
+
+
+@jit(parallel=True)
+def pV_of_F(self):
+    """
+    vertices of faces
+    """
+    Fkeys = sorted(self.h_bound_F.keys())
+    F = np.zeros((len(Fkeys), 3), dtype=_NUMPY_INT_)
+    Nf = len(Fkeys)
+    for _f in prange(Nf):
+        f = Fkeys[_f]
+        h0 = self.h_bound_f(f)
+        h1 = self.h_next_h(h0)
+        h2 = self.h_next_h(h1)
+        F[_f] = [self.v_origin_h(h0), self.v_origin_h(h1), self.v_origin_h(h2)]
+
+    return F
 
 
 @jitclass(half_edge_mesh_spec)
@@ -197,7 +233,8 @@ class HalfEdgeMeshBase:
         h_twin_H,
         f_left_H,
         h_bound_F,
-        # h_comp_B=None,
+        h_comp_B,
+        find_h_comp_B=False,
     ):
 
         self.xyz_coord_V = xyz_coord_V
@@ -207,11 +244,12 @@ class HalfEdgeMeshBase:
         self.h_twin_H = h_twin_H
         self.h_bound_F = h_bound_F
         self.f_left_H = f_left_H
-        self.h_comp_B = self.find_h_comp_B()
-        # if h_comp_B is None:
-        #     self.h_comp_B = self.find_h_comp_B()
-        # else:
-        #     self.h_comp_B = h_comp_B
+        # self.h_comp_B = h_comp_B
+        # self.h_comp_B = self.find_h_comp_B()
+        if find_h_comp_B:
+            self.h_comp_B = self.find_h_comp_B()
+        else:
+            self.h_comp_B = h_comp_B
 
     #######################################################
     def run_tests(self):
@@ -262,16 +300,15 @@ class HalfEdgeMeshBase:
         self.link(V, H, F)
         self.find_h_comp_B()
         # geometry
-        self.xyz_com_f(f)
         self.vec_area_f(f)
         self.area_f(f)
-        self.total_area_of_faces()
+        # self.total_area_of_faces()
         self.barcell_area(v)
-        self.total_area_of_dual_barcells()
+        # self.total_area_of_dual_barcells()
         self.vorcell_area(v)
-        self.total_area_of_dual_vorcells()
+        # self.total_area_of_dual_vorcells()
         self.meyercell_area(v)
-        self.total_area_of_dual_meyercells()
+        # self.total_area_of_dual_meyercells()
         # Misc helper functions
         self.valence_v(v)
         self.num_vertices
@@ -453,6 +490,17 @@ class HalfEdgeMeshBase:
         """
         return self._h_twin_H[h]
 
+    def h_comp_b(self, b):
+        """get index of a half-edge contained in boundary b
+
+        Args:
+            b (int): boundary index
+
+        Returns:
+            int: half-edge index
+        """
+        return self._h_comp_B[b]
+
     # # Derived combinatorial maps
     def v_head_h(self, h):
         """get index of the vertex at the head of half-edge h
@@ -626,18 +674,6 @@ class HalfEdgeMeshBase:
 
     #######################################################
     # Data exporters
-    # @property
-    # def Vkeys(self):
-    #     return sorted(self._xyz_coord_V.keys())
-
-    # @property
-    # def Hkeys(self):
-    #     return sorted(self._v_origin_H.keys())
-
-    # @property
-    # def Fkeys(self):
-    #     return sorted(self._h_bound_F.keys())
-
     @property
     def xyz_array(self):
         Vkeys = sorted(self.xyz_coord_V.keys())
@@ -647,41 +683,101 @@ class HalfEdgeMeshBase:
             xyz_array[i] = self.xyz_coord_v(v)
         return xyz_array
 
-    # @property
-    # def V_of_F(self):
-    #     # return [list(self.generate_V_of_f(f)) for f in self.h_bound_F.keys()]
-    #     # Vkeys = sorted(self.xyz_coord_V.keys())
-    #     Fkeys = sorted(self.h_bound_F.keys())
-    #     Nf = len(Fkeys)
-    #     V_of_F = np.zeros((Nf, 3), dtype=_NUMPY_INT_)
-    #     for i, f in enumerate(Fkeys):
-    #         V_of_F[i] = list(self.generate_V_of_f(f))
-    #     return V_of_F
-
-    # @property
-    # def V_of_H(self):
-    #     Hkeys = sorted(self.v_origin_H.keys())
-    #     Nh = len(Hkeys)
-    #     V_of_H = np.zeros((Nh, 3), dtype=_NUMPY_INT_)
-    #     for i, h in enumerate(Hkeys):
-    #         V_of_H[i] = [self.v_origin_h(h), self.v_head_h(h)]
-    #     return V_of_F
-
     @property
-    def data_arrays(self):
-        """
-        Get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...
-        """
+    def V_of_F(self):
+        return pV_of_F(self)
 
-        return half_edge_dicts_to_arrays(
-            self.xyz_coord_V,
-            self.h_out_V,
-            self.v_origin_H,
-            self.h_next_H,
-            self.h_twin_H,
-            self.f_left_H,
-            self.h_bound_F,
+    def rekey_half_edge_dicts(self):
+        """
+        Reorders and updates keys to be contiguous integers starting
+        """
+        xyz_coord_V = self.xyz_coord_V
+        h_out_V = self.h_out_V
+        v_origin_H = self.v_origin_H
+        h_next_H = self.h_next_H
+        h_twin_H = self.h_twin_H
+        f_left_H = self.f_left_H
+        h_bound_F = self.h_bound_F
+        h_comp_B = self.h_comp_B
+        old_V_new = sorted(xyz_coord_V.keys())
+        new_V_old = {val: key for key, val in enumerate(old_V_new) if val != key}
+        old_H_new = sorted(h_next_H.keys())
+        new_H_old = {val: key for key, val in enumerate(old_H_new) if val != key}
+        old_F_new = sorted(h_bound_F.keys())
+        new_F_old = {val: key for key, val in enumerate(old_F_new) if val != key}
+        ##
+        # oldBkeys = [-b1, -b2, -b3, ...]
+        # newBkeys = [-1, -2, -3, ...]
+        oldBkeys = sorted(h_comp_B.keys(), reverse=True)
+        newBkeys = np.array(
+            [-(_key + 1) for _key, val in enumerate(oldBkeys)], dtype=_NUMPY_INT_
         )
+        new_B_old = {
+            k_old: k_new for k_old, k_new in zip(oldBkeys, newBkeys) if k_old != k_new
+        }
+        new_F_old.update(new_B_old)
+
+        if new_V_old or new_H_old or new_F_old:
+            for k_old, k_new in new_V_old.items():
+                xyz = xyz_coord_V.pop(k_old)
+                xyz_coord_V[k_new] = xyz
+                h_out_v_old = h_out_V.pop(k_old)
+                if h_out_v_old in new_H_old:
+                    h_out_v = new_H_old[h_out_v_old]
+                    h_out_V[k_new] = h_out_v
+                else:
+                    h_out_V[k_new] = h_out_v_old
+            for k_old, k_new in new_H_old.items():
+                v_origin_h_old = v_origin_H.pop(k_old)
+                if v_origin_h_old in new_V_old:
+                    v_origin_h = new_V_old[v_origin_h_old]
+                    v_origin_H[k_new] = v_origin_h
+                else:
+                    v_origin_H[k_new] = v_origin_h_old
+                h_next_h_old = h_next_H.pop(k_old)
+                if h_next_h_old in new_H_old:
+                    h_next_h = new_H_old[h_next_h_old]
+                    h_next_H[k_new] = h_next_h
+                else:
+                    h_next_H[k_new] = h_next_h_old
+                h_twin_h_old = h_twin_H.pop(k_old)
+                if h_twin_h_old in new_H_old:
+                    h_twin_h = new_H_old[h_twin_h_old]
+                    h_twin_H[k_new] = h_twin_h
+                else:
+                    h_twin_H[k_new] = h_twin_h_old
+                f_left_h_old = f_left_H.pop(k_old)
+                if f_left_h_old in new_F_old:
+                    f_left_h = new_F_old[f_left_h_old]
+                    f_left_H[k_new] = f_left_h
+                else:
+                    f_left_H[k_new] = f_left_h_old
+            for _k_old, _k_new in new_F_old.items():
+                k_old = _k_old
+                k_new = _k_new
+                h_bound_f_old = h_bound_F.pop(k_old)
+                if h_bound_f_old in new_H_old:
+                    h_bound_f = new_H_old[h_bound_f_old]
+                    h_bound_F[k_new] = h_bound_f
+                else:
+                    h_bound_F[k_new] = h_bound_f_old
+
+            for k_old, k_new in new_B_old.items():
+                h_comp_b_old = h_comp_B.pop(k_old)
+                if h_comp_b_old in new_H_old:
+                    h_comp_b = new_H_old[h_comp_b_old]
+                    h_comp_B[k_new] = h_comp_b
+                else:
+                    h_comp_B[k_new] = h_comp_b_old
+
+            self.xyz_coord_V = xyz_coord_V
+            self.h_out_V = h_out_V
+            self.v_origin_H = v_origin_H
+            self.h_next_H = h_next_H
+            self.h_twin_H = h_twin_H
+            self.f_left_H = f_left_H
+            self.h_bound_F = h_bound_F
+            self.h_comp_B = h_comp_B
 
     @property
     def data_dicts(self):
@@ -696,6 +792,52 @@ class HalfEdgeMeshBase:
             self.h_twin_H,
             self.f_left_H,
             self.h_bound_F,
+            self.h_comp_B,
+        )
+
+    @property
+    def data_arrays(self):
+        """
+        Get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...
+        """
+        self.rekey_half_edge_dicts()
+        Nv = len(self.xyz_coord_V)
+        Nh = len(self.h_next_H)
+        Nf = len(self.h_bound_F)
+        Nb = len(self.h_comp_B)
+        xyz_coord_V_array = np.zeros((Nv, 3), dtype=_NUMPY_FLOAT_)
+        h_out_V_array = np.zeros(Nv, dtype=_NUMPY_INT_)
+        v_origin_H_array = np.zeros(Nh, dtype=_NUMPY_INT_)
+        h_next_H_array = np.zeros(Nh, dtype=_NUMPY_INT_)
+        h_twin_H_array = np.zeros(Nh, dtype=_NUMPY_INT_)
+        f_left_H_array = np.zeros(Nh, dtype=_NUMPY_INT_)
+        h_bound_F_array = np.zeros(Nf, dtype=_NUMPY_INT_)
+        h_comp_B_array = np.zeros(Nb, dtype=_NUMPY_INT_)
+        for v_arr in range(Nv):
+            v_dic = _NUMPY_INT_(v_arr)
+            xyz_coord_V_array[v_arr] = self.xyz_coord_v(v_dic)
+            h_out_V_array[v_arr] = self.h_out_v(v_dic)  #
+        for h_arr in range(Nh):
+            h_dic = _NUMPY_INT_(h_arr)
+            v_origin_H_array[h_arr] = self.v_origin_h(h_dic)
+            h_next_H_array[h_arr] = self.h_next_h(h_dic)
+            h_twin_H_array[h_arr] = self.h_twin_h(h_dic)
+            f_left_H_array[h_arr] = self.f_left_h(h_dic)
+        for f_arr in range(Nf):
+            f_dic = _NUMPY_INT_(f_arr)
+            h_bound_F_array[f_arr] = self.h_bound_f(f_dic)
+        for b_arr in range(Nb):
+            b_dic = _NUMPY_INT_(-(b_arr + 1))
+            h_comp_B_array[b_arr] = self.h_comp_b(b_dic)
+        return (
+            xyz_coord_V_array,
+            h_out_V_array,
+            v_origin_H_array,
+            h_next_H_array,
+            h_twin_H_array,
+            f_left_H_array,
+            h_bound_F_array,
+            h_comp_B_array,
         )
 
     ######################################################
@@ -714,17 +856,6 @@ class HalfEdgeMeshBase:
                 F.add(self.f_left_h(h))
 
         return V, H, F
-
-    # def star_of_edge(self, h):
-    #     """Star of an edge is the set of all simplices that contain the edge."""
-    #     V = set()
-    #     H = {h, self.h_twin_h(h)}
-    #     F = set()
-    #     for hi in H:
-    #         if not self.complement_boundary_contains_h(hi):
-    #             F.add(self.f_left_h(hi))
-
-    #     return V, H, F
 
     def star(self, V_in, H_in, F_in):
         """The star of a single simplex is the set of all simplices that have the simplex as a face."""
@@ -791,15 +922,6 @@ class HalfEdgeMeshBase:
     # ######################################################
     # # Geometry
 
-    def xyz_com_f(self, f):
-        h0 = self.h_bound_f(f)
-        h1 = self.h_next_h(h0)
-        h2 = self.h_next_h(h1)
-        r0 = self.xyz_coord_v(self.v_origin_h(h0))
-        r1 = self.xyz_coord_v(self.v_origin_h(h1))
-        r2 = self.xyz_coord_v(self.v_origin_h(h2))
-        return (r0 + r1 + r2) / 3
-
     def vec_area_f(self, f):
         h0 = self.h_bound_f(f)
         h1 = self.h_next_h(h0)
@@ -813,12 +935,13 @@ class HalfEdgeMeshBase:
     def area_f(self, f):
         return np.linalg.norm(self.vec_area_f(f))
 
-    def total_area_of_faces(self):
-        Atot = 0.0
-        for f in self.h_bound_F.keys():
-            Atot += self.area_f(f)
-
-        return Atot
+    def area_F(self):
+        keys = sorted(self.h_bound_F.keys())
+        N = len(keys)
+        A = np.zeros(N, dtype=_NUMPY_FLOAT_)
+        for _, k in enumerate(keys):
+            A[_] = self.area_f(k)
+        return A
 
     def barcell_area(self, v):
         """area of the barycentric cell dual to vertex v"""
@@ -840,12 +963,13 @@ class HalfEdgeMeshBase:
 
         return A
 
-    def total_area_of_dual_barcells(self):
-        Atot = 0.0
-        for v in self.xyz_coord_V.keys():
-            Atot += self.barcell_area(v)
-
-        return Atot
+    def barcell_area_V(self):
+        keys = sorted(self.xyz_coord_V.keys())
+        N = len(keys)
+        A = np.zeros(N, dtype=_NUMPY_FLOAT_)
+        for _, k in enumerate(keys):
+            A[_] = self.barcell_area(k)
+        return A
 
     def vorcell_area(self, v):
         r"""area of voronoi cell dual to vertex v
@@ -888,91 +1012,93 @@ class HalfEdgeMeshBase:
 
         return Atot
 
-    def total_area_of_dual_vorcells(self):
-        Atot = 0.0
-        for v in self.xyz_coord_V.keys():
-            Atot += self.vorcell_area(v)
+    def vorcell_area_V(self):
+        keys = sorted(self.xyz_coord_V.keys())
+        N = len(keys)
+        A = np.zeros(N, dtype=_NUMPY_FLOAT_)
+        for _, k in enumerate(keys):
+            A[_] = self.vorcell_area(k)
+        return A
 
-        return Atot
+    # def meyercell_area(self, v):
+    #     """Meyer's mixed area of cell dual to vertex v"""
+    #     Atot = 0.0
+    #     ri = self.xyz_coord_v(v)
+    #     ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+    #     # h_start = self.V_hedge[v]
+    #     # hij = h_start
+    #     # while True:
+    #     for hij in self.generate_H_out_v_clockwise(v):
+    #         if self.complement_boundary_contains_h(hij):
+    #             continue
+    #         hjjp1 = self.h_next_h(hij)
+    #         hjp1i = self.h_next_h(hjjp1)
+    #         vj = self.v_origin_h(hjjp1)
+    #         rj = self.xyz_coord_v(vj)
+    #         vjp1 = self.v_origin_h(hjp1i)
+    #         rjp1 = self.xyz_coord_v(vjp1)
 
-    def meyercell_area(self, v):
-        """Meyer's mixed area of cell dual to vertex v"""
-        Atot = 0.0
-        ri = self.xyz_coord_v(v)
-        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-        # h_start = self.V_hedge[v]
-        # hij = h_start
-        # while True:
-        for hij in self.generate_H_out_v_clockwise(v):
-            if self.complement_boundary_contains_h(hij):
-                continue
-            hjjp1 = self.h_next_h(hij)
-            hjp1i = self.h_next_h(hjjp1)
-            vj = self.v_origin_h(hjjp1)
-            rj = self.xyz_coord_v(vj)
-            vjp1 = self.v_origin_h(hjp1i)
-            rjp1 = self.xyz_coord_v(vjp1)
+    #         rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+    #         rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+    #         ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+    #         rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+    #         rjp1_ri = rjp1[0] * ri[0] + rjp1[1] * ri[1] + rjp1[2] * ri[2]
 
-            rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
-            rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
-            ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
-            rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
-            rjp1_ri = rjp1[0] * ri[0] + rjp1[1] * ri[1] + rjp1[2] * ri[2]
+    #         normDrij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+    #         # normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
+    #         normDrjjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+    #         # normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
+    #         normDrjp1i = np.sqrt(rjp1_rjp1 - 2 * rjp1_ri + ri_ri)
+    #         cos_thetajijp1 = (ri_ri + rj_rjp1 - ri_rj - rjp1_ri) / (
+    #             normDrij * normDrjp1i
+    #         )
+    #         cos_thetajp1ji = (rj_rj + rjp1_ri - rj_rjp1 - ri_rj) / (
+    #             normDrij * normDrjjp1
+    #         )
+    #         cos_thetaijp1j = (rjp1_rjp1 + ri_rj - rj_rjp1 - rjp1_ri) / (
+    #             normDrjp1i * normDrjjp1
+    #         )
+    #         if cos_thetajijp1 < 0:
+    #             semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
+    #             Atot += (
+    #                 np.sqrt(
+    #                     semiP
+    #                     * (semiP - normDrij)
+    #                     * (semiP - normDrjjp1)
+    #                     * (semiP - normDrjp1i)
+    #                 )
+    #                 / 2
+    #             )
+    #             # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 4
+    #         elif cos_thetajp1ji < 0 or cos_thetaijp1j < 0:
+    #             semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
+    #             Atot += (
+    #                 np.sqrt(
+    #                     semiP
+    #                     * (semiP - normDrij)
+    #                     * (semiP - normDrjjp1)
+    #                     * (semiP - normDrjp1i)
+    #                 )
+    #                 / 4
+    #             )
+    #             # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 8
+    #         else:
+    #             cot_thetaijp1j = cos_thetaijp1j / np.sqrt(1 - cos_thetaijp1j**2)
+    #             cot_thetajp1ji = cos_thetajp1ji / np.sqrt(1 - cos_thetajp1ji**2)
+    #             Atot += (
+    #                 normDrij**2 * cot_thetaijp1j / 8
+    #                 + normDrjp1i**2 * cot_thetajp1ji / 8
+    #             )
 
-            normDrij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
-            # normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
-            normDrjjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
-            # normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
-            normDrjp1i = np.sqrt(rjp1_rjp1 - 2 * rjp1_ri + ri_ri)
-            cos_thetajijp1 = (ri_ri + rj_rjp1 - ri_rj - rjp1_ri) / (
-                normDrij * normDrjp1i
-            )
-            cos_thetajp1ji = (rj_rj + rjp1_ri - rj_rjp1 - ri_rj) / (
-                normDrij * normDrjjp1
-            )
-            cos_thetaijp1j = (rjp1_rjp1 + ri_rj - rj_rjp1 - rjp1_ri) / (
-                normDrjp1i * normDrjjp1
-            )
-            if cos_thetajijp1 < 0:
-                semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
-                Atot += (
-                    np.sqrt(
-                        semiP
-                        * (semiP - normDrij)
-                        * (semiP - normDrjjp1)
-                        * (semiP - normDrjp1i)
-                    )
-                    / 2
-                )
-                # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 4
-            elif cos_thetajp1ji < 0 or cos_thetaijp1j < 0:
-                semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
-                Atot += (
-                    np.sqrt(
-                        semiP
-                        * (semiP - normDrij)
-                        * (semiP - normDrjjp1)
-                        * (semiP - normDrjp1i)
-                    )
-                    / 4
-                )
-                # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 8
-            else:
-                cot_thetaijp1j = cos_thetaijp1j / np.sqrt(1 - cos_thetaijp1j**2)
-                cot_thetajp1ji = cos_thetajp1ji / np.sqrt(1 - cos_thetajp1ji**2)
-                Atot += (
-                    normDrij**2 * cot_thetaijp1j / 8
-                    + normDrjp1i**2 * cot_thetajp1ji / 8
-                )
+    #     return Atot
 
-        return Atot
-
-    def total_area_of_dual_meyercells(self):
-        Atot = 0.0
-        for v in self.xyz_coord_V.keys():
-            Atot += self.meyercell_area(v)
-
-        return Atot
+    # def meyercell_area_V(self):
+    #     keys = sorted(self.xyz_coord_V.keys())
+    #     N = len(keys)
+    #     A = np.zeros(N, dtype=_NUMPY_FLOAT_)
+    #     for _, k in enumerate(keys):
+    #         A[_] = self.meyercell_area(k)
+    #     return A
 
     ######################################################
     # Misc helper functions
@@ -1008,7 +1134,8 @@ class HalfEdgeMeshBase:
         return self.num_vertices - self.num_edges + self.num_faces
 
     ######################################################
-
+    ######################################################
+    ######################################################
     def patch_from_seed_vertex(self, v_seed):
         """
         Initialize a patch from a seed vertex by including taking the closure of all simplices in supermesh that contain the seed vertex. If v_seed is not in a boundary of supermesh, the patch will be a disk centered at v_seed.
@@ -1085,51 +1212,46 @@ class HalfEdgeMeshBase:
         defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
         constant timelike parameter s.
         """
+        # Fkeys = self.h_bound_F.keys()
+        # Vkeys = sorted(self.xyz_coord_V.keys())
+        # lapQ = np.zeros_like(Q)
+        # for i in Vkeys:
+        #     x = self.xyz_coord_v(i)
+        #     qx = Q[i]
+        #     for f in Fkeys:
+        #         af = self.area_f(f)
+        #         for j in self.generate_V_of_f(f):
+        #             qy = Q[j]
+        #             y = self.xyz_coord_v(j)
+        #             lapQ[i] += (
+        #                 (af / 3)
+        #                 * (qy - qx)
+        #                 * np.exp(-np.linalg.norm(y - x) ** 2 / (4 * s))
+        #                 / (4 * np.pi * s**2)
+        #             )
+        # return lapQ
         Fkeys = self.h_bound_F.keys()
-        Vkeys = sorted(self.xyz_coord_V.keys())
+        Af = self.area_F()
+        F = self.V_of_F
+        V = self.xyz_array
+        Nv = len(V)
         lapQ = np.zeros_like(Q)
-        for i in Vkeys:
-            x = self.xyz_coord_v(i)
-            qx = Q[i]
+        for i in range(Nv):
             for f in Fkeys:
-                af = self.area_f(f)
-                for j in self.generate_V_of_f(f):
-                    qy = Q[j]
-                    y = self.xyz_coord_v(j)
+                for j in F[f]:
                     lapQ[i] += (
-                        (af / 3)
-                        * (qy - qx)
-                        * np.exp(-np.linalg.norm(y - x) ** 2 / (4 * s))
-                        / (4 * np.pi * s)
+                        (Af[f] / 3)
+                        * (Q[j] - Q[i])
+                        * np.exp(
+                            -(
+                                (V[j, 0] - V[i, 0]) ** 2
+                                + (V[j, 1] - V[i, 1]) ** 2
+                                + (V[j, 2] - V[i, 2]) ** 2
+                            )
+                            / (4 * s)
+                        )
+                        / (4 * np.pi * s**2)
                     )
-        return lapQ
-
-    def obelkin_laplacian(self, Q, s):
-        """
-        Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
-        defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
-        constant timelike parameter s.
-        """
-        # V = self.xyz_array
-        Vkeys = sorted(self.xyz_coord_V)
-        Nv = len(Vkeys)
-        # A = np.array([self.barcell_area(v) for v in Vkeys])
-        lapQ = np.zeros_like(Q)
-        for _i in range(Nv):
-            i = Vkeys[_i]
-            qx = Q[_i]
-            x = self.xyz_coord_v(i)
-            ax = self.barcell_area(i)
-            for _j in range(Nv):
-                j = Vkeys[_j]
-                qy = Q[_j]
-                y = self.xyz_coord_v(j)
-                lapQ[_i] += (
-                    ax
-                    * (qy - qx)
-                    * np.exp(-np.linalg.norm(y - x) ** 2 / (4 * s))
-                    / (4 * np.pi * s)
-                )
         return lapQ
 
     def pbelkin_laplacian(self, Q, s):
@@ -1139,6 +1261,47 @@ class HalfEdgeMeshBase:
         constant timelike parameter s.
         """
         return pbelkin_laplacian(self, Q, s)
+
+    def guckenberger_laplacian(self, Q):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using 'Method D' from
+        Guckenberger et al 2016 'On the bending algorithms for soft objects in flows'.
+        This is a modification of Belkin et al's which replaces the constant time-like
+        parameter s with the area the dual cell at each vertex.
+        """
+        Fkeys = self.h_bound_F.keys()
+        Af = self.area_F()
+        Av = self.barcell_area_V()
+        F = self.V_of_F
+        V = self.xyz_array
+        Nv = len(V)
+        lapQ = np.zeros_like(Q)
+        for i in range(Nv):
+            for f in Fkeys:
+                for j in F[f]:
+                    lapQ[i] += (
+                        (Af[f] / 3)
+                        * (Q[j] - Q[i])
+                        * np.exp(
+                            -(
+                                (V[j, 0] - V[i, 0]) ** 2
+                                + (V[j, 1] - V[i, 1]) ** 2
+                                + (V[j, 2] - V[i, 2]) ** 2
+                            )
+                            / (4 * Av[i])
+                        )
+                        / (4 * np.pi * Av[i] ** 2)
+                    )
+        return lapQ
+
+    def pguckenberger_laplacian(self, Q):
+        """
+        Computes the heat kernel Laplacian of Q at each vertex using 'Method D' from
+        Guckenberger et al 2016 'On the bending algorithms for soft objects in flows'.
+        This is a modification of Belkin et al's which replaces the constant time-like
+        parameter s with the area the dual cell at each vertex.
+        """
+        return pguckenberger_laplacian(self, Q)
 
     ######################################################
     # to be deprecated
@@ -1203,10 +1366,10 @@ class HalfEdgeMeshBuilder:
         h_twin_H,
         f_left_H,
         h_bound_F,
-        # h_comp_B=None,
-        # mesh_class=HalfEdgeMeshBase,
+        h_comp_B=None,
+        mesh_class=HalfEdgeMeshBase,
     ):
-        # self.mesh_class = mesh_class
+        self.mesh_class = mesh_class
         # Nv = len(xyz_coord_V)
         self.xyz_coord_V_array = np.array(xyz_coord_V, dtype=_NUMPY_FLOAT_)
         # self.xyz_coord_V_array = np.zeros((Nv, 3), dtype=_NUMPY_FLOAT_)
@@ -1216,7 +1379,10 @@ class HalfEdgeMeshBuilder:
         self.h_twin_H_array = np.array(h_twin_H, dtype=_NUMPY_INT_)
         self.f_left_H_array = np.array(f_left_H, dtype=_NUMPY_INT_)
         self.h_bound_F_array = np.array(h_bound_F, dtype=_NUMPY_INT_)
-
+        if h_comp_B is None:
+            self.h_comp_B_array = self.find_h_comp_B_array()
+        else:
+            self.h_comp_B_array = np.array(h_comp_B, dtype=_NUMPY_INT_)
         (
             self.xyz_coord_V,
             self.h_out_V,
@@ -1225,6 +1391,7 @@ class HalfEdgeMeshBuilder:
             self.h_twin_H,
             self.f_left_H,
             self.h_bound_F,
+            self.h_comp_B,
         ) = half_edge_arrays_to_dicts(
             self.xyz_coord_V_array,
             self.h_out_V_array,
@@ -1233,6 +1400,7 @@ class HalfEdgeMeshBuilder:
             self.h_twin_H_array,
             self.f_left_H_array,
             self.h_bound_F_array,
+            self.h_comp_B_array,
         )
         # if h_comp_B is None:
         #     self.h_comp_B = self.find_h_comp_B()
@@ -1278,7 +1446,7 @@ class HalfEdgeMeshBuilder:
         return c.build()
 
     @classmethod
-    def from_half_edge_ply(cls, ply_path):
+    def from_half_edge_ply(cls, ply_path, mesh_class=HalfEdgeMeshBase):
         """Initialize a half-edge mesh from a ply file containing half-edge mesh data.
 
         Args:
@@ -1287,7 +1455,10 @@ class HalfEdgeMeshBuilder:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
         """
-        c = cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).target_samples)
+        c = cls(
+            *VertTri2HalfEdgeConverter.from_target_ply(ply_path).target_samples,
+            mesh_class=mesh_class,
+        )
         return c.build()
 
     @classmethod
@@ -1303,6 +1474,42 @@ class HalfEdgeMeshBuilder:
         c = cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).target_samples)
         return c
 
+    @classmethod
+    def from_data_arrays(cls, path):
+        """Initialize a half-edge mesh from npz file containing data arrays."""
+        data = np.load(path)
+        c = cls(
+            data["xyz_coord_V"],
+            data["h_out_V"],
+            data["v_origin_H"],
+            data["h_next_H"],
+            data["h_twin_H"],
+            data["f_left_H"],
+            data["h_bound_F"],
+            data["h_comp_B"],
+        )
+        return c.build()
+
+    @classmethod
+    def load_test_spheres(cls):
+        """Load test spheres from npz file."""
+        _NUM_VERTS_ = [
+            12,
+            42,
+            162,
+            642,
+            2562,
+            10242,
+            40962,
+            163842,
+            655362,
+            2621442,
+        ]
+        npzs = [f"./data/half_edge_arrays/unit_sphere_{N:07d}.npz" for N in _NUM_VERTS_]
+        M = [cls.from_data_arrays(path) for path in npzs]
+        return M
+
+    #######################################################
     @property
     def numba_dicts(self):
         return (
@@ -1313,6 +1520,7 @@ class HalfEdgeMeshBuilder:
             self.h_twin_H,
             self.f_left_H,
             self.h_bound_F,
+            self.h_comp_B,
         )
 
     @property
@@ -1325,10 +1533,378 @@ class HalfEdgeMeshBuilder:
             self.h_twin_H_array,
             self.f_left_H_array,
             self.h_bound_F_array,
+            self.h_comp_B_array,
+        )
+
+    def find_h_comp_B_array(self):
+        return find_h_comp_B_array(
+            self.xyz_coord_V_array,
+            self.h_out_V_array,
+            self.v_origin_H_array,
+            self.h_next_H_array,
+            self.h_twin_H_array,
+            self.f_left_H_array,
+            self.h_bound_F_array,
         )
 
     def build(self):
-        # return self.mesh_class(*self.numba_dicts)
-        HEdicts = self.numba_dicts
+        # HEdicts = self.numba_dicts
         # return HalfEdgeMeshBase(*self.numba_dicts)
-        return HalfEdgeMeshBase(*HEdicts)
+        # return HalfEdgeMeshBase(*HEdicts)
+        return self.mesh_class(*self.numba_dicts, find_h_comp_B=True)
+
+
+half_edge_patch_spec = [
+    ("_name", unicode_type),
+    ("_xyz_coord_V", xyz_coord_V_numba_type),
+    ("_h_out_V", h_out_V_numba_type),
+    ("_v_origin_H", v_origin_H_numba_type),
+    ("_h_next_H", h_next_H_numba_type),
+    ("_h_twin_H", h_twin_H_numba_type),
+    ("_f_left_H", f_left_H_numba_type),
+    ("_h_bound_F", h_bound_F_numba_type),
+    ("_h_comp_B", h_comp_B_numba_type),
+]
+
+
+# @jitclass(half_edge_mesh_spec)
+class HalfEdgePatch:
+    """
+    A submanifold of a HalfEdgeMesh topologically equivalent to a disk.
+    """
+
+    def __init__(
+        self,
+        supermesh,
+        V,
+        H,
+        F,
+        h_comp_B=None,
+        V_bdry=None,
+    ):
+        self.supermesh = supermesh
+        self.V = V
+        self.H = H
+        self.F = F
+        if h_comp_B is None:
+            self.h_comp_B = self.find_h_comp_B()
+        if V_bdry is None:
+            self.V_bdry = set(self.generate_V_cw_B())
+
+    @property
+    def V(self):
+        return self._V
+
+    @V.setter
+    def V(self, value):
+        if isinstance(value, set):
+            self._V = value
+        elif hasattr(value, "__iter__"):
+            self._V = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
+
+    @property
+    def H(self):
+        return self._H
+
+    @H.setter
+    def H(self, value):
+        if isinstance(value, set):
+            self._H = value
+        elif hasattr(value, "__iter__"):
+            self._H = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
+
+    @property
+    def F(self):
+        return self._F
+
+    @F.setter
+    def F(self, value):
+        if isinstance(value, set):
+            self._F = value
+        elif hasattr(value, "__iter__"):
+            self._F = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
+
+    @property
+    def V_bdry(self):
+        return self._V_bdry
+
+    @V_bdry.setter
+    def V_bdry(self, value):
+        if isinstance(value, set):
+            self._V_bdry = value
+        elif hasattr(value, "__iter__"):
+            self._V_bdry = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
+
+    ##############################################
+    # @classmethod
+    # def from_seed_vertex(cls, v_seed, supermesh):
+    #     """
+    #     Initialize a patch from a seed vertex by including taking the closure of all simplices in supermesh that contain the seed vertex. If v_seed is not in a boundary of supermesh, the patch will be a disk centered at v_seed.
+
+    #     Parameters:
+    #         v_seed (int): vertex index
+    #         supermesh (HalfEdgeMesh): mesh from which the patch is extracted
+    #     """
+    #     V, H, F = supermesh.closure(*supermesh.star_of_vertex(v_seed))
+    #     self = cls(supermesh, V, H, F)
+    #     # self.h_comp_B = self.find_h_comp_B()
+
+    #     return self
+
+    def complement_boundary_contains_h(self, h):
+        """check if half-edge h is in the boundary of the mesh"""
+        return h in self.H and self.supermesh.f_left_h(h) not in self.F
+
+    def interior_boundary_contains_h(self, h):
+        """check if half-edge h is on the boundary of the mesh"""
+        return (
+            h in self.H
+            and self.supermesh.f_left_h(self.supermesh.h_twin_h(h)) not in self.F
+        )
+
+    def boundary_contains_h(self, h):
+        """check if half-edge h is on the boundary of the mesh"""
+        if h in self.H:
+            if self.supermesh.f_left_h(h) not in self.F:
+                return True
+            if self.supermesh.f_left_h(self.supermesh.h_twin_h(h)) not in self.F:
+                return True
+        return False
+
+    ##############################################
+    def xyz_coord_v(self, v):
+        """
+        get array of xyz coordinates of vertex v
+
+        Args:
+            v (int): vertex index
+
+        Returns:
+            numpy.array: xyz coordinates
+        """
+        return self.supermesh.xyz_coord_v(v)
+
+    def h_out_v(self, v):
+        """
+        get index of an non-boundary outgoing half-edge incident on vertex v
+
+        Args:
+            v (int): vertex index
+
+        Returns:
+            int: half-edge index
+        """
+        if v not in self.V:
+            raise ValueError("Vertex not in patch.")
+        for h in self.supermesh.generate_H_out_v_clockwise(v):
+            if h not in self.H:
+                continue
+            elif self.supermesh.f_left_h(h) in self.F:
+                return h
+
+    def v_origin_h(self, h):
+        """get index of the vertex at the origin of half-edge h
+
+        Args:
+            h (int): half-edge index
+
+        Returns:
+            int: vertex index
+        """
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
+        return self.supermesh.v_origin_h(h)
+
+    def h_next_h(self, h):
+        """get index of the next half-edge after h in the face/boundary cycle
+        Args:
+            h (int): half-edge index
+
+        Returns:
+            int: half-edge index
+        """
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
+        elif self.supermesh.f_left_h(h) in self.F:
+            return self.supermesh.h_next_h(h)
+        n = self.supermesh.h_next_h(h)
+        while n not in self.H:
+            n = self.supermesh.h_out_cw_from_h(n)
+        return n
+
+    def h_twin_h(self, h):
+        """get index of the half-edge anti-parallel to half-edge h
+
+        Args:
+            h (int): half-edge index
+
+        Returns:
+            int: half-edge index
+        """
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
+        return self.supermesh.h_twin_h(h)
+
+    def f_left_h(self, h):
+        """get index of the face to the left of half-edge h
+
+        Args:
+            h (int): half-edge index
+
+        Returns:
+            int: face index
+        """
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
+        elif self.supermesh.f_left_h(h) in self.F:
+            return self.supermesh.f_left_h(h)
+        else:
+            return -1
+
+    def h_bound_f(self, f):
+        """get index of a half-edge on the boundary of face f
+
+        Args:
+            f (int): face index
+
+        Returns:
+            int: half-edge index
+        """
+        if f not in self.F:
+            raise ValueError("Face not in patch.")
+        return self.supermesh.h_bound_f(f)
+
+    def generate_H_next_h(self, h_start):
+        h = h_start
+        while True:
+            yield h
+            h = self.h_next_h(h)
+            if h == h_start:
+                break
+
+    def generate_H_cw_B(self):
+        for bdry, h in self.h_comp_B.items():
+            for h in self.generate_H_next_h(h):
+                yield h
+
+    def generate_V_cw_B(self):
+        for h in self.generate_H_cw_B():
+            yield self.v_origin_h(h)
+
+    def generate_F_cw_B(self):
+        for h in self.generate_H_cw_B():
+            yield self.f_left_h(self.h_twin_h(h))
+
+    def find_h_comp_B(self, F_need2check=None):
+        h_comp_B = dict()
+        bdry_count = 0
+        H_in_cw_boundary = set()
+        # boundary_is_right_of_H = set()
+        if F_need2check is None:
+            F_need2check = self.F.copy()  # set of faces that need to be checked
+        while F_need2check:
+            f = F_need2check.pop()
+            h = self.h_bound_f(f)
+            for h in self.generate_H_next_h(h):
+                if self.interior_boundary_contains_h(h):
+                    H_in_cw_boundary.add(self.h_twin_h(h))
+        while H_in_cw_boundary:
+            bdry_count += 1
+            h = H_in_cw_boundary.pop()
+            bdry = -bdry_count
+            h_comp_B[bdry] = h
+            for h in self.generate_H_next_h(h):
+                H_in_cw_boundary.discard(h)
+        return h_comp_B
+
+    ##############################################
+    # ****************************************** #
+    ##############################################
+    def expand_boundary(self):
+        """
+        **slow but actually works***
+        Expand the boundary of the patch by one ring of vertices, edges, and faces.
+
+        Returns:
+            set: set of new boundary vertices
+
+        V
+        H
+        F
+        generate_V_cw_B()
+        find_h_comp_B()
+            h_bound_f()
+            generate_H_next_h()
+            interior_boundary_contains_h()
+            h_twin_h()
+            generate_H_next_h
+        supermesh.closure()
+        supermesh.star()
+        """
+        new_boundary_verts = set()
+        V_bdry_old = set(self.generate_V_cw_B())
+        V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
+        V_bdry_new = V - self.V
+        self.V.update(V)
+        self.H.update(H)
+        self.F.update(F)
+        self.h_comp_B = self.find_h_comp_B(F_need2check=F)
+        return V_bdry_new
+
+    ##############################################
+    # ****************************************** #
+    ##############################################
+
+    ##############################################
+    def to_half_edge_mesh(self):
+        V = sorted(self.V)
+        F = sorted(self.F)
+        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
+        F = [
+            [
+                V.index(self.v_origin_h(h))
+                for h in self.generate_H_next_h(self.h_bound_f(f))
+            ]
+            for f in F
+        ]
+        return HalfEdgeMesh.from_vert_face_list(xyz_coord_V, F)
+
+    @property
+    def data_lists(self):
+        """ """
+        V = sorted(self.V)
+        H = sorted(self.H)
+        F = sorted(self.F)
+        # [x if x<.5 else 33 for x in X]
+        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
+        h_out_V = [H.index(self.h_out_v(v)) for v in V]
+        v_origin_H = [V.index(self.v_origin_h(h)) for h in H]
+        h_next_H = [H.index(self.h_next_h(h)) for h in H]
+        h_twin_H = [H.index(self.h_twin_h(h)) for h in H]
+        f_left_H = [
+            self.f_left_h(h) if self.f_left_h(h) < 0 else F.index(self.f_left_h(h))
+            for h in H
+        ]
+        h_bound_F = [H.index(self.h_bound_f(f)) for f in F]
+
+        return (
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+        )
+
+    ##############################################
+    ##############################################
+    # to be deprecated
