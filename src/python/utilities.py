@@ -1,5 +1,85 @@
 import numpy as np
 import warnings
+import pickle
+import gzip
+import os
+import subprocess
+
+
+def chunk_file_with_split(filename, chunk_size="40M"):
+    try:
+        subprocess.run(
+            ["split", "-b", chunk_size, filename, f"{filename}.part"], check=True
+        )
+        print(f"File {filename} has been chunked into {chunk_size} pieces.")
+    except subprocess.CalledProcessError as e:
+        print(f"An error occurred while chunking the file: {e}")
+
+
+def unchunk_file_with_cat(filename, output_filename):
+    try:
+        command = f"cat {filename}.part* > {output_filename}"
+        subprocess.run(command, shell=True, check=True)
+        print(f"Chunked files have been recombined into {output_filename}.")
+    except subprocess.CalledProcessError as e:
+        print(f"An error occurred while unchunking the files: {e}")
+
+
+def save_pkl(data, filename, compressed=False, remove_unchunked=False):
+    if compressed:
+        with gzip.open(filename, "wb") as f:
+            pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+    else:
+        with open(filename, "wb") as f:
+            pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    file_size = os.path.getsize(filename)
+    max_size = 40 * 1024 * 1024  # 50MB in bytes
+
+    if file_size > max_size:
+        warnings.warn(
+            f"The file {filename} exceeds 40MB. Its size is {file_size / (1024 * 1024):.2f}MB.",
+            UserWarning,
+        )
+        if chunk:
+            chunk_file_with_split(filename, chunk_size="40M")
+            if remove_unchunked:
+                os.remove(filename)
+
+
+def load_pkl(filename, compressed=False):
+    if compressed:
+        with gzip.open(filename, "rb") as f:
+            data = pickle.load(f)
+    else:
+        with open(filename, "rb") as f:
+            data = pickle.load(f)
+    return data
+
+
+def save_npz(data, filename, compressed=False, chunk=False, remove_unchunked=False):
+    if compressed:
+        np.savez_compressed(filename, **data)
+    else:
+        np.savez(filename, **data)
+
+    file_size = os.path.getsize(filename)
+    max_size = 40 * 1024 * 1024  # 50MB in bytes
+
+    if file_size > max_size:
+        warnings.warn(
+            f"The file {filename} exceeds 40MB. Its size is {file_size / (1024 * 1024):.2f}MB.",
+            UserWarning,
+        )
+        if chunk:
+            chunk_file_with_split(filename, chunk_size="40M")
+            if remove_unchunked:
+                os.remove(filename)
+
+
+def load_npz(filename):
+    data = np.load(filename)
+    return {k: v for k, v in data.items()}
 
 
 def round_to(x, n=3):

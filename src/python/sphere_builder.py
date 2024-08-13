@@ -18,6 +18,7 @@ from numba.experimental import jitclass
 import pickle
 from time import time
 import os
+from src.python.utilities import save_npz
 
 
 @jit
@@ -521,7 +522,9 @@ class SphereFactory:
         self.t_refine.append(t)
         self.refine_level += 1
 
-    def save_data_arrays(self, path, level=-1):
+    def save_data_arrays(
+        self, path, level=-1, compressed=False, chunk=False, remove_unchunked=False
+    ):
         """
         Save data arrays to npz file
 
@@ -537,20 +540,29 @@ class SphereFactory:
             f_left_H,
             h_bound_F,
         ) = self.HE(level=level)
-        h_comp_B = np.array([])
-        np.savez(
+        h_comp_B = np.array([], dtype=np.int32)
+        data = {
+            "xyz_coord_V": xyz_coord_V,
+            "h_out_V": h_out_V,
+            "v_origin_H": v_origin_H,
+            "h_next_H": h_next_H,
+            "h_twin_H": h_twin_H,
+            "f_left_H": f_left_H,
+            "h_bound_F": h_bound_F,
+            "h_comp_B": h_comp_B,
+        }
+
+        save_npz(
+            data,
             path,
-            xyz_coord_V=xyz_coord_V,
-            h_out_V=h_out_V,
-            v_origin_H=v_origin_H,
-            h_next_H=h_next_H,
-            h_twin_H=h_twin_H,
-            f_left_H=f_left_H,
-            h_bound_F=h_bound_F,
-            h_comp_B=h_comp_B,
+            compressed=compressed,
+            chunk=chunk,
+            remove_unchunked=remove_unchunked,
         )
 
-    def pickle_data_arrays(self, path, level=-1):
+    def pickle_data_arrays(
+        self, path, level=-1, compressed=False, chunk=False, remove_unchunked=False
+    ):
         """
         Save data arrays to pickle file
 
@@ -566,7 +578,7 @@ class SphereFactory:
             f_left_H,
             h_bound_F,
         ) = self.HE(level=level)
-        h_comp_B = np.array([])
+        h_comp_B = np.array([], dtype=np.int32)
         data = {
             "xyz_coord_V": xyz_coord_V,
             "h_out_V": h_out_V,
@@ -577,8 +589,13 @@ class SphereFactory:
             "h_bound_F": h_bound_F,
             "h_comp_B": h_comp_B,
         }
-        with open(path, "wb") as f:
-            pickle.dump(data, f)
+        save_pkl(
+            data,
+            path,
+            compressed=compressed,
+            chunk=chunk,
+            remove_unchunked=remove_unchunked,
+        )
 
     def write_plys(self, level=-1):
         if isinstance(level, int):
@@ -849,11 +866,22 @@ def save_new_from_old():
         2621442,
     ]  # [12, 42, 162, 642, 2562, 10242, 40962, 163842]
     # _SURF_NAMES_ = [f"unit_sphere_{N:07d}" for N in _NUM_VERTS_]
-    paths = [f"./data/half_edge_arrays/_unit_sphere_{N:07d}" for N in _NUM_VERTS_]
-    for level, path in enumerate(paths):
-        path_pickle = path + ".pickle"
+    paths = [f"./data/half_edge_arrays/unit_sphere_{N:07d}" for N in _NUM_VERTS_]
+    cpaths = [
+        f"./data/half_edge_arrays/compressed_unit_sphere_{N:07d}" for N in _NUM_VERTS_
+    ]
+    for level in range(len(paths)):
+        path = paths[level]
+        cpath = cpaths[level]
+        # path_pickle = path + ".pkl"
         path_npz = path + ".npz"
         print(path_npz)
-        sf_new.save_data_arrays(path_npz, level=level)
-        print(path_pickle)
-        sf_new.pickle_data_arrays(path_pickle, level=level)
+        sf_new.save_data_arrays(
+            path_npz, level=level, compressed=False, chunk=False, remove_unchunked=False
+        )
+        cpath_npz = cpath + ".npz"
+        print(cpath_npz)
+        # sf_new.pickle_data_arrays(path_pickle, level=level)
+        sf_new.save_data_arrays(
+            cpath_npz, level=level, compressed=True, chunk=True, remove_unchunked=True
+        )

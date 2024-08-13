@@ -264,8 +264,8 @@ class HalfEdgeMeshBase:
         self.h_twin_h(h)
         #
         self.v_head_h(h)
-        self.f_right_h(h)
-        self.h_out_cw_from_h(h)
+        # self.f_right_h(h)
+        # self.h_out_cw_from_h(h)
         self.h_in_cw_from_h(h)
         self.h_prev_h(h)
         self.h_prev_h_by_rot(h)
@@ -283,14 +283,10 @@ class HalfEdgeMeshBase:
         self.generate_H_next_h(h)
         self.generate_V_of_f(f)
         # Data exporters
-        # self.Vkeys
-        # self.Hkeys
-        # self.Fkeys
         self.xyz_array
-        # self.V_of_F
-        # self.V_of_H
-        # self.data_lists
-        # self.data_dicts
+        self.V_of_F
+        self.data_arrays
+        self.data_dicts
         # Simplical operations
         V, H, F = self.star_of_vertex(v)
         self.star_of_vertex(v)
@@ -1491,7 +1487,7 @@ class HalfEdgeMeshBuilder:
         return c.build()
 
     @classmethod
-    def load_test_spheres(cls):
+    def load_test_spheres(cls, data_dir="./data/half_edge_arrays"):
         """Load test spheres from npz file."""
         _NUM_VERTS_ = [
             12,
@@ -1505,7 +1501,7 @@ class HalfEdgeMeshBuilder:
             655362,
             2621442,
         ]
-        npzs = [f"./data/half_edge_arrays/unit_sphere_{N:07d}.npz" for N in _NUM_VERTS_]
+        npzs = [f"{data_dir}/unit_sphere_{N:07d}.npz" for N in _NUM_VERTS_]
         M = [cls.from_data_arrays(path) for path in npzs]
         return M
 
