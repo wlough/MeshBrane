@@ -155,6 +155,97 @@ def pguckenberger_laplacian(self, Q):
     return lapQ
 
 
+@jit
+def heat_kernel(x, y, s):
+    # return np.exp(
+    #     -((y[0] - x[0]) ** 2 + (y[1] - x[1]) ** 2 + (y[2] - x[2]) ** 2) / (4 * s)
+    # ) / (4 * np.pi * s)
+    return np.exp(-np.sum((y - x) ** 2, axis=-1) / (4 * s)) / (4 * np.pi * s)
+
+
+@jit
+def lap_kernel1(x, y, ds):
+    return heat_kernel(x, y, ds) / ds
+
+
+@jit
+def lap_kernel2(x, y, ds):
+    c1, c2 = 2, -1 / 2
+    s1, s2 = ds, 2 * ds
+    return c1 * heat_kernel(x, y, s1) / ds + c2 * heat_kernel(x, y, s2) / ds
+
+
+@jit
+def lap_kernel3(x, y, ds):
+    c1, c2, c3 = 3, -3 / 2, 1 / 3
+    s1, s2, s3 = ds, 2 * ds, 3 * ds
+    return (
+        c1 * heat_kernel(x, y, s1) / ds
+        + c2 * heat_kernel(x, y, s2) / ds
+        + c3 * heat_kernel(x, y, s3) / ds
+    )
+
+
+@jit(parallel=True)
+def belkin_laplacian1(self, Q, s):
+    """
+    Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
+    defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
+    constant timelike parameter s.
+    """
+    Fkeys = self.h_bound_F.keys()
+    Af = self.area_F()
+    F = self.V_of_F
+    V = self.xyz_array
+    Nv = len(V)
+    lapQ = np.zeros_like(Q)
+    for i in prange(Nv):
+        for f in Fkeys:
+            for j in F[f]:
+                lapQ[i] += (Af[f] / 3) * (Q[j] - Q[i]) * lap_kernel1(V[i], V[j], s)
+    return lapQ
+
+
+@jit(parallel=True)
+def belkin_laplacian2(self, Q, s):
+    """
+    Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
+    defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
+    constant timelike parameter s.
+    """
+    Fkeys = self.h_bound_F.keys()
+    Af = self.area_F()
+    F = self.V_of_F
+    V = self.xyz_array
+    Nv = len(V)
+    lapQ = np.zeros_like(Q)
+    for i in prange(Nv):
+        for f in Fkeys:
+            for j in F[f]:
+                lapQ[i] += (Af[f] / 3) * (Q[j] - Q[i]) * lap_kernel2(V[i], V[j], s)
+    return lapQ
+
+
+@jit(parallel=True)
+def belkin_laplacian3(self, Q, s):
+    """
+    Computes the heat kernel Laplacian of Q at each vertex using the 'mesh Laplacian'
+    defined in Belkin et al 2008 'Discrete laplace operator on meshed surfaces' with
+    constant timelike parameter s.
+    """
+    Fkeys = self.h_bound_F.keys()
+    Af = self.area_F()
+    F = self.V_of_F
+    V = self.xyz_array
+    Nv = len(V)
+    lapQ = np.zeros_like(Q)
+    for i in prange(Nv):
+        for f in Fkeys:
+            for j in F[f]:
+                lapQ[i] += (Af[f] / 3) * (Q[j] - Q[i]) * lap_kernel3(V[i], V[j], s)
+    return lapQ
+
+
 @jit(parallel=True)
 def pV_of_F(self):
     """
@@ -1299,6 +1390,14 @@ class HalfEdgeMeshBase:
         """
         return pguckenberger_laplacian(self, Q)
 
+    def order_p_belkin_laplacian(self, Q, s, p):
+        if p == 1:
+            return belkin_laplacian1(self, Q, s)
+        if p == 2:
+            return belkin_laplacian2(self, Q, s)
+        if p == 3:
+            return belkin_laplacian3(self, Q, s)
+
     ######################################################
     # to be deprecated
 
@@ -1487,7 +1586,7 @@ class HalfEdgeMeshBuilder:
         return c.build()
 
     @classmethod
-    def load_test_spheres(cls, data_dir="./data/half_edge_arrays"):
+    def load_test_spheres(cls, data_dir="./output/half_edge_arrays"):
         """Load test spheres from npz file."""
         _NUM_VERTS_ = [
             12,

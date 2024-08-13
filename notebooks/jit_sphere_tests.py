@@ -686,9 +686,9 @@ def surf_mcvec3d(
 # %%
 # noise_scales = [0.0]
 # for n, noise_scale in enumerate(noise_scales):
-# run_mcvec_tests(run_name="mcvec0", overwrite=True)
+run_mcvec_tests(run_name="mcvec0", overwrite=True)
 
-results = get_mcvec_test_results(run_name="mcvec")
+results = get_mcvec_test_results(run_name="mcvec0")
 
 # mv = MeshViewer(*m.data_lists)
 # mv.plot()
@@ -724,9 +724,9 @@ plt_kwargs = {
 single_plot_L2_fit(
     results,
     belkin_fixed=False,
-    belkin_afe=True,
+    belkin_afe=False,
     cotan=True,
-    guckenberger=False,
+    guckenberger=True,
     **plt_kwargs,
 )
 

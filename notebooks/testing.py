@@ -6,7 +6,9 @@ from src.python.utilities import (
     chunk_file_with_split,
     unchunk_file_with_cat,
 )
+from src.python.sphere_builder import save_new_from_old
 
+save_new_from_old()
 _NUM_VERTS_ = [
     12,
     42,
@@ -44,4 +46,4 @@ new_filename = "./data/compressed_half_edge_arrays/new_unit_sphere_2621442.npz"
 chunk_file_with_split(filename, chunk_size=chunk_size)
 unchunk_file_with_cat(filename, new_filename)
 a = load_npz(new_filename)
-a
+dir(a)

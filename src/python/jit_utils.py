@@ -124,7 +124,7 @@ def jit_vf_samples_to_he_samples(V, F):
         h_next_H[h] = h_next
 
     # find and enumerate boundaries -1,-2,...
-    H_need2visit = set([h for h in range(len(H)) if f_left_H[h] == -1])
+    H_need2visit = set([h for h in range(len(H)) if f_left_H[h] < 0])
     bdry_count = 0
     while H_need2visit:
         bdry_count += 1
