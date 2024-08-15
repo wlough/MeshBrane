@@ -1,49 +1,61 @@
-from src.python.utilities import (
-    load_pkl,
-    load_npz,
-    save_pkl,
-    save_npz,
-    chunk_file_with_split,
-    unchunk_file_with_cat,
+from src.python.half_edge_brane import BraneBuilder
+from src.python.mesh_viewer import MeshViewer, downsample, downsample2
+import numpy as np
+from src.python.pretty_pictures import scalars_to_rgba
+
+# b = BraneBuilder.load_test_sphere()
+b = BraneBuilder.load_oblate_sphere(n_v=2)
+V, F = b.xyz_array, b.V_of_F
+a, aa, aaa = downsample(V, F)
+# H, n = b.mean_curvature_unit_normal_V()
+H, K, lapH, n = b.compute_curvature_data()
+data_arrays = b.data_arrays
+
+
+Fn = (
+    -2
+    # * b.bending_modulus
+    * (
+        lapH
+        + 2 * (H - b.spontaneous_curvature) * (H**2 + b.spontaneous_curvature * H - K)
+    )
 )
-from src.python.sphere_builder import save_new_from_old
+A = b.barcell_area_V()
 
-save_new_from_old()
-_NUM_VERTS_ = [
-    12,
-    42,
-    162,
-    642,
-    2562,
-    10242,
-    40962,
-    163842,
-    655362,
-    2621442,
-]
-_npzs = [f"./data/half_edge_arrays/unit_sphere_{N:07d}.npz" for N in _NUM_VERTS_]
-_pkls = [f"./data/half_edge_arrays/unit_sphere_{N:07d}.pickle" for N in _NUM_VERTS_]
-npzs = [
-    f"./data/compressed_half_edge_arrays/unit_sphere_{N:07d}.npz" for N in _NUM_VERTS_
-]
-pkls = [
-    f"./data/compressed_half_edge_arrays/unit_sphere_{N:07d}.pickle"
-    for N in _NUM_VERTS_
-]
-# max_size = 40 * 1024 * 1024
-# n = [load_npz(f) for f in _npzs]
-# p = [load_pkl(f) for f in _pkls]
-# for npz_path, pkl_path, npz_data, pkl_data in zip(npzs, pkls, n, p):
-#     print(npz_path)
-#     save_npz(npz_data, npz_path, compressed=True)
-#     print(pkl_path)
-#     save_pkl(pkl_data, pkl_path, compressed=True)
-# print("done")
 
-filename = npzs[-1]
-chunk_size = "40M"
-new_filename = "./data/compressed_half_edge_arrays/new_unit_sphere_2621442.npz"
-chunk_file_with_split(filename, chunk_size=chunk_size)
-unchunk_file_with_cat(filename, new_filename)
-a = load_npz(new_filename)
-dir(a)
+def surfvec3d(
+    b,
+    data_arrays,
+    vec,
+    scale_vec=1.0,
+    alpha=0.4,
+):
+
+    # local_error = np.linalg.norm(mcvec - mcvec_actual, axis=-1)
+    # V_rgba = scalars_to_rgba(local_error)
+    Vkeys = sorted(b.xyz_coord_V.keys())
+    V_rgba = scalars_to_rgba([-b.valence_v(v) for v in Vkeys])
+    V_rgba[:, -1] = alpha
+    E_rgba = np.zeros((len(b._v_origin_H), 4))
+    vfdata0 = [data_arrays[0], vec]
+
+    mv_kwargs = {
+        "vector_field_data": [vfdata0],
+        "V_rgba": V_rgba,
+        "color_by_V_rgba": True,
+        "E_rgba": E_rgba,
+    }
+    mv = MeshViewer(*data_arrays, **mv_kwargs)
+    # mv.plot()
+    mv.simple_plot()
+
+
+# %%
+vec = np.einsum("i,ij->ij", lapH, n)
+surfvec3d(
+    b,
+    data_arrays,
+    vec,
+    scale_vec=1.0,
+    alpha=0.4,
+)

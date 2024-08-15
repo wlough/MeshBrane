@@ -144,6 +144,74 @@ print("Mean and Gaussian curvatures")
 display(Latex(H_str))
 display(Latex(K_str))
 # %%
+# laplacian test funs
+a = 1
+laplacian = (
+    lambda f: f.diff(theta, 2) / a**2
+    + f.diff(phi, 2) / (a**2 * sp.sin(theta) ** 2)
+    + sp.cos(theta) * f.diff(theta) / (a**2 * sp.sin(theta))
+)
+fun_x = a * sp.sin(theta) * sp.cos(phi)
+fun_y = a * sp.sin(theta) * sp.sin(phi)
+fun_x_squared = fun_x**2
+fun_exp_x_y = sp.exp(fun_x + fun_y)
+lap_x = laplacian(fun_x).trigsimp()
+lap_x_squared = laplacian(fun_x_squared).trigsimp()
+lap_exp_x_y = laplacian(fun_exp_x_y).trigsimp()
+str(lap_x)
+str(lap_x_squared)
+str(lap_exp_x_y)
+
+
+def compute_surfcoord_from_xyz(xyz_array):
+    phi = np.arctan2(xyz_array[:, 1], xyz_array[:, 0])
+    rho = np.linalg.norm(xyz_array[:, :2], axis=-1)
+    theta = np.arctan2(rho, xyz_array[:, 2])
+    return np.array([theta, phi]).T
+
+
+def compute_xyz_from_surfcoord(surfcoord_array):
+    theta, phi = surfcoord_array.T
+    x = np.sin(theta) * np.cos(phi)
+    y = np.sin(theta) * np.sin(phi)
+    z = np.cos(theta)
+    return np.array([x, y, z]).T
+
+
+def lap_x(xyz_array):
+    phi = np.arctan2(xyz_array[:, 1], xyz_array[:, 0])
+    rho = np.linalg.norm(xyz_array[:, :2], axis=-1)
+    theta = np.arctan2(rho, xyz_array[:, 2])
+    return -2 * np.sin(theta) * np.cos(phi)
+
+
+def lap_x_squared(xyz_array):
+    phi = np.arctan2(xyz_array[:, 1], xyz_array[:, 0])
+    rho = np.linalg.norm(xyz_array[:, :2], axis=-1)
+    theta = np.arctan2(rho, xyz_array[:, 2])
+    return 6 * np.sin(phi) ** 2 * np.sin(theta) ** 2 - 6 * np.sin(theta) ** 2 + 2
+
+
+def lap_exp_x_y(xyz_array):
+    phi = np.arctan2(xyz_array[:, 1], xyz_array[:, 0])
+    rho = np.linalg.norm(xyz_array[:, :2], axis=-1)
+    theta = np.arctan2(rho, xyz_array[:, 2])
+    return (
+        (
+            -np.sin(2 * phi) / 2
+            + np.sin(2 * (phi - theta)) / 4
+            + np.sin(2 * (phi + theta)) / 4
+            + np.cos(2 * theta) / 2
+            - np.sqrt(2) * np.cos(phi - theta + pi / 4)
+            + np.sqrt(2) * np.cos(phi + theta + pi / 4)
+            + 3 / 2
+        )
+        * np.exp(-np.sin(phi - theta) / 2 + np.sin(phi + theta) / 2)
+        * np.exp(np.cos(phi - theta) / 2 - np.cos(phi + theta) / 2)
+    )
+
+
+# %%
 import sympy as sp
 from sympy.functions.special.spherical_harmonics import Ynm
 
@@ -167,7 +235,7 @@ laplacian = (
 # Compute the Laplacian in spherical coordinates
 laplacian_Y = laplacian(Y).trigsimp()
 laplacian_Y0 = laplacian0(Y).trigsimp()
-#
+(laplacian_Y - laplacian_Y0).simplify()
 
 # Display the Laplacian of the spherical harmonics
 (laplacian_Y.expand(func=True).trigsimp() / Y.expand(func=True)).trigsimp().simplify()

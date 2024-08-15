@@ -6,6 +6,18 @@ import os
 import subprocess
 
 
+def make_output_dir(output_dir, overwrite=False):
+    if os.path.exists(output_dir) and overwrite:
+        os.system(f"rm -r {output_dir}")
+    elif not os.path.exists(output_dir):
+        pass
+    else:
+        raise ValueError(
+            f"{output_dir} already exists. Choose a different output_dir, or set overwrite=True"
+        )
+    os.system(f"mkdir -p {output_dir}")
+
+
 def chunk_file_with_split(filename, chunk_size="40M"):
     try:
         subprocess.run(

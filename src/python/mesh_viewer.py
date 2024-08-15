@@ -2,6 +2,61 @@ from mayavi import mlab
 import numpy as np
 import os
 import subprocess
+import pyvista as pv
+
+
+def downsample(V, F, target_faces=1000):
+    vertices = V
+    faces = F
+    num_faces = faces.shape[0]
+    if num_faces < target_faces:
+        original_indices = np.arange(vertices.shape[0])
+        return vertices, faces, original_indices
+    target_reduction = target_faces / num_faces
+
+    faces_pv = np.hstack([np.full((faces.shape[0], 1), 3), faces]).flatten()
+
+    # Create a PyVista mesh
+    mesh = pv.PolyData(vertices, faces_pv)
+
+    # Add original point IDs to the mesh
+    mesh.point_data["orig_ids"] = np.arange(mesh.n_points)
+
+    # Simplify the mesh (reduce the number of faces) and preserve original point IDs
+    simplified_mesh = mesh.decimate_pro(target_reduction, preserve_topology=True)
+
+    # Extract simplified vertices and faces
+    simplified_vertices = simplified_mesh.points
+    simplified_faces = simplified_mesh.faces.reshape(-1, 4)[:, 1:]
+
+    # Extract the indices of the original vertices used in the simplified mesh
+    original_indices = np.unique(simplified_mesh.point_data["orig_ids"])
+
+    return np.array(simplified_vertices), simplified_faces, np.array(original_indices)
+
+
+def downsample2(V, F, target_reduction=0.5):
+    vertices = V
+    faces = F
+    faces_pv = np.hstack([np.full((faces.shape[0], 1), 3), faces]).flatten()
+
+    # Create a PyVista mesh
+    mesh = pv.PolyData(vertices, faces_pv)
+
+    # Add original point IDs to the mesh
+    mesh.point_data["orig_ids"] = np.arange(mesh.n_points)
+
+    # Simplify the mesh (reduce the number of faces) and preserve original point IDs
+    simplified_mesh = mesh.decimate_pro(target_reduction, preserve_topology=True)
+
+    # Extract simplified vertices and faces
+    simplified_vertices = simplified_mesh.points
+    simplified_faces = simplified_mesh.faces.reshape(-1, 4)[:, 1:]
+
+    # Extract the indices of the original vertices used in the simplified mesh
+    original_indices = np.unique(simplified_mesh.point_data["orig_ids"])
+
+    return np.array(simplified_vertices), simplified_faces, np.array(original_indices)
 
 
 class MeshViewer:
@@ -521,6 +576,63 @@ class MeshViewer:
         ###############################
         for fvf in self.fancy_mayavi_vector_fields:
             fvf.plot()
+
+        if self.show_plot_axes:
+            mlab.axes()
+            mlab.orientation_axes()
+        # mview = mlab.view()
+        # print(mview)
+        if self.view is not None:
+            mlab.view(**self.view)
+        if save:
+            fig_path = self.get_fig_path()
+            self.image_count += 1
+            mlab.savefig(fig_path, figure=fig, size=self.figsize)
+        if show:
+            mlab.show()
+
+        mlab.close(all=True)
+
+    def simple_plot(
+        self,
+        show=True,
+        save=False,
+        title="",
+        target_faces=1000,
+        representation="wireframe",
+    ):
+        """
+        fig_path=f"{output_directory}/temp_images/fig_{image_count:0>4}.png"
+        """
+        mlab.options.offscreen = not show
+
+        fig = mlab.figure(title, size=self.figsize)
+
+        ################################
+        V, F, Iv = downsample(self.V, self.F, target_faces=target_faces)
+
+        # brane_mesh
+        if self.show_surface:
+            brane_mesh_kwargs = {
+                "name": "brane_mesh",
+                "representation": representation,
+            }
+
+            brane_mesh = mlab.triangular_mesh(*V.T, F, **brane_mesh_kwargs)
+
+            F_rgba_int = (self.V_rgba[Iv] * 255).round().astype(int)
+            F_color_scalars = np.linspace(0, 1, F_rgba_int.shape[0])
+            brane_mesh.module_manager.scalar_lut_manager.lut.number_of_colors = len(
+                F_rgba_int
+            )
+            brane_mesh.module_manager.scalar_lut_manager.lut.table = F_rgba_int
+            brane_mesh.module_manager.lut_data_mode = "point data"
+            brane_mesh.mlab_source.dataset.point_data.scalars = F_color_scalars
+            brane_mesh.mlab_source.dataset.point_data.scalars.name = "face colors"
+            brane_mesh.mlab_source.update()
+            brane_mesh2 = mlab.pipeline.set_active_attribute(
+                brane_mesh, point_scalars="face colors"
+            )
 
         if self.show_plot_axes:
             mlab.axes()

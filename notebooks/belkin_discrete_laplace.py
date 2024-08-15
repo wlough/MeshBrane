@@ -51,6 +51,7 @@ def fig_single(
     Xlabel="",
     Ylabel="",
     legendlabel="",
+    fig_path=None,
 ):
     pream = ""
     # colors = ["#EE6666", "#3388BB", "#9988DD", "#EECC55", "#88BB44", "#FFBBBB"]
@@ -68,9 +69,10 @@ def fig_single(
     ]
     markers = ["o", "*", "^", "s"]
     linestyles = ["solid", "dashed", "dashdot", "dotted"]
-    textsize = 14
+    textsize = 16
     plt.rcParams.update(
         {
+            "font.size": textsize,
             "text.latex.preamble": pream,
             "figure.dpi": 300.0,
             "xtick.direction": "in",
@@ -158,6 +160,8 @@ def fig_single(
     ax.legend()
 
     plt.tight_layout()
+    if fig_path is not None:
+        plt.savefig(fig_path)
     plt.show()
 
 
@@ -168,6 +172,7 @@ def fig_single(
 ############
 # f(x)=x^2 #
 ############
+fig_path = "./output/belkin_L2_plane_x_2.png"
 parameter = np.array([0.0025, 0.01, 0.0225])
 num_vertices = np.array([500, 2000, 8000, 16000])
 
@@ -192,6 +197,7 @@ plot_kwargs = {
     "suptitle": suptitle,
     "Xlabel": Xlabel,
     "Ylabel": Ylabel,
+    "fig_path": fig_path,
 }
 # fig_subplots(**plot_kwargs)
 fig_single(**plot_kwargs)
@@ -199,6 +205,7 @@ fig_single(**plot_kwargs)
 ######################
 # f(x, y)=exp(x + y) #
 ######################
+fig_path = "./output/belkin_L2_plane_exp_x_y.png"
 parameter = np.array([0.0025, 0.01, 0.0225])
 num_vertices = np.array([500, 2000, 8000, 16000])
 fun = "f(x, y)=exp(x + y)"
@@ -222,6 +229,7 @@ plot_kwargs = {
     "suptitle": suptitle,
     "Xlabel": Xlabel,
     "Ylabel": Ylabel,
+    "fig_path": fig_path,
 }
 fig_single(**plot_kwargs)
 
@@ -234,6 +242,7 @@ fig_single(**plot_kwargs)
 ############
 # f(x)=x #
 ############
+fig_path = "./output/belkin_L2_sphere_x.png"
 parameter = np.array([0.01])
 num_vertices = np.array([500, 2000, 8000, 16000])
 
@@ -256,6 +265,7 @@ plot_kwargs = {
     "suptitle": suptitle,
     "Xlabel": Xlabel,
     "Ylabel": Ylabel,
+    "fig_path": fig_path,
 }
 # fig_subplots(**plot_kwargs)
 fig_single(**plot_kwargs)
@@ -263,6 +273,7 @@ fig_single(**plot_kwargs)
 ############
 # f(x)=x^2 #
 ############
+fig_path = "./output/belkin_L2_sphere_x_2.png"
 parameter = np.array([0.01])
 num_vertices = np.array([500, 2000, 8000, 16000])
 
@@ -285,6 +296,7 @@ plot_kwargs = {
     "suptitle": suptitle,
     "Xlabel": Xlabel,
     "Ylabel": Ylabel,
+    "fig_path": fig_path,
 }
 # fig_subplots(**plot_kwargs)
 fig_single(**plot_kwargs)
@@ -292,6 +304,7 @@ fig_single(**plot_kwargs)
 ############
 # f(x, y)=exp(x,y) #
 ############
+fig_path = "./output/belkin_L2_sphere_exp_x_y.png"
 parameter = np.array([0.01])
 num_vertices = np.array([500, 2000, 8000, 16000])
 
@@ -314,6 +327,7 @@ plot_kwargs = {
     "suptitle": suptitle,
     "Xlabel": Xlabel,
     "Ylabel": Ylabel,
+    "fig_path": fig_path,
 }
 # fig_subplots(**plot_kwargs)
 fig_single(**plot_kwargs)
@@ -326,6 +340,7 @@ fig_single(**plot_kwargs)
 ############
 # f(x)=x #
 ############
+fig_path = "./output/belkin_Linf_sphere_x.png"
 parameter = np.array([0.01])
 num_vertices = np.array([500, 2000, 8000, 16000])
 
@@ -350,6 +365,7 @@ plot_kwargs = {
     "suptitle": suptitle,
     "Xlabel": Xlabel,
     "Ylabel": Ylabel,
+    "fig_path": fig_path,
 }
 # fig_subplots(**plot_kwargs)
 fig_single(**plot_kwargs)
@@ -357,6 +373,7 @@ fig_single(**plot_kwargs)
 ############
 # f(x)=x^2 #
 ############
+fig_path = "./output/belkin_Linf_sphere_x_2.png"
 parameter = np.array([0.01])
 num_vertices = np.array([500, 2000, 8000, 16000])
 
@@ -381,6 +398,7 @@ plot_kwargs = {
     "suptitle": suptitle,
     "Xlabel": Xlabel,
     "Ylabel": Ylabel,
+    "fig_path": fig_path,
 }
 # fig_subplots(**plot_kwargs)
 fig_single(**plot_kwargs)
@@ -388,6 +406,7 @@ fig_single(**plot_kwargs)
 ############
 # f(x, y)=exp(x,y) #
 ############
+fig_path = "./output/belkin_Linf_sphere_exp_x_y.png"
 parameter = np.array([0.01])
 num_vertices = np.array([500, 2000, 8000, 16000])
 
@@ -412,6 +431,7 @@ plot_kwargs = {
     "suptitle": suptitle,
     "Xlabel": Xlabel,
     "Ylabel": Ylabel,
+    "fig_path": fig_path,
 }
 # fig_subplots(**plot_kwargs)
 fig_single(**plot_kwargs)
@@ -447,6 +467,7 @@ plot_kwargs = {
     "suptitle": suptitle,
     "Xlabel": Xlabel,
     "Ylabel": Ylabel,
+    "fig_path": fig_path,
 }
 # fig_subplots(**plot_kwargs)
 fig_single(**plot_kwargs)
@@ -476,6 +497,7 @@ plot_kwargs = {
     "suptitle": suptitle,
     "Xlabel": Xlabel,
     "Ylabel": Ylabel,
+    "fig_path": fig_path,
 }
 # fig_subplots(**plot_kwargs)
 fig_single(**plot_kwargs)
@@ -505,6 +527,7 @@ plot_kwargs = {
     "suptitle": suptitle,
     "Xlabel": Xlabel,
     "Ylabel": Ylabel,
+    "fig_path": fig_path,
 }
 # fig_subplots(**plot_kwargs)
 fig_single(**plot_kwargs)

@@ -21,10 +21,10 @@ _NUM_VERTS_ = [
     642,
     2562,
     10242,
-    40962,
-    163842,
+    # 40962,
+    # 163842,
 ]  # [12, 42, 162, 642, 2562, 10242, 40962, 163842]
-_SURF_NAMES_ = [f"sphere_{N:06d}_he" for N in _NUM_VERTS_]
+_SURF_NAMES_ = [f"unit_sphere_{N:06d}_he" for N in _NUM_VERTS_]
 _SURF_PARAMS_ = [1.0]
 
 
@@ -683,7 +683,7 @@ def surf_mcvec3d(
 # for n, noise_scale in enumerate(noise_scales):
 # run_mcvec_tests(run_name="mcvec0", overwrite=True)
 
-results = get_mcvec_test_results(run_name="mcvec")
+results = get_mcvec_test_results(run_name="mcvec0")
 
 # mv = MeshViewer(*m.data_lists)
 # mv.plot()
