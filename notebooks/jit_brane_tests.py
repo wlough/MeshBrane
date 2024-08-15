@@ -172,7 +172,7 @@ ST = SphereCotanTest(
 
 # Td0 = ST.run_tests(overwrite=True)
 
-# %%
+
 Td = ST.load_test_results()
 T = Td["lap_x"][0]
 X = T.independent_var
