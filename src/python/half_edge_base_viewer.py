@@ -776,7 +776,7 @@ ColorDict = {
 class FancyMayaviVectorField:
     """
     A class for visualizing a vector field in mayavi.
-    
+
     Parameters
     ----------
     points : np.ndarray
@@ -789,7 +789,7 @@ class FancyMayaviVectorField:
         The name of the vector field. Default is "fancy_vector_field".
     show : bool, optional
         Whether to show the vector field. Default is True.
-    
+
     Attributes
     ----------
     points : np.ndarray
@@ -814,15 +814,16 @@ class FancyMayaviVectorField:
         The radius of the vector shafts. Default is 0.01.
     color_mode : str
         The color mode for the vectors. Default is "color_by_scalar".
-    
+
     Methods
     -------
     update(points=None, vectors=None, rgba=None, name=None, show=None)
         Update the vector field.
     plot()
         Plot the vector field.
-    
+
     """
+
     def __init__(self, points, vectors, rgba=None, name=None, show=True):
         self.points = points
         self.vectors = vectors
@@ -900,6 +901,7 @@ class FancyMayaviVectorField:
         vfield.mlab_source.dataset.point_data.scalars.name = f"{self.name}_colors"
         vfield.mlab_source.update()
         return vfield
+
 
 class FancyMayaviMesh:
     def __init__(

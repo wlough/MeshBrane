@@ -1176,17 +1176,14 @@ class Brane:
         """
         2*pi - sum_f (angle_f)
         """
-        r = self.xyz_coord_v(v)
-        h = self.h_out_v(v)
-        h_start = h
+        r0 = self.xyz_coord_v(v)
         defect = 2 * np.pi
-        h = h_start
         for h in self.generate_H_out_v_clockwise(v):
             h_rot = self.h_next_h(self.h_twin_h(h))
             r1 = self.xyz_coord_v(self.v_head_h(h))
             r2 = self.xyz_coord_v(self.v_head_h(h_rot))
-            e1 = r1 - r
-            e2 = r2 - r
+            e1 = r1 - r0
+            e2 = r2 - r0
             norm_e1 = np.sqrt(e1[0] ** 2 + e1[1] ** 2 + e1[2] ** 2)
             norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
             cos_angle = (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (

@@ -1,61 +1,105 @@
-from src.python.half_edge_brane import BraneBuilder
-from src.python.mesh_viewer import MeshViewer, downsample, downsample2
-import numpy as np
-from src.python.pretty_pictures import scalars_to_rgba
-
-# b = BraneBuilder.load_test_sphere()
-b = BraneBuilder.load_oblate_sphere(n_v=2)
-V, F = b.xyz_array, b.V_of_F
-a, aa, aaa = downsample(V, F)
-# H, n = b.mean_curvature_unit_normal_V()
-H, K, lapH, n = b.compute_curvature_data()
-data_arrays = b.data_arrays
-
-
-Fn = (
-    -2
-    # * b.bending_modulus
-    * (
-        lapH
-        + 2 * (H - b.spontaneous_curvature) * (H**2 + b.spontaneous_curvature * H - K)
-    )
+from src.python.half_edge_base_utils import (
+    vf_samples_to_he_samples,
+    find_h_comp_B,
+    make_half_edge_base_numba_utils,
 )
-A = b.barcell_area_V()
 
-
-def surfvec3d(
-    b,
-    data_arrays,
-    vec,
-    scale_vec=1.0,
-    alpha=0.4,
-):
-
-    # local_error = np.linalg.norm(mcvec - mcvec_actual, axis=-1)
-    # V_rgba = scalars_to_rgba(local_error)
-    Vkeys = sorted(b.xyz_coord_V.keys())
-    V_rgba = scalars_to_rgba([-b.valence_v(v) for v in Vkeys])
-    V_rgba[:, -1] = alpha
-    E_rgba = np.zeros((len(b._v_origin_H), 4))
-    vfdata0 = [data_arrays[0], vec]
-
-    mv_kwargs = {
-        "vector_field_data": [vfdata0],
-        "V_rgba": V_rgba,
-        "color_by_V_rgba": True,
-        "E_rgba": E_rgba,
-    }
-    mv = MeshViewer(*data_arrays, **mv_kwargs)
-    # mv.plot()
-    mv.simple_plot()
-
+make_half_edge_base_numba_utils()
 
 # %%
-vec = np.einsum("i,ij->ij", lapH, n)
-surfvec3d(
-    b,
-    data_arrays,
-    vec,
-    scale_vec=1.0,
-    alpha=0.4,
+import numpy as np
+import os
+from numba import jit, prange
+from numba.pycc import CC
+from numba.types import int32, float64
+
+_NUMBA_INT_ = int32
+_NUMPY_INT_ = np.int32
+cc = CC()
+# %%
+from numba import typeof
+
+# %%
+import numpy as np
+from src.python.half_edge_mesh import HalfEdgeMesh
+from src.python.half_edge_base_numba_utils import (
+    numba_vf_samples_to_he_samples,
+    numba_find_h_comp_B,
 )
+
+# m = HalfEdgeMesh.from_half_edge_ply("./data/ply/binary/sphere_000642_he.ply")
+m = HalfEdgeMesh.from_half_edge_ply("./data/ply/binary/neovius.ply")
+
+V, F = m.xyz_array, m.V_of_F
+F = np.int32(F)
+
+
+(
+    xyz_coord_V,
+    h_out_V,
+    v_origin_H,
+    h_next_H,
+    h_twin_H,
+    f_left_H,
+    h_bound_F,
+    h_comp_B,
+) = numba_vf_samples_to_he_samples(V, F)
+args = (
+    xyz_coord_V,
+    h_out_V,
+    v_origin_H,
+    h_next_H,
+    h_twin_H,
+    f_left_H,
+    h_bound_F,
+)
+# %%
+
+
+def find_h_comp_B(
+    _xyz_coord_V,
+    _h_out_V,
+    _v_origin_H,
+    _h_next_H,
+    _h_twin_H,
+    _f_left_H,
+    _h_bound_F,
+):
+    (
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+    ) = (
+        np.array(_xyz_coord_V, dtype=np.float64),
+        np.array(_h_out_V, dtype=np.int32),
+        np.array(_v_origin_H, dtype=np.int32),
+        np.array(_h_next_H, dtype=np.int32),
+        np.array(_h_twin_H, dtype=np.int32),
+        np.array(_f_left_H, dtype=np.int32),
+        np.array(_h_bound_F, dtype=np.int32),
+    )
+    return numba_find_h_comp_B(
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+    )
+
+
+B = find_h_comp_B(
+    xyz_coord_V,
+    h_out_V,
+    v_origin_H,
+    h_next_H,
+    h_twin_H,
+    f_left_H,
+    h_bound_F,
+)
+# %%

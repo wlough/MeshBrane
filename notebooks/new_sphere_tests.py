@@ -85,7 +85,7 @@ def load_tests(
     return belkinST, guckenbergerST, cotanST
 
 
-def get_test_results(
+def get_test_results0(
     test_name="mean_curvature",
     load_half_edge_meshes=False,
     N_diff_order=[1],
@@ -114,6 +114,7 @@ def get_test_results(
     belkin_keys = [
         (n_diff_order, n_snum) for n_diff_order in N_diff_order for n_snum in N_snum
     ]
+    guckenberger_keys = [n_diff_order for n_diff_order in N_diff_order]
     belkinST, guckenbergerST, cotanST = load_tests(
         load_half_edge_meshes=load_half_edge_meshes, num_vertices=num_vertices
     )
@@ -157,6 +158,16 @@ def get_test_results(
     # test_results["guckenberger_Linftyerror"] = np.array(
     #     [m.guckenberger_laplacian_mcvec_results["Linftyerror"] for m in M]
     # )
+    guckenbergerTall = guckenbergerST.Tdict
+    test_results["guckenberger_samples"] = [
+        guckenbergerTall[key].samples_numerical[2:] for key in guckenberger_keys
+    ]
+    test_results["guckenberger_L2error"] = np.array(
+        [guckenbergerTall[key].normalized_L2_error[2:] for key in guckenberger_keys]
+    )
+    test_results["guckenberger_Linftyerror"] = np.array(
+        [guckenbergerTall[key].Linfinity_error[2:] for key in guckenberger_keys]
+    )
     #######################################################
     # Belkin with fixed values for heat_param=[s0,s1,...] #
     #######################################################
@@ -184,21 +195,177 @@ def get_test_results(
     return test_results
 
 
+def get_test_results(
+    test_name="mean_curvature",
+    load_half_edge_meshes=False,
+    N_diff_order=[1],
+    N_snum=[0, 1, 2, 3, 4],
+    num_vertices=[
+        # 12,
+        # 42,
+        162,
+        642,
+        2562,
+        10242,
+        40962,
+        # 163842,
+        # 655362,
+        # 2621442,
+    ],
+):
+    """
+    For tests with multiple param values, the first index corresponds to the
+    parameter value and the second corresponds to the number of vertices.
+    """
+    # belkinST, guckenbergerST, cotanST = load_tests(
+    #     load_half_edge_meshes=load_half_edge_meshes
+    # )
+
+    belkin_keys = [
+        (n_diff_order, n_snum) for n_diff_order in N_diff_order for n_snum in N_snum
+    ]
+    guckenberger_keys = [n_diff_order for n_diff_order in N_diff_order]
+    belkinST, guckenbergerST, cotanST = load_tests(
+        load_half_edge_meshes=load_half_edge_meshes, num_vertices=num_vertices
+    )
+
+    test_results = dict()
+    # M = load_test_surfs(run_name=run_name)
+    if load_half_edge_meshes:
+        M = cotanST.M
+        test_results["M"] = M
+    # test_results["noise_scale"] = M[0].cotan_laplacian_mcvec_results["noise_scale"]
+    test_results["num_faces"] = cotanST.Tdict["mean_curvature"][0].independent_var
+    test_results["mean_curvature_actual"] = cotanST.Tdict["mean_curvature"][
+        0
+    ].samples_actual
+    test_results["unit_normal_actual"] = cotanST.Tdict["unit_normal"][0].samples_actual[
+        2:
+    ]
+    test_results["lap_x_actual"] = cotanST.Tdict["lap_x"][0].samples_actual
+    test_results["lap_x_squared_actual"] = cotanST.Tdict["lap_x_squared"][
+        0
+    ].samples_actual
+    test_results["lap_exp_x_y_actual"] = cotanST.Tdict["lap_exp_x_y"][0].samples_actual[
+        2:
+    ]
+
+    #
+    #########
+    # Cotan #
+    #########
+    cotanT = cotanST.Tdict[test_name][0]
+    test_results["cotan_samples"] = cotanT.samples_numerical
+    test_results["cotan_L2error"] = cotanT.normalized_L2_error
+    test_results["cotan_Linftyerror"] = cotanT.Linfinity_error
+    #########################################################
+    # Guckenberger with local heat_param=Meyer's mixed area #
+    #########################################################
+    # test_results["samples"] = [m.guckenberger_laplacian_mcvec_results["mcvec"] for m in M]
+    # test_results["guckenberger_L2error"] = np.array(
+    #     [m.guckenberger_laplacian_mcvec_results["L2error"] for m in M]
+    # )
+    # test_results["guckenberger_Linftyerror"] = np.array(
+    #     [m.guckenberger_laplacian_mcvec_results["Linftyerror"] for m in M]
+    # )
+    guckenbergerTall = guckenbergerST.Tdict
+    test_results["guckenberger_samples"] = [
+        guckenbergerTall[key].samples_numerical for key in guckenberger_keys
+    ]
+    test_results["guckenberger_L2error"] = np.array(
+        [guckenbergerTall[key].normalized_L2_error for key in guckenberger_keys]
+    )
+    test_results["guckenberger_Linftyerror"] = np.array(
+        [guckenbergerTall[key].Linfinity_error for key in guckenberger_keys]
+    )
+    #######################################################
+    # Belkin with fixed values for heat_param=[s0,s1,...] #
+    #######################################################
+    belkinTall = belkinST.Tdict[test_name]
+
+    test_results["belkin_samples"] = [
+        belkinTall[key].samples_numerical for key in belkin_keys
+    ]
+    test_results["belkin_fixed_heat_param"] = np.array(
+        [belkinTall[key].params["s"] for key in belkin_keys]
+    )
+    # test_results["belkin_fixed_heat_param"] = np.array(
+    #     [
+    #         M[0].belkin_laplacian_mcvec_fixed_heat_param_results["heat_param"][n_param]
+    #         for n_param in range(num_heat_param)
+    #     ]
+    # )
+    test_results["belkin_fixed_L2error"] = np.array(
+        [belkinTall[key].normalized_L2_error for key in belkin_keys]
+    )
+    test_results["belkin_fixed_Linftyerror"] = np.array(
+        [belkinTall[key].Linfinity_error for key in belkin_keys]
+    )
+
+    return test_results
+
+
 def single_plot_L2_fit(
     results,
     belkin_fixed=True,
     cotan=True,
+    guckenberger=True,
     Xlabel="",
     Ylabel="",
     suptitle="",
     fig_path="./output/fig.png",
     # num_v = np.array(range(len(_NUM_VERTS_)))
+    num_vertices=[
+        # 12,
+        # 42,
+        162,
+        642,
+        2562,
+        10242,
+        40962,
+        # 163842,
+        # 655362,
+        # 2621442,
+    ],
 ):
-    num_faces = results["num_faces"]
-    cotan_error = results["cotan_L2error"]
-    # guckenberger_error = results["guckenberger_L2error"]
+    num_vertices_all = [
+        # 12,
+        # 42,
+        162,
+        642,
+        2562,
+        10242,
+        40962,
+        # 163842,
+        # 655362,
+        # 2621442,
+    ]
+    Nv_indices = [num_vertices_all.index(_) for _ in num_vertices]
+    num_faces = np.array([results["num_faces"][_] for _ in Nv_indices])
+    # cotan_error = np.array([results["cotan_L2error"][_] for _ in Nv_indices])
+    # guckenberger_error = np.array(
+    #     [results["guckenberger_L2error"][0][_] for _ in Nv_indices]
+    # )
+    # belkin_fixed_heat_param = results["belkin_fixed_heat_param"]
+    #
+    # belkin_fixed_error = np.array(
+    #     [results["belkin_fixed_L2error"][:, _] for _ in Nv_indices]
+    # ).T
+    cotan_error = np.array([results["cotan_Linftyerror"][_] for _ in Nv_indices])
+    guckenberger_error = np.array(
+        [results["guckenberger_Linftyerror"][0][_] for _ in Nv_indices]
+    )
     belkin_fixed_heat_param = results["belkin_fixed_heat_param"]
-    belkin_fixed_error = results["belkin_fixed_L2error"]
+
+    belkin_fixed_error = np.array(
+        [results["belkin_fixed_Linftyerror"][:, _] for _ in Nv_indices]
+    ).T
+
+    # Linftyerror
+    #     return (num_faces,cotan_error,
+    # guckenberger_error,
+    # belkin_fixed_heat_param,
+    # belkin_fixed_error,results["belkin_fixed_L2error"])
     # belkin_afe_heat_param = results["belkin_afe_heat_param"]
     # belkin_afe_error = results["belkin_afe_L2error"]
 
@@ -209,8 +376,8 @@ def single_plot_L2_fit(
     #     N_fit += len(belkin_afe_error)
     if cotan:
         N_fit += len(cotan_error)
-    # if guckenberger:
-    #     N_fit += len(guckenberger_error)
+    if guckenberger:
+        N_fit += 1  # len(guckenberger_error)
     color_marker_linestyle = get_plt_combos(N_fit)
 
     textsize = 16
@@ -316,25 +483,26 @@ def single_plot_L2_fit(
     #         errmax = np.max([errmax, *err])
     #         n_fit += 1
     #
-    # if guckenberger:
-    #     err = guckenberger_error
-    #
-    #     color, marker, linestyle = color_marker_linestyle[n_fit]
-    #     fit_dict = log_log_fit(num_vertices, err)
-    #     m = fit_dict["m"]
-    #     y_fit = fit_dict["F"]
-    #     y = fit_dict["logY"]
-    #     x = fit_dict["logX"]
-    #     fit_label = r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
-    #     ax.plot(x, y_fit, linestyle=linestyle, color=color, label=fit_label)
-    #     sample_label = r"$s_G=a_x$"
-    #     ax.plot(x, y, marker, color=color, label=sample_label)
-    #
-    #     ymin = np.min([ymin, *y])
-    #     ymax = np.max([ymax, *y])
-    #     errmin = np.min([errmin, *err])
-    #     errmax = np.max([errmax, *err])
-    #     n_fit += 1
+
+    if guckenberger:
+        err = guckenberger_error
+
+        color, marker, linestyle = color_marker_linestyle[n_fit]
+        fit_dict = log_log_fit(num_faces, err)
+        m = fit_dict["m"]
+        y_fit = fit_dict["F"]
+        y = fit_dict["logY"]
+        x = fit_dict["logX"]
+        fit_label = r"$O\left(" + Xlabel + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+        ax.plot(x, y_fit, linestyle=linestyle, color=color, label=fit_label)
+        sample_label = r"$s_G=a_x$"
+        ax.plot(x, y, marker, color=color, label=sample_label)
+
+        ymin = np.min([ymin, *y])
+        ymax = np.max([ymax, *y])
+        errmin = np.min([errmin, *err])
+        errmax = np.max([errmax, *err])
+        n_fit += 1
 
     if cotan:
         err = cotan_error
@@ -564,19 +732,23 @@ def single_plot_Linfty_fit(
 # for n, noise_scale in enumerate(noise_scales):
 # run_mcvec_tests(run_name="mcvec0", overwrite=True)
 
-
+# dir(results)
+# guckenbergerT = guckenbergerST.Tdict[test_name][0]
+# test_results["guckenberger_samples"] = guckenbergerT.samples_numerical
+# test_results["guckenberger_L2error"] = guckenbergerT.normalized_L2_error
+# test_results["guckenberger_Linftyerror"] = guckenbergerT.Linfinity_error
 # %%
-p = 3
+p = 2
 results = get_test_results(
     test_name="mean_curvature",
     load_half_edge_meshes=False,
     N_diff_order=[p],
-    N_snum=[1, 2, 3],
+    N_snum=[0, 1, 2, 3, 4],
     num_vertices=[
         # 12,
         # 42,
-        # 162,
-        # 642,
+        162,
+        642,
         2562,
         10242,
         40962,
@@ -592,14 +764,36 @@ plt_kwargs = {
     + r"\varepsilon=\frac{||\mathcal{D} {\bf{r}}-\Delta {\bf{r}}||_{2}}{||\Delta {\bf{r}}||_{2}}, \quad"
     + f" {p=}",
     "fig_path": f"./output/diff_order{p}.png",
+    "num_vertices": [
+        # 12,
+        # 42,
+        162,
+        642,
+        # 2562,
+        # 10242,
+        # 40962,
+        # 163842,
+        # 655362,
+        # 2621442,
+    ],
+    "belkin_fixed": False,
+    "guckenberger": True,
+    "cotan": False,
 }
 single_plot_L2_fit(
     results,
-    belkin_fixed=True,
-    cotan=True,
     **plt_kwargs,
 )
-
+# (
+#     num_faces,
+#     cotan_error,
+#     guckenberger_error,
+#     belkin_fixed_heat_param,
+#     belkin_fixed_error,
+#     b,
+# ) = a
+# belkin_fixed_error.shape
+# b.shape
 # %%
 plt_kwargs = {
     "Xlabel": r"N",
