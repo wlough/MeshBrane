@@ -70,7 +70,7 @@ class MeshViewer:
         E_twin,
         E_face,
         F_edge,
-        h_comp_B=None,
+        h_right_B=None,
         # Computes from that^ if None
         F=None,
         # Additional vector fields to plot
@@ -914,7 +914,7 @@ class FancyMayaviMesh:
         E_twin,
         E_face,
         F_edge,
-        h_comp_B=None,
+        h_right_B=None,
         # Computes from that^ if None
         F=None,
         # Additional vector fields to plot

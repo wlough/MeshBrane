@@ -3,72 +3,26 @@ import numpy as np
 try:
     from src.python.half_edge_base_numba_utils import (
         numba_vf_samples_to_he_samples,
-        numba_find_h_comp_B,
+        numba_find_h_right_B,
+        numba_he_samples_to_vf_samples,
+        numba_V_of_F,
     )
-except ModuleNotFoundError:
+except ImportError:
     pass
-_NUMPY_INT_ = np.int32
+_NUMPY_INT_ = np.int64
 _NUMPY_FLOAT_ = np.float64
 
 
-# from src.python.jit_utils import (
-#     jit_get_halfedge_index_of_twin,
-#     jit_vf_samples_to_he_samples,
-# )
 def make_half_edge_base_numba_utils(
     module_name="half_edge_base_numba_utils", output_directory="./src/python"
 ):
-    # import os
     from numba import jit, typeof
     from numba.pycc import CC
-
-    # from numba.types import int32, float64
 
     _NUMBA_INT_ = typeof(_NUMPY_INT_(1))
     _NUMBA_FLOAT_ = typeof(_NUMPY_FLOAT_(1))
     cc = CC(module_name)
     cc.output_dir = output_directory
-
-    @cc.export(
-        "numba_find_h_comp_B",
-        (
-            _NUMBA_FLOAT_[:, :],
-            _NUMBA_INT_[:],
-            _NUMBA_INT_[:],
-            _NUMBA_INT_[:],
-            _NUMBA_INT_[:],
-            _NUMBA_INT_[:],
-            _NUMBA_INT_[:],
-        ),
-    )
-    def numba_find_h_comp_B(
-        xyz_coord_V,
-        h_out_V,
-        v_origin_H,
-        h_next_H,
-        h_twin_H,
-        f_left_H,
-        h_bound_F,
-    ):
-        """
-        Find a half-edge in each boundary of mesh
-        """
-        Nhedges = len(v_origin_H)
-        # find and enumerate boundaries -1,-2,...
-        H_need2visit = set([_NUMBA_INT_(h) for h in range(Nhedges) if f_left_H[h] < 0])
-        _h_comp_B = []
-        while H_need2visit:
-            b = len(_h_comp_B)
-            h_start = H_need2visit.pop()
-            f_left_H[h_start] = -(b + 1)
-            h = _NUMBA_INT_(h_next_H[h_start])
-            _h_comp_B.append(h)
-            while h != h_start:
-                H_need2visit.remove(h)
-                f_left_H[h] = -(b + 1)
-                h = h_next_H[h]
-        h_comp_B = np.array(_h_comp_B, dtype=_NUMPY_INT_)
-        return h_comp_B
 
     @jit
     def get_halfedge_index_of_twin(H, h):
@@ -92,6 +46,130 @@ def make_half_edge_base_numba_utils(
         if ht_arr.size > 0:
             return _NUMBA_INT_(ht_arr[0])
         return _NUMBA_INT_(-1)
+
+    @jit(
+        (
+            _NUMBA_FLOAT_[:, :],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+        ),
+    )
+    def jit_V_of_F(
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+        h_right_B,
+    ):
+        Nf = len(h_bound_F)
+        V_of_F = np.zeros((Nf, 3), dtype=_NUMPY_INT_)
+        for f in range(Nf):
+            h = h_bound_F[f]
+            h_start = h
+            _v = 0
+            while True:
+                V_of_F[f, _v] = v_origin_H[h]
+                h = h_next_H[h]
+                _v += 1
+                if h == h_start:
+                    break
+        return V_of_F
+
+    @cc.export(
+        "numba_V_of_F",
+        (
+            _NUMBA_FLOAT_[:, :],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+        ),
+    )
+    def numba_V_of_F(
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+        h_right_B,
+    ):
+        # Nf = len(h_bound_F)
+        # V_of_F = np.zeros((Nf, 3), dtype=_NUMPY_INT_)
+        # for f in range(Nf):
+        #     h = h_bound_F[f]
+        #     h_start = h
+        #     _v = 0
+        #     while True:
+        #         V_of_F[f, _v] = v_origin_H[h]
+        #         h = h_next_H[h]
+        #         _v += 1
+        #         if h == h_start:
+        #             break
+        # return V_of_F
+        return jit_V_of_F(
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+            h_right_B,
+        )
+
+    @cc.export(
+        "numba_find_h_right_B",
+        (
+            _NUMBA_FLOAT_[:, :],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+        ),
+    )
+    def numba_find_h_right_B(
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+    ):
+        """
+        Find a half-edge in each boundary of mesh
+        """
+        Nhedges = len(v_origin_H)
+        # find and enumerate boundaries -1,-2,...
+        H_need2visit = set([_NUMBA_INT_(h) for h in range(Nhedges) if f_left_H[h] < 0])
+        _h_right_B = []
+        while H_need2visit:
+            b = len(_h_right_B)
+            h_start = H_need2visit.pop()
+            f_left_H[h_start] = -(b + 1)
+            h = _NUMBA_INT_(h_next_H[h_start])
+            _h_right_B.append(h)
+            while h != h_start:
+                H_need2visit.remove(h)
+                f_left_H[h] = -(b + 1)
+                h = h_next_H[h]
+        h_right_B = np.array(_h_right_B, dtype=_NUMPY_INT_)
+        return h_right_B
 
     @cc.export(
         "numba_vf_samples_to_he_samples",
@@ -170,18 +248,18 @@ def make_half_edge_base_numba_utils(
         H_need2visit = set(
             [_NUMBA_INT_(h) for h in range(Nhedges) if f_left_H[h] == -1]
         )
-        _h_comp_B = []
+        _h_right_B = []
         while H_need2visit:
-            b = len(_h_comp_B)
+            b = len(_h_right_B)
             h_start = H_need2visit.pop()
             f_left_H[h_start] = -(b + 1)
             h = _NUMBA_INT_(h_next_H[h_start])
-            _h_comp_B.append(h)
+            _h_right_B.append(h)
             while h != h_start:
                 H_need2visit.remove(h)
                 f_left_H[h] = -(b + 1)
                 h = h_next_H[h]
-        h_comp_B = np.array(_h_comp_B, dtype=_NUMPY_INT_)
+        h_right_B = np.array(_h_right_B, dtype=_NUMPY_INT_)
         return (
             xyz_coord_V,
             h_out_V,
@@ -190,7 +268,46 @@ def make_half_edge_base_numba_utils(
             h_twin_H,
             f_left_H,
             h_bound_F,
-            h_comp_B,
+            h_right_B,
+        )
+
+    @cc.export(
+        "numba_he_samples_to_vf_samples",
+        (
+            _NUMBA_FLOAT_[:, :],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+            _NUMBA_INT_[:],
+        ),
+    )
+    def numba_he_samples_to_vf_samples(
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+        h_right_B,
+    ):
+        vvv_of_F = jit_V_of_F(
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+            h_right_B,
+        )
+
+        return (
+            xyz_coord_V,
+            vvv_of_F,
         )
 
     # if __name__ == "__main__":
@@ -199,12 +316,162 @@ def make_half_edge_base_numba_utils(
 
 
 def vf_samples_to_he_samples(xyz_coord_V, vvv_of_F):
+    """
+    Convert vertex-face mesh data to half-edge mesh data
+
+    Parameters
+    ----------
+    xyz_coord_V : ndarray[:, :] of _NUMPY_FLOAT_
+        Nvx3 array of vertex Cartesian coordinates
+    vvv_of_F : numpy.ndarray[:, :] of _NUMPY_INT_
+        Nfx3 array of vertex indices of faces
+
+    Returns
+    -------
+    xyz_coord_V : ndarray[:, :] of _NUMPY_FLOAT_
+        xyz_coord_V[i] = xyz coordinates of vertex i
+    h_out_V : ndarray[:] of _NUMPY_INT_
+        h_out_V[i] = some outgoing half-edge incident on vertex i
+    v_origin_H : ndarray[:] of _NUMPY_INT_
+        v_origin_H[j] = vertex at the origin of half-edge j
+    h_next_H : ndarray[:] of _NUMPY_INT_
+        h_next_H[j] next half-edge after half-edge j in the face cycle
+    h_twin_H : ndarray[:] of _NUMPY_INT_
+        h_twin_H[j] = half-edge antiparallel to half-edge j
+    f_left_H : ndarray[:] of _NUMPY_INT_
+        f_left_H[j] = face to the left of half-edge j, if j in interior(M) or a positively oriented boundary of M
+        f_left_H[j] = boundary to the left of half-edge j, if j in a negatively oriented boundary
+    h_bound_F : ndarray[:] of _NUMPY_INT_
+        h_bound_F[k] = some half-edge on the boudary of face k.
+    h_right_B : ndarray[:] of _NUMPY_INT_
+        h_right_B[n] = half-edge to the right of boundary n.
+    """
     xyz_coord_V = np.array(xyz_coord_V, dtype=_NUMPY_FLOAT_)
     vvv_of_F = np.array(vvv_of_F, dtype=_NUMPY_INT_)
     return numba_vf_samples_to_he_samples(xyz_coord_V, vvv_of_F)
 
 
-def find_h_comp_B(
+def he_samples_to_vf_samples(
+    xyz_coord_V,
+    h_out_V,
+    v_origin_H,
+    h_next_H,
+    h_twin_H,
+    f_left_H,
+    h_bound_F,
+    h_right_B,
+):
+    """
+    Convert vertex-face mesh data to half-edge mesh data
+
+    Parameters
+    -------
+    xyz_coord_V : ndarray[:, :] of _NUMPY_FLOAT_
+        xyz_coord_V[i] = xyz coordinates of vertex i
+    h_out_V : ndarray[:] of _NUMPY_INT_
+        h_out_V[i] = some outgoing half-edge incident on vertex i
+    v_origin_H : ndarray[:] of _NUMPY_INT_
+        v_origin_H[j] = vertex at the origin of half-edge j
+    h_next_H : ndarray[:] of _NUMPY_INT_
+        h_next_H[j] next half-edge after half-edge j in the face cycle
+    h_twin_H : ndarray[:] of _NUMPY_INT_
+        h_twin_H[j] = half-edge antiparallel to half-edge j
+    f_left_H : ndarray[:] of _NUMPY_INT_
+        f_left_H[j] = face to the left of half-edge j, if j in interior(M) or a positively oriented boundary of M
+        f_left_H[j] = boundary to the left of half-edge j, if j in a negatively oriented boundary
+    h_bound_F : ndarray[:] of _NUMPY_INT_
+        h_bound_F[k] = some half-edge on the boudary of face k.
+    h_right_B : ndarray[:] of _NUMPY_INT_
+        h_right_B[n] = half-edge to the right of boundary n.
+
+    Returns
+    ----------
+    xyz_coord_V : ndarray[:, :] of _NUMPY_FLOAT_
+        Nvx3 array of vertex Cartesian coordinates
+    vvv_of_F : numpy.ndarray[:, :] of _NUMPY_INT_
+        Nfx3 array of vertex indices of faces
+
+    """
+    xyz_coord_V = np.array(xyz_coord_V, dtype=_NUMPY_FLOAT_)
+    h_out_V = np.array(h_out_V, dtype=_NUMPY_INT_)
+    v_origin_H = np.array(v_origin_H, dtype=_NUMPY_INT_)
+    h_next_H = np.array(h_next_H, dtype=_NUMPY_INT_)
+    h_twin_H = np.array(h_twin_H, dtype=_NUMPY_INT_)
+    f_left_H = np.array(f_left_H, dtype=_NUMPY_INT_)
+    h_bound_F = np.array(h_bound_F, dtype=_NUMPY_INT_)
+    h_right_B = np.array(h_right_B, dtype=_NUMPY_INT_)
+    return numba_he_samples_to_vf_samples(
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+        h_right_B,
+    )
+
+
+def V_of_F(
+    xyz_coord_V,
+    h_out_V,
+    v_origin_H,
+    h_next_H,
+    h_twin_H,
+    f_left_H,
+    h_bound_F,
+    h_right_B,
+):
+    """
+    Convert he mesh data to...
+
+    Parameters
+    -------
+    xyz_coord_V : ndarray[:, :] of _NUMPY_FLOAT_
+        xyz_coord_V[i] = xyz coordinates of vertex i
+    h_out_V : ndarray[:] of _NUMPY_INT_
+        h_out_V[i] = some outgoing half-edge incident on vertex i
+    v_origin_H : ndarray[:] of _NUMPY_INT_
+        v_origin_H[j] = vertex at the origin of half-edge j
+    h_next_H : ndarray[:] of _NUMPY_INT_
+        h_next_H[j] next half-edge after half-edge j in the face cycle
+    h_twin_H : ndarray[:] of _NUMPY_INT_
+        h_twin_H[j] = half-edge antiparallel to half-edge j
+    f_left_H : ndarray[:] of _NUMPY_INT_
+        f_left_H[j] = face to the left of half-edge j, if j in interior(M) or a positively oriented boundary of M
+        f_left_H[j] = boundary to the left of half-edge j, if j in a negatively oriented boundary
+    h_bound_F : ndarray[:] of _NUMPY_INT_
+        h_bound_F[k] = some half-edge on the boudary of face k.
+    h_right_B : ndarray[:] of _NUMPY_INT_
+        h_right_B[n] = half-edge to the right of boundary n.
+
+    Returns
+    ----------
+    vvv_of_F : numpy.ndarray[:, :] of _NUMPY_INT_
+        Nfx3 array of vertex indices of faces
+
+    """
+    xyz_coord_V = np.array(xyz_coord_V, dtype=_NUMPY_FLOAT_)
+    h_out_V = np.array(h_out_V, dtype=_NUMPY_INT_)
+    v_origin_H = np.array(v_origin_H, dtype=_NUMPY_INT_)
+    h_next_H = np.array(h_next_H, dtype=_NUMPY_INT_)
+    h_twin_H = np.array(h_twin_H, dtype=_NUMPY_INT_)
+    f_left_H = np.array(f_left_H, dtype=_NUMPY_INT_)
+    h_bound_F = np.array(h_bound_F, dtype=_NUMPY_INT_)
+    h_right_B = np.array(h_right_B, dtype=_NUMPY_INT_)
+    return numba_V_of_F(
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+        h_right_B,
+    )
+
+
+def find_h_right_B(
     xyz_coord_V,
     h_out_V,
     v_origin_H,
@@ -213,6 +480,30 @@ def find_h_comp_B(
     f_left_H,
     h_bound_F,
 ):
+    """
+
+    Parameters
+    ----------
+    xyz_coord_V : ndarray[:, :] of _NUMPY_FLOAT_
+        xyz_coord_V[i] = xyz coordinates of vertex i
+    h_out_V : ndarray[:] of _NUMPY_INT_
+        h_out_V[i] = some outgoing half-edge incident on vertex i
+    v_origin_H : ndarray[:] of _NUMPY_INT_
+        v_origin_H[j] = vertex at the origin of half-edge j
+    h_next_H : ndarray[:] of _NUMPY_INT_
+        h_next_H[j] next half-edge after half-edge j in the face cycle
+    h_twin_H : ndarray[:] of _NUMPY_INT_
+        h_twin_H[j] = half-edge antiparalel to half-edge j
+    f_left_H : ndarray[:] of _NUMPY_INT_
+        f_left_H[j] = face to the left of half-edge j
+    h_bound_F : ndarray[:] of _NUMPY_INT_
+        h_bound_F[k] = some half-edge on the ccw boudary of face k
+
+    Returns
+    -------
+    h_right_B : ndarray[:] of _NUMPY_INT_
+        h_right_B[n] = half-edge in complement boundary n of the mesh
+    """
     xyz_coord_V = np.array(xyz_coord_V, dtype=_NUMPY_FLOAT_)
     h_out_V = np.array(h_out_V, dtype=_NUMPY_INT_)
     v_origin_H = np.array(v_origin_H, dtype=_NUMPY_INT_)
@@ -220,7 +511,7 @@ def find_h_comp_B(
     h_twin_H = np.array(h_twin_H, dtype=_NUMPY_INT_)
     f_left_H = np.array(f_left_H, dtype=_NUMPY_INT_)
     h_bound_F = np.array(h_bound_F, dtype=_NUMPY_INT_)
-    return numba_find_h_comp_B(
+    return numba_find_h_right_B(
         xyz_coord_V,
         h_out_V,
         v_origin_H,

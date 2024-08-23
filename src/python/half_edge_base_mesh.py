@@ -1,7 +1,6 @@
-from src.python.ply_tools import VertTri2HalfEdgeConverter
+from src.python.half_edge_base_ply_tools import VertTri2HalfEdgeMeshConverter
+from src.python.half_edge_base_utils import V_of_F
 import numpy as np
-import concurrent.futures
-import warnings
 
 _NUMPY_INT_ = np.int64
 _NUMPY_FLOAT_ = np.float64
@@ -11,26 +10,27 @@ class HalfEdgeMeshBase:
     """
     Array-based half-edge mesh data structure
     ----------------------------------------
-    HalfEdgeMesh uses two basic data types: numpy.ndarray of Cartesian coordinates for vertex position and integer-valued labels for vertices/half-edges/faces. Mesh connectivity data are stored as ndarrays of vertex/half-edge/face labels. Each data array has a name of the form "a_description_B", where "a" denotes the type of object associated with the elements ("xyz" for position, "v" for vertex, "h" for half-edge, or "f" for face), "B" denotes the type of object associated with the indices ("V" for vertex, "H" for half-edge, or "F" for face), and "description" is a description of information represented by the data. For example, "_v_origin_H" is an of vertices at the origin of each half-edge. The i-th element of data array "a_description_B" can be accessed using the "a_description_b(i)" method.
+    HalfEdgeMesh uses two basic data types: numpy.ndarray of Cartesian coordinates for vertex position and integer-valued labels for vertices/half-edges/faces. Mesh connectivity data are stored as ndarrays of vertex/half-edge/face labels. Each data array has a name of the form "a_description_Q", where "a" denotes the type of object associated with the elements ("xyz" for position, "v" for vertex, "h" for half-edge, or "f" for face), "Q" denotes the type of object associated with the indices ("V" for vertex, "H" for half-edge, "F" for face, or "B" for boundary), and "description" is a description of information represented by the data. For example, "_v_origin_H" is an array of vertices at the origin of each half-edge. The i-th element of data array "a_description_Q" can be accessed using the "a_description_q(i)" method.
 
     Properties
     ----------
-    xyz_coord_V : numpy.ndarray
-        _xyz_coord_V[i] = xyz coordinates of vertex i
-    h_out_V : ndarray of int
-        _h_out_V[i] = some outgoing half-edge incident on vertex i
-    v_origin_H : ndarray of int
-        _v_origin_H[j] = vertex at the origin of half-edge j
-    h_next_H : ndarray of int
-        _h_next_H[j] next half-edge after half-edge j in the face cycle
-    h_twin_H : ndarray of int
-        _h_twin_H[j] = half-edge antiparalel to half-edge j
-    f_left_H : ndarray of int
-        _f_left_H[j] = face to the left of half-edge j
-    h_bound_F : ndarray of int
-        _h_bound_F[k] = some half-edge on the ccw boudary of face k
-    h_comp_B : ndarray of int
-        _h_comp_B[n] = half-edge in complement boundary n of the mesh
+    xyz_coord_V : ndarray[:, :] of _NUMPY_FLOAT_
+        xyz_coord_V[i] = xyz coordinates of vertex i
+    h_out_V : ndarray[:] of _NUMPY_INT_
+        h_out_V[i] = some outgoing half-edge incident on vertex i
+    v_origin_H : ndarray[:] of _NUMPY_INT_
+        v_origin_H[j] = vertex at the origin of half-edge j
+    h_next_H : ndarray[:] of _NUMPY_INT_
+        h_next_H[j] next half-edge after half-edge j in the face cycle
+    h_twin_H : ndarray[:] of _NUMPY_INT_
+        h_twin_H[j] = half-edge antiparallel to half-edge j
+    f_left_H : ndarray[:] of _NUMPY_INT_
+        f_left_H[j] = face to the left of half-edge j, if j in interior(M) or a positively oriented boundary of M
+        f_left_H[j] = boundary to the left of half-edge j, if j in a negatively oriented boundary
+    h_bound_F : ndarray[:] of _NUMPY_INT_
+        h_bound_F[k] = some half-edge on the boudary of face k.
+    h_right_B : ndarray[:] of _NUMPY_INT_
+        h_right_B[n] = half-edge to the right of boundary n.
 
     Initialization
     ---------------
@@ -44,7 +44,7 @@ class HalfEdgeMeshBase:
                      f_left_H,
                      h_bound_F)
     - From an npz file containing data arrays:
-        HalfEdgeMesh.from_data_arrays(npz_path)
+        HalfEdgeMesh.from_he_data(npz_path)
     - From an array of vertex positions and an array of face vertices:
         HalfEdgeMesh.from_vert_face_dict(xyz_coord_V, vvv_of_F)
     - From a ply file (binary/ascii) containing vertex/face data:
@@ -67,7 +67,7 @@ class HalfEdgeMeshBase:
         h_twin_H,
         f_left_H,
         h_bound_F,
-        h_comp_B=None,
+        h_right_B,
     ):
         self.xyz_coord_V = xyz_coord_V
         self.h_out_V = h_out_V
@@ -76,15 +76,12 @@ class HalfEdgeMeshBase:
         self.h_twin_H = h_twin_H
         self.h_bound_F = h_bound_F
         self.f_left_H = f_left_H
-        if h_comp_B is None:
-            self.h_comp_B = self.find_h_comp_B()
-        else:
-            self.h_comp_B = h_comp_B
+        self.h_right_B = h_right_B
 
     #######################################################
     # Initilization methods
     @classmethod
-    def from_data_arrays(cls, path):
+    def from_he_data(cls, path):
         """Initialize a half-edge mesh from npz file containing data arrays."""
         data = np.load(path)
         return cls(
@@ -95,11 +92,11 @@ class HalfEdgeMeshBase:
             data["h_twin_H"],
             data["f_left_H"],
             data["h_bound_F"],
-            data["h_comp_B"],
+            data["h_right_B"],
         )
 
     @classmethod
-    def from_vert_face_list(cls, xyz_coord_V, vvv_of_F):
+    def from_vf_data(cls, xyz_coord_V, vvv_of_F):
         """
         Initialize a half-edge mesh from vertex/face data.
 
@@ -115,7 +112,7 @@ class HalfEdgeMeshBase:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class with the given vertices and faces.
         """
         return cls(
-            *VertTri2HalfEdgeConverter.from_source_samples(
+            *VertTri2HalfEdgeMeshConverter.from_source_samples(
                 xyz_coord_V, vvv_of_F
             ).target_samples
         )
@@ -130,7 +127,9 @@ class HalfEdgeMeshBase:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class with data from the ply file.
         """
-        return cls(*VertTri2HalfEdgeConverter.from_source_ply(ply_path).target_samples)
+        return cls(
+            *VertTri2HalfEdgeMeshConverter.from_source_ply(ply_path).target_samples
+        )
 
     @classmethod
     def from_half_edge_ply(cls, ply_path):
@@ -142,19 +141,9 @@ class HalfEdgeMeshBase:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
         """
-        return cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).target_samples)
-
-    @classmethod
-    def from_half_edge_ply_no_bdry_twin(cls, ply_path):
-        """Initialize a half-edge mesh from a ply file containing half-edge mesh data using the h_twin = -1 convention for boundary edges.
-
-        Args:
-            ply_path (str): path to ply file
-
-        Returns:
-            HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
-        """
-        return cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).source_samples)
+        return cls(
+            *VertTri2HalfEdgeMeshConverter.from_target_ply(ply_path).target_samples
+        )
 
     #######################################################
     # Fundamental accessors
@@ -164,19 +153,7 @@ class HalfEdgeMeshBase:
 
     @xyz_coord_V.setter
     def xyz_coord_V(self, value):
-        try:
-            arr = np.array(value, dtype=_NUMPY_FLOAT_)
-        except ValueError:
-            raise ValueError(
-                f"The provided data cannot be converted to a NumPy array with dtype np.int32."
-            )
-
-        # Ensure the array has the correct shape if needed (optional)
-        # For example, if you want to ensure it's a 1D array:
-        if array.ndim != 1:
-            raise ValueError("The provided data must be a 1D array.")
-
-        self._data = array
+        self._xyz_coord_V = np.array(value, dtype=_NUMPY_FLOAT_)
 
     @property
     def h_out_V(self):
@@ -184,12 +161,7 @@ class HalfEdgeMeshBase:
 
     @h_out_V.setter
     def h_out_V(self, value):
-        if isinstance(value, dict):
-            self._h_out_V = value
-        elif hasattr(value, "__iter__"):
-            self._h_out_V = dict(enumerate(value))
-        else:
-            raise TypeError("h_out_V must be a dictionary or an iterable.")
+        self._h_out_V = np.array(value, dtype=_NUMPY_INT_)
 
     @property
     def v_origin_H(self):
@@ -197,12 +169,7 @@ class HalfEdgeMeshBase:
 
     @v_origin_H.setter
     def v_origin_H(self, value):
-        if isinstance(value, dict):
-            self._v_origin_H = value
-        elif hasattr(value, "__iter__"):
-            self._v_origin_H = dict(enumerate(value))
-        else:
-            raise TypeError("v_origin_H must be a dictionary or an iterable.")
+        self._v_origin_H = np.array(value, dtype=_NUMPY_INT_)
 
     @property
     def h_next_H(self):
@@ -210,12 +177,7 @@ class HalfEdgeMeshBase:
 
     @h_next_H.setter
     def h_next_H(self, value):
-        if isinstance(value, dict):
-            self._h_next_H = value
-        elif hasattr(value, "__iter__"):
-            self._h_next_H = dict(enumerate(value))
-        else:
-            raise TypeError("h_next_H must be a dictionary or an iterable.")
+        self._h_next_H = np.array(value, dtype=_NUMPY_INT_)
 
     @property
     def h_twin_H(self):
@@ -223,12 +185,7 @@ class HalfEdgeMeshBase:
 
     @h_twin_H.setter
     def h_twin_H(self, value):
-        if isinstance(value, dict):
-            self._h_twin_H = value
-        elif hasattr(value, "__iter__"):
-            self._h_twin_H = dict(enumerate(value))
-        else:
-            raise TypeError("h_twin_H must be a dictionary or an iterable.")
+        self._h_twin_H = np.array(value, dtype=_NUMPY_INT_)
 
     @property
     def f_left_H(self):
@@ -236,12 +193,7 @@ class HalfEdgeMeshBase:
 
     @f_left_H.setter
     def f_left_H(self, value):
-        if isinstance(value, dict):
-            self._f_left_H = value
-        elif hasattr(value, "__iter__"):
-            self._f_left_H = dict(enumerate(value))
-        else:
-            raise TypeError("f_left_H must be a dictionary or an iterable.")
+        self._f_left_H = np.array(value, dtype=_NUMPY_INT_)
 
     @property
     def h_bound_F(self):
@@ -249,26 +201,15 @@ class HalfEdgeMeshBase:
 
     @h_bound_F.setter
     def h_bound_F(self, value):
-        if isinstance(value, dict):
-            self._h_bound_F = value
-        elif hasattr(value, "__iter__"):
-            self._h_bound_F = dict(enumerate(value))
-        else:
-            raise TypeError("h_bound_F must be a dictionary or an iterable.")
+        self._h_bound_F = np.array(value, dtype=_NUMPY_INT_)
 
     @property
-    def h_comp_B(self):
-        return self._h_comp_B
+    def h_right_B(self):
+        return self._h_right_B
 
-    @h_comp_B.setter
-    def h_comp_B(self, value):
-        if isinstance(value, dict):
-            self._h_comp_B = value
-        elif hasattr(value, "__iter__"):
-            self._h_comp_B = {-(_key + 1): val for _key, val in enumerate(value)}
-
-        else:
-            raise TypeError("h_comp_B must be a dictionary or an iterable.")
+    @h_right_B.setter
+    def h_right_B(self, value):
+        self._h_right_B = np.array(value, dtype=_NUMPY_INT_)
 
     #######################################################
     # Combinatorial maps #
@@ -361,7 +302,7 @@ class HalfEdgeMeshBase:
         Returns:
             int: half-edge index
         """
-        return self._h_comp_B[b]
+        return self._h_right_B[b]
 
     # Derived combinatorial maps
     def v_head_h(self, h):
@@ -487,107 +428,30 @@ class HalfEdgeMeshBase:
     #######################################################
     # Generators and data exporters
     @property
-    def Vkeys(self):
-        return sorted(self._xyz_coord_V.keys())
-
-    @property
-    def Hkeys(self):
-        return sorted(self._v_origin_H.keys())
-
-    @property
-    def Fkeys(self):
-        return sorted(self._h_bound_F.keys())
-
-    @property
-    def xyz_array(self):
-        return np.array([self.xyz_coord_v(v) for v in sorted(self.xyz_coord_V.keys())])
-
-    @property
     def V_of_F(self):
-        # return [list(self.generate_V_of_f(f)) for f in self.h_bound_F.keys()]
-
-        return np.array(
-            [list(self.generate_V_of_f(f)) for f in sorted(self.h_bound_F.keys())]
-        )
+        return V_of_F(*self.data_arrays)
 
     @property
     def V_of_H(self):
         return np.array(
-            [
-                [self.v_origin_h(h), self.v_head_h(h)]
-                for h in sorted(self.v_origin_H.keys())
-            ]
+            [[self.v_origin_h(h), self.v_head_h(h)] for h in range(self.num_half_edges)]
         )
 
     @property
     def data_arrays(self):
         """
         Get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...
-
-        new_Xkeys_old[key_old] = old_Xkeys_new.index(key_old)
         """
-        old_Vkeys_new = sorted(self._xyz_coord_V.keys())
-        old_Hkeys_new = sorted(self._v_origin_H.keys())
-        old_Fkeys_new = sorted(self._h_bound_F.keys())
-
-        new_Vkeys_old = {val: key for key, val in enumerate(old_Vkeys_new)}
-        new_Hkeys_old = {val: key for key, val in enumerate(old_Hkeys_new)}
-        new_Fkeys_old = {val: key for key, val in enumerate(old_Fkeys_new)}
-        ##
-        # oldBkeys = [-b1, -b2, -b3, ...]
-        # newBkeys = [-1, -2, -3, ...]
-        oldBkeys = sorted(self.h_comp_B.keys(), reverse=True)
-        new_Bkeys_old = {val: -(_key + 1) for _key, val in enumerate(oldBkeys)}
-        # add boundary keys as negative face keys
-        new_Fkeys_old.update(new_Bkeys_old)
-        ##
-        xyz_coord_V = np.array(
-            [self.xyz_coord_v(v) for v in old_Vkeys_new], dtype=_NUMPY_FLOAT_
-        )
-        h_out_V = np.array(
-            [new_Hkeys_old[self.h_out_v(v)] for v in old_Vkeys_new], dtype=_NUMPY_INT_
-        )
-        v_origin_H = np.array(
-            [new_Vkeys_old[self.v_origin_h(h)] for h in old_Hkeys_new],
-            dtype=_NUMPY_INT_,
-        )
-        h_next_H = np.array(
-            [new_Hkeys_old[self.h_next_h(h)] for h in old_Hkeys_new], dtype=_NUMPY_INT_
-        )
-        h_twin_H = np.array(
-            [new_Hkeys_old[self.h_twin_h(h)] for h in old_Hkeys_new], dtype=_NUMPY_INT_
-        )
-        ###
-        # oldBkeys = sorted(self.h_comp_B.keys(), reverse=True)
-        # new_Bkeys = [-(_key + 1) for _key, val in enumerate(old_Bkeys)]
-        # old_Bkeys_new = {n: o for o, n in zip(old_Bkeys, new_Bkeys)}
-        # new_Bkeys_old = {o: n for o, n in zip(old_Bkeys, new_Bkeys)}
-        # new_Bkeys_old = {val: -(_key + 1) for _key, val in enumerate(old_Bkeys_new)}
-        # new_Bkeys_old = {val: -(_key + 1) for _key, val in enumerate(oldBkeys)}
-        h_comp_B = np.array(
-            [new_Hkeys_old[self.h_comp_b(b)] for b in oldBkeys], dtype=_NUMPY_INT_
-        )
-        ###
-        # f_left_H = np.array([self.f_left_h(h) for h in old_Hkeys_new])
-        # f_left_H = np.array(
-        #     [new_Bkeys_old[f] if f < 0 else new_Fkeys_old[f] for f in f_left_H]
-        # )
-        f_left_H = np.array(
-            [new_Fkeys_old[self.f_left_h(h)] for h in old_Hkeys_new], dtype=_NUMPY_INT_
-        )
-        h_bound_F = np.array(
-            [new_Hkeys_old[self.h_bound_f(f)] for f in old_Fkeys_new], dtype=_NUMPY_INT_
-        )
 
         return (
-            xyz_coord_V,
-            h_out_V,
-            v_origin_H,
-            h_next_H,
-            h_twin_H,
-            f_left_H,
-            h_bound_F,
-            h_comp_B,
+            self.xyz_coord_V,
+            self.h_out_V,
+            self.v_origin_H,
+            self.h_next_H,
+            self.h_twin_H,
+            self.f_left_H,
+            self.h_bound_F,
+            self.h_right_B,
         )
 
     def save_data_arrays(self, path):
@@ -605,7 +469,7 @@ class HalfEdgeMeshBase:
             h_twin_H,
             f_left_H,
             h_bound_F,
-            h_comp_B,
+            h_right_B,
         ) = self.data_arrays
         np.savez(
             path,
@@ -616,22 +480,7 @@ class HalfEdgeMeshBase:
             h_twin_H=h_twin_H,
             f_left_H=f_left_H,
             h_bound_F=h_bound_F,
-            h_comp_B=h_comp_B,
-        )
-
-    @property
-    def data_dicts(self):
-        """
-        get dicts of vertex positions and connectivity data and required to reconstruct mesh or write to ply file
-        """
-        return (
-            self.xyz_coord_V,
-            self.h_out_V,
-            self.v_origin_H,
-            self.h_next_H,
-            self.h_twin_H,
-            self.f_left_H,
-            self.h_bound_F,
+            h_right_B=h_right_B,
         )
 
     def generate_H_out_v_clockwise(self, v):
@@ -755,24 +604,6 @@ class HalfEdgeMeshBase:
         ClSt_V, ClSt_H, ClSt_F = self.closure(*self.star(V, H, F))
         return ClSt_V - StCl_V, ClSt_H - StCl_H, ClSt_F - StCl_F
 
-    def find_h_comp_B(self):
-        """Find a half-edge in each boundary of mesh"""
-        h_comp_B = dict()
-        complement_boundary_contains_H = set()
-        F_need2check = set(self.h_bound_F)  # set of faces that need to be checked
-        while F_need2check:
-            f = F_need2check.pop()
-            for h in self.generate_H_bound_f(f):
-                if self.interior_boundary_contains_h(h):
-                    complement_boundary_contains_H.add(self.h_twin_h(h))
-        while complement_boundary_contains_H:
-            h = complement_boundary_contains_H.pop()
-            bdry = self.f_left_h(h)
-            h_comp_B[bdry] = h
-            for h in self.generate_H_next_h(h):
-                complement_boundary_contains_H.discard(h)
-        return h_comp_B
-
     ######################################################
     # Geometry
     def xyz_com_f(self, f):
@@ -799,7 +630,7 @@ class HalfEdgeMeshBase:
 
     def total_area_of_faces(self):
         Atot = 0.0
-        for f in self.h_bound_F.keys():
+        for f in range(self.num_faces):
             Atot += self.area_f(f)
 
         return Atot
@@ -826,7 +657,7 @@ class HalfEdgeMeshBase:
 
     def total_area_of_dual_barcells(self):
         Atot = 0.0
-        for v in self.xyz_coord_V.keys():
+        for v in range(self.num_vertices):
             Atot += self.barcell_area(v)
 
         return Atot
@@ -874,7 +705,7 @@ class HalfEdgeMeshBase:
 
     def total_area_of_dual_vorcells(self):
         Atot = 0.0
-        for v in self.xyz_coord_V.keys():
+        for v in range(self.num_vertices):
             Atot += self.vorcell_area(v)
 
         return Atot
@@ -953,7 +784,7 @@ class HalfEdgeMeshBase:
 
     def total_area_of_dual_meyercells(self):
         Atot = 0.0
-        for v in self.xyz_coord_V.keys():
+        for v in range(self.num_vertices):
             Atot += self.meyercell_area(v)
 
         return Atot
@@ -976,12 +807,16 @@ class HalfEdgeMeshBase:
         return len(self._v_origin_H) // 2
 
     @property
+    def num_half_edges(self):
+        return len(self._v_origin_H)
+
+    @property
     def num_faces(self):
         return len(self._h_bound_F)
 
     @property
     def num_boundaries(self):
-        return len(self._h_comp_B)
+        return len(self._h_right_B)
 
     @property
     def genus(self):
@@ -1007,11 +842,10 @@ class HalfEdgeMeshBuilder:
     #######################################################
     # Initilization methods
     @classmethod
-    def from_data_arrays(cls, path, mesh_type=HalfEdgeMeshBase):
+    def from_he_data(cls, path, mesh_type=HalfEdgeMeshBase):
         """Initialize an instance of mesh_type from npz file containing data arrays."""
         data = np.load(path)
-
-        # return cls(
+        # cls(
         #     data["xyz_coord_V"],
         #     data["h_out_V"],
         #     data["v_origin_H"],
@@ -1019,12 +853,12 @@ class HalfEdgeMeshBuilder:
         #     data["h_twin_H"],
         #     data["f_left_H"],
         #     data["h_bound_F"],
-        #     data["h_comp_B"],
+        #     data["h_right_B"],
         # )
         return mesh_type(**data)
 
     @classmethod
-    def from_vert_face_list(cls, xyz_coord_V, vvv_of_F, mesh_type=HalfEdgeMeshBase):
+    def from_vf_data(cls, xyz_coord_V, vvv_of_F, mesh_type=HalfEdgeMeshBase):
         """
         Initialize a half-edge mesh from vertex/face data.
 
@@ -1040,7 +874,7 @@ class HalfEdgeMeshBuilder:
             HalfEdgeMeshBase: An instance of the HalfEdgeMeshBase class with the given vertices and faces.
         """
         return cls(
-            *VertTri2HalfEdgeConverter.from_source_samples(
+            *VertTri2HalfEdgeMeshConverter.from_source_samples(
                 xyz_coord_V, vvv_of_F
             ).target_samples
         )
@@ -1055,7 +889,9 @@ class HalfEdgeMeshBuilder:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class with data from the ply file.
         """
-        return cls(*VertTri2HalfEdgeConverter.from_source_ply(ply_path).target_samples)
+        return cls(
+            *VertTri2HalfEdgeMeshConverter.from_source_ply(ply_path).target_samples
+        )
 
     @classmethod
     def from_half_edge_ply(cls, ply_path):
@@ -1067,7 +903,9 @@ class HalfEdgeMeshBuilder:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
         """
-        return cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).target_samples)
+        return cls(
+            *VertTri2HalfEdgeMeshConverter.from_target_ply(ply_path).target_samples
+        )
 
     @classmethod
     def from_half_edge_ply_no_bdry_twin(cls, ply_path):
@@ -1079,4 +917,6 @@ class HalfEdgeMeshBuilder:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
         """
-        return cls(*VertTri2HalfEdgeConverter.from_target_ply(ply_path).source_samples)
+        return cls(
+            *VertTri2HalfEdgeMeshConverter.from_target_ply(ply_path).source_samples
+        )

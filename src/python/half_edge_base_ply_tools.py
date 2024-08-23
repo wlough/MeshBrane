@@ -1,91 +1,15 @@
 from plyfile import PlyData, PlyElement, PlyListProperty
+from src.python.half_edge_base_utils import (
+    vf_samples_to_he_samples,
+    he_samples_to_vf_samples,
+    find_h_right_B,
+)
+import numpy as np
 
-
-################################
-@njit(parallel=True)
-def jit_vf_samples_to_he_samples(V, F):
-    # (V, F) = source_samples
-    Nfaces = len(F)
-    Nvertices = len(V)
-
-    H = []
-    h_out_V = Nvertices * [-1]
-    v_origin_H = []
-    h_next_H = []
-    f_left_H = []
-    h_bound_F = np.zeros(Nfaces, dtype=np.int32)
-
-    # h = 0
-    for f in range(Nfaces):
-        h_bound_F[f] = 3 * f
-        for i in range(3):
-            h = 3 * f + i
-            h_next = 3 * f + (i + 1) % 3
-            v0 = F[f][i]
-            v1 = F[f][(i + 1) % 3]
-            H.append([v0, v1])
-            v_origin_H.append(v0)
-            f_left_H.append(f)
-            h_next_H.append(h_next)
-            if h_out_V[v0] == -1:
-                h_out_V[v0] = h
-    need_twins = set([_ for _ in range(len(H))])
-    need_next = set()
-    h_twin_H = len(H) * [-2]  # -2 means not set
-    while need_twins:
-        h = need_twins.pop()
-        if h_twin_H[h] == -2:  # if twin not set
-            h_twin = jit_get_halfedge_index_of_twin(
-                H, h
-            )  # returns -1 if twin not found
-            if h_twin == -1:  # if twin not found
-                h_twin = len(H)
-                v0, v1 = H[h]
-                H.append([v1, v0])
-                v_origin_H.append(v1)
-                need_next.add(h_twin)
-                h_twin_H[h] = h_twin
-                h_twin_H.append(h)
-                f_left_H.append(-1)
-            else:
-                h_twin_H[h], h_twin_H[h_twin] = h_twin, h
-                need_twins.remove(h_twin)
-
-    h_next_H.extend([-1] * len(need_next))
-    while need_next:
-        h = need_next.pop()
-        h_next = h_twin_H[h]
-        # rotate ccw around origin of twin until we find nex h on boundary
-        while f_left_H[h_next] != -1:
-            h_next = h_twin_H[h_next_H[h_next_H[h_next]]]
-        h_next_H[h] = h_next
-
-    # find and enumerate boundaries -1,-2,...
-    H_need2visit = set([h for h in range(len(H)) if f_left_H[h] < 0])
-    bdry_count = 0
-    while H_need2visit:
-        bdry_count += 1
-        h_start = H_need2visit.pop()
-        f_left_H[h_start] = -bdry_count
-        h = h_next_H[h_start]
-        while h != h_start:
-            H_need2visit.remove(h)
-            f_left_H[h] = -bdry_count
-            h = h_next_H[h]
-
-    target_samples = (
-        V,
-        h_out_V,
-        v_origin_H,
-        h_next_H,
-        h_twin_H,
-        f_left_H,
-        h_bound_F,
-    )
-    return target_samples
-
-
-################################
+_NUMPY_INT_ = np.int64
+_NUMPY_FLOAT_ = np.float64
+_PLY_INT_ = "int32"  # str(np.dtype(_NUMPY_INT_))
+_PLY_FLOAT_ = str(np.dtype(_NUMPY_FLOAT_))
 
 
 class MeshSchema:
@@ -122,93 +46,76 @@ class MeshSchema:
         self,
         name="MeshSchema",
         identifier="ply",
-        ply_format="binary_little_endian 1.0",
+        # ply_format="binary_little_endian 1.0",
         comments=None,
         elements=None,
     ):
         self.name = name
-        self.ply_format = ply_format
+        # self.ply_format = ply_format
         self.identifier = identifier
-        if elements is not None:
-            self.elements = elements
-        else:
-            # self.elements = [dict()]
-            self.elements = [
-                {
-                    "name": "element_with_properties",
-                    "count": "number_of_element_samples",
-                    "properties": [("prop0", "dtype_prop0"), ("prop1", "dtype_prop1")],
-                },
-                {
-                    "name": "element_with_list_property",
-                    "count": "number_of_element_samples",
-                    "properties": [("list_prop", "dtype_of_stuff_in_list_prop", (3,))],
-                },
-            ]
+        self.elements = elements
 
-        self.header = self.generate_header()
+    # def _generate_header(self):
+    #     header = [self.identifier]
+    #     header.append(f"format {self.ply_format}")
+    #     for element in self.elements:
+    #         header.append(f"element {element['name']} {element['count']}")
+    #         for prop in element["properties"]:
+    #             if len(prop) == 2:
+    #                 header.append(f"property {prop[1]} {prop[0]}")
+    #             elif len(prop) == 3:
+    #                 header.append(f"property list uint8 {prop[1]} {prop[0]}")
+    #     header.append("end_header")
+    #     return header
 
-    def generate_header(self):
-        header = [self.identifier]
-        header.append(f"format {self.ply_format}")
-        for element in self.elements:
-            header.append(f"element {element['name']} {element['count']}")
-            for prop in element["properties"]:
-                if len(prop) == 2:
-                    header.append(f"property {prop[1]} {prop[0]}")
-                elif len(prop) == 3:
-                    header.append(f"property list uint8 {prop[1]} {prop[0]}")
-        header.append("end_header")
-        return header
+    # def _print_header(self):
+    #     for line in self.header:
+    #         print(line)
 
-    def print_header(self):
-        for line in self.header:
-            print(line)
-
-    @classmethod
-    def _schema_from_ply_file(cls, file_path, schema_name=None):
-        """Constructs a PlySchema object by reading a ply file header. need to manually set size for list properties"""
-        if schema_name is None:
-            schema_name = file_path
-        elements = []
-        comments = []
-        identifier = None
-        ply_format = None
-        with open(file_path, "r") as f:
-            lines = f.readlines()
-            identifier = lines[0].strip()
-            i = 1
-            while i < len(lines):
-                line = lines[i].strip()
-                if line.startswith("format"):
-                    _, ply_format = line.split(maxsplit=1)
-                elif line.startswith("comment"):
-                    comments.append(line[8:].strip())
-                elif line.startswith("element"):
-                    elements.append(dict())
-                    _, element_name, element_count = line.split()
-                    elements[-1]["name"] = element_name
-                    elements[-1]["count"] = element_count
-                    elements[-1]["properties"] = []
-                elif line.startswith("property"):
-                    # prop_line = lines[i].strip()
-                    prop_line_split = lines[i].strip().split()
-                    if len(prop_line_split) == 3:
-                        _, prop_dtype, prop_name = prop_line_split
-                        elements[-1]["properties"].append((prop_name, prop_dtype))
-                    if len(prop_line_split) == 5:
-                        _, _, list_index_dtype, prop_dtype, prop_name = prop_line_split
-                        elements[-1]["properties"].append((prop_name, prop_dtype, (3,)))
-                elif line.startswith("end_header"):
-                    break
-                i += 1
-        return cls(
-            name=schema_name,
-            identifier=identifier,
-            ply_format=ply_format,
-            comments=comments,
-            elements=elements,
-        )
+    # @classmethod
+    # def _schema_from_ply_file(cls, file_path, schema_name=None):
+    #     """Constructs a PlySchema object by reading a ply file header. need to manually set size for list properties"""
+    #     if schema_name is None:
+    #         schema_name = file_path
+    #     elements = []
+    #     comments = []
+    #     identifier = None
+    #     ply_format = None
+    #     with open(file_path, "r") as f:
+    #         lines = f.readlines()
+    #         identifier = lines[0].strip()
+    #         i = 1
+    #         while i < len(lines):
+    #             line = lines[i].strip()
+    #             if line.startswith("format"):
+    #                 _, ply_format = line.split(maxsplit=1)
+    #             elif line.startswith("comment"):
+    #                 comments.append(line[8:].strip())
+    #             elif line.startswith("element"):
+    #                 elements.append(dict())
+    #                 _, element_name, element_count = line.split()
+    #                 elements[-1]["name"] = element_name
+    #                 elements[-1]["count"] = element_count
+    #                 elements[-1]["properties"] = []
+    #             elif line.startswith("property"):
+    #                 # prop_line = lines[i].strip()
+    #                 prop_line_split = lines[i].strip().split()
+    #                 if len(prop_line_split) == 3:
+    #                     _, prop_dtype, prop_name = prop_line_split
+    #                     elements[-1]["properties"].append((prop_name, prop_dtype))
+    #                 if len(prop_line_split) == 5:
+    #                     _, _, list_index_dtype, prop_dtype, prop_name = prop_line_split
+    #                     elements[-1]["properties"].append((prop_name, prop_dtype, (3,)))
+    #             elif line.startswith("end_header"):
+    #                 break
+    #             i += 1
+    #     return cls(
+    #         name=schema_name,
+    #         identifier=identifier,
+    #         ply_format=ply_format,
+    #         comments=comments,
+    #         elements=elements,
+    #     )
 
     def ply_data_to_samples(self, plydata):
         """Constructs a lists of data from a PlyData object using the schema"""
@@ -239,7 +146,7 @@ class MeshSchema:
             [tuple(v) for v in V],
             dtype=[("x", "double"), ("y", "double"), ("z", "double")],
         )
-        F_data = np.empty(len(F), dtype=[("vertex_indices", "int32", (3,))])
+        F_data = np.empty(len(F), dtype=[("vertex_indices", _PLY_INT_, (3,))])
         F_data["vertex_indices"] = F
         vertex_element = PlyElement.describe(V_data, "vertex")
         face_element = PlyElement.describe(F_data, "face")
@@ -263,42 +170,50 @@ class VertexTriMeshSchema(MeshSchema):
     float_type : str
         Data type for float properties (default="double").
     int_type : str
-        Data type for int properties (default="int32").
+        Data type for int properties (default=_PLY_INT_).
     """
 
-    def __init__(self, float_type="double", int_type="int32"):
+    def __init__(self):
         comments = [
             "Mesh represented by a list vertex positions and a list of vertex indices that make up each face"
-        ]
-        elements = [
-            {
-                "name": "vertex",
-                "count": 7,
-                "properties": [("x", float_type), ("y", float_type), ("z", float_type)],
-            },
-            {
-                "name": "face",
-                "count": 6,
-                "properties": [("vertex_indices", int_type, (3,))],
-            },
         ]
         super().__init__(
             name="VertexTriMeshSchema",
             identifier="ply",
-            ply_format="binary_little_endian 1.0",
+            # ply_format="binary_little_endian 1.0",
             comments=comments,
-            elements=elements,
+            # elements=None,
         )
-        self.float_type = float_type
-        self.int_type = int_type
+        self.elements = [
+            {
+                "name": "vertex",
+                "count": 7,
+                "properties": [
+                    ("x", _PLY_FLOAT_),
+                    ("y", _PLY_FLOAT_),
+                    ("z", _PLY_FLOAT_),
+                ],
+            },
+            {
+                "name": "face",
+                "count": 6,
+                "properties": [("vertex_indices", _PLY_INT_, (3,))],
+            },
+        ]
 
     def ply_data_to_samples(self, plydata):
         """Constructs a lists of data from a PlyData object using the schema"""
         xyz_coord_V = np.array(
             [plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]],
-            dtype=self.float_type,
+            dtype=_NUMPY_FLOAT_,
         ).T
-        vvv_of_F = np.array(plydata["face"]["vertex_indices"], dtype=self.int_type)
+        vvv_of_F = np.array(
+            [
+                vertex_indices.tolist()
+                for vertex_indices in plydata["face"]["vertex_indices"]
+            ],
+            dtype=_NUMPY_INT_,
+        )
         samples = (
             xyz_coord_V,
             vvv_of_F,
@@ -314,12 +229,12 @@ class VertexTriMeshSchema(MeshSchema):
         V_data = np.array(
             [tuple(v) for v in V],
             dtype=[
-                ("x", self.float_type),
-                ("y", self.float_type),
-                ("z", self.float_type),
+                ("x", _PLY_FLOAT_),
+                ("y", _PLY_FLOAT_),
+                ("z", _PLY_FLOAT_),
             ],
         )
-        F_data = np.empty(len(F), dtype=[("vertex_indices", self.int_type, (3,))])
+        F_data = np.empty(len(F), dtype=[("vertex_indices", _PLY_INT_, (3,))])
         F_data["vertex_indices"] = F
         vertex_element = PlyElement.describe(V_data, "vertex")
         face_element = PlyElement.describe(F_data, "face")
@@ -342,54 +257,53 @@ class HalfEdgeMeshSchema(MeshSchema):
         List of dicts containing info about ply elemtents and their properties
     """
 
-    def __init__(self, float_type="double", int_type="int32"):
+    def __init__(self):
         identifier = "he_ply"
         comments = ["Schema for HalfEdgeMesh ply with boundary."]
-        elements = [
+        # super().__init__(name, format, elements)
+        super().__init__(
+            name="HalfEdgeMeshSchema",
+            identifier="ply",
+            # ply_format="binary_little_endian 1.0",
+            comments=comments,
+            # elements=elements,
+        )
+        self.elements = [
             {
                 "name": "vertex",
                 "count": "Nvertex",
                 "properties": [
-                    ("x", float_type),
-                    ("y", float_type),
-                    ("z", float_type),
-                    ("h", int_type),
+                    ("x", _PLY_FLOAT_),
+                    ("y", _PLY_FLOAT_),
+                    ("z", _PLY_FLOAT_),
+                    ("h", _PLY_INT_),
                 ],
             },
             {
                 "name": "half_edge",
                 "count": "Nhalf_edge",
                 "properties": [
-                    ("v", int_type),
-                    ("f", int_type),
-                    ("n", int_type),
-                    ("t", int_type),
+                    ("v", _PLY_INT_),
+                    ("f", _PLY_INT_),
+                    ("n", _PLY_INT_),
+                    ("t", _PLY_INT_),
                 ],
             },
             {
                 "name": "face",
                 "count": "Nface",
                 "properties": [
-                    ("h", int_type),
+                    ("h", _PLY_INT_),
                 ],
             },
             {
                 "name": "boundary",
                 "count": "Nboundary",
                 "properties": [
-                    ("h", int_type),
+                    ("h", _PLY_INT_),
                 ],
             },
         ]
-
-        # super().__init__(name, format, elements)
-        super().__init__(
-            name="HalfEdgeMeshSchema",
-            identifier="ply",
-            format="binary_little_endian 1.0",
-            comments=comments,
-            elements=elements,
-        )
 
     def ply_data_to_samples(self, plydata):
         """Constructs a lists of data from a PlyData object using the schema
@@ -409,20 +323,20 @@ class HalfEdgeMeshSchema(MeshSchema):
             f_left_H[j] = -(b+1) if half-edge j is contained in boundary b and the complement of the mesh is left of j
         h_bound_F : list of int
             h_bound_F[k] = some half-edge on the boudary of face k
-        h_comp_B : list of int
-            h_comp_B[b] = some half-edge in the boundary b which is right of the complement of the mesh
+        h_right_B : list of int
+            h_right_B[b] = some half-edge in the boundary b which is right of the complement of the mesh
         """
         # ply_data = PlyData.read(file_path)
         xyz_coord_V = np.array(
             [plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]],
-            dtype=self.float_type,
+            dtype=_NUMPY_FLOAT_,
         ).T
-        h_out_V = np.array(plydata["vertex"]["h"], dtype=self.int_type)
-        v_origin_H = np.array(plydata["half_edge"]["v"], dtype=self.int_type)
-        h_next_H = np.array(plydata["half_edge"]["n"], dtype=self.int_type)
-        h_twin_H = np.array(plydata["half_edge"]["t"], dtype=self.int_type)
-        f_left_H = np.array(plydata["half_edge"]["f"], dtype=self.int_type)
-        h_bound_F = np.array(plydata["face"]["h"], dtype=self.int_type)
+        h_out_V = np.array(plydata["vertex"]["h"], dtype=_NUMPY_INT_)
+        v_origin_H = np.array(plydata["half_edge"]["v"], dtype=_NUMPY_INT_)
+        h_next_H = np.array(plydata["half_edge"]["n"], dtype=_NUMPY_INT_)
+        h_twin_H = np.array(plydata["half_edge"]["t"], dtype=_NUMPY_INT_)
+        f_left_H = np.array(plydata["half_edge"]["f"], dtype=_NUMPY_INT_)
+        h_bound_F = np.array(plydata["face"]["h"], dtype=_NUMPY_INT_)
         samples = (
             xyz_coord_V,
             h_out_V,
@@ -433,10 +347,19 @@ class HalfEdgeMeshSchema(MeshSchema):
             h_bound_F,
         )
         try:
-            h_comp_B = np.array(plydata["boundary"]["h"], dtype=self.int_type)
-            samples += (h_comp_B,)
+            h_right_B = np.array(plydata["boundary"]["h"], dtype=_NUMPY_INT_)
+            samples += (h_right_B,)
         except KeyError:
-            pass
+            h_right_B = find_h_right_B(
+                xyz_coord_V,
+                h_out_V,
+                v_origin_H,
+                h_next_H,
+                h_twin_H,
+                f_left_H,
+                h_bound_F,
+            )
+            samples += (h_right_B,)
         return samples
 
     def samples_to_ply_data(self, *samples, use_binary=False):
@@ -452,12 +375,12 @@ class HalfEdgeMeshSchema(MeshSchema):
             h_bound_F,
         ) = samples[:7]
         V_data = np.array(
-            [(xyz[0], xyz[1], xyz[2], h) for xyz, h in zip(xyz_coord_V, h_out_V)],
+            [(x, y, z, h) for (x, y, z), h in zip(xyz_coord_V, h_out_V)],
             dtype=[
-                ("x", self.float_type),
-                ("y", self.float_type),
-                ("z", self.float_type),
-                ("h", self.int_type),
+                ("x", _PLY_FLOAT_),
+                ("y", _PLY_FLOAT_),
+                ("z", _PLY_FLOAT_),
+                ("h", _PLY_INT_),
             ],
         )
         H_data = np.array(
@@ -466,27 +389,45 @@ class HalfEdgeMeshSchema(MeshSchema):
                 for v, n, t, f in zip(v_origin_H, h_next_H, h_twin_H, f_left_H)
             ],
             dtype=[
-                ("v", self.int_type),
-                ("n", self.int_type),
-                ("t", self.int_type),
-                ("f", self.int_type),
+                ("v", _PLY_INT_),
+                ("n", _PLY_INT_),
+                ("t", _PLY_INT_),
+                ("f", _PLY_INT_),
             ],
         )
-        F_data = np.array(h_bound_F, dtype=[("h", self.int_type)])
-
+        F_data = np.array(h_bound_F, dtype=[("h", _PLY_INT_)])
+        # # ***
+        # print(V_data)
+        # print(type(V_data))
+        # print(self.float_type)
+        # print(self.int_type)
+        # # ***
         vertex_element = PlyElement.describe(V_data, "vertex")
         half_edge_element = PlyElement.describe(H_data, "half_edge")
         face_element = PlyElement.describe(F_data, "face")
         if len(samples) == 8:
-            h_comp_B = samples[7]
-            B_data = np.array(h_comp_B, dtype=[("h", self.int_type)])
+            h_right_B = samples[7]
+            B_data = np.array(h_right_B, dtype=[("h", _PLY_INT_)])
             boundary_element = PlyElement.describe(B_data, "boundary")
             return PlyData(
                 [vertex_element, half_edge_element, face_element, boundary_element],
                 text=not use_binary,
             )
+
+        h_right_B = find_h_right_B(
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+        )
+        B_data = np.array(h_right_B, dtype=[("h", _PLY_INT_)])
+        boundary_element = PlyElement.describe(B_data, "boundary")
         return PlyData(
-            [vertex_element, half_edge_element, face_element], text=not use_binary
+            [vertex_element, half_edge_element, face_element, boundary_element],
+            text=not use_binary,
         )
 
 
@@ -740,24 +681,13 @@ class VertTri2HalfEdgeMeshConverter(MeshConverter):
 
     @classmethod
     def from_source_samples(cls, *source_samples):
-        source_ply_schema = VertexTriListSchema()
+        source_ply_schema = VertexTriMeshSchema()
         source_ply_data = source_ply_schema.samples_to_ply_data(*source_samples)
         return cls(source_ply_data)
 
     @classmethod
-    def jit_from_source_samples(cls, *source_samples):
-        source_ply_schema = VertexTriListSchema()
-        source_ply_data = source_ply_schema.samples_to_ply_data(*source_samples)
-        c = cls()
-        c._source_ply_data = source_ply_data
-        c._source_samples = c.source_ply_schema.ply_data_to_samples(c.source_ply_data)
-        c._target_samples = c.jit_source_samples_to_target_samples(*c._source_samples)
-        c._target_ply_data = c.target_ply_schema.samples_to_ply_data(*c._target_samples)
-        return c
-
-    @classmethod
     def from_target_samples(cls, *target_samples):
-        target_ply_schema = HalfEdgeSchema()
+        target_ply_schema = HalfEdgeMeshSchema()
         pc = cls(
             source_ply_data=None,
             source_ply_path=None,
@@ -768,7 +698,7 @@ class VertTri2HalfEdgeMeshConverter(MeshConverter):
 
     @classmethod
     def from_target_ply(cls, target_ply_path):
-        target_ply_schema = HalfEdgeSchema()
+        target_ply_schema = HalfEdgeMeshSchema()
         pc = cls(
             source_ply_data=None,
             source_ply_path=None,
@@ -779,135 +709,44 @@ class VertTri2HalfEdgeMeshConverter(MeshConverter):
         )
         return pc
 
-    def get_index_of_twin(self, H, h):
-        """
-        Find the half-edge twin to h in the list of half-edges H.
+    # @classmethod
+    # def update_he_ply_with_h_right_B(cls, old_ply_path, new_ply_path):
+    #     c = cls.from_target_ply(old_ply_path)
+    #     c.write_target_ply(target_path=new_ply_path, use_ascii=False)
 
-        Parameters
-        ----------
-        H : list
-            List of half-edges [[v0, v1], ...]
-        h : int
-            Index of half-edge in H
-
-        Returns
-        -------
-        h_twin : int
-            Index of H[h_twin]=[v1,v0] in H, where H[h]=[v0,v1]. Returns -1 if twin not found.
-        """
-        Nhedges = len(H)
-        v0 = H[h][0]
-        v1 = H[h][1]
-        for h_twin in range(Nhedges):
-            if H[h_twin][0] == v1 and H[h_twin][1] == v0:
-                return h_twin
-
-        return -1
+    @classmethod
+    def _update_he_plys_with_h_right_B(cls):
+        old_ply_dir = "./data/ply/binary"
+        new_ply_dir = "./data/half_edge_base/ply"
+        misc = ["annulus.ply", "hex_patch.ply", "hex_sector.ply"]
+        neovius = ["neovius.ply", "neovius_coarse.ply", "neovius_fine.ply"]
+        dumbbell = ["dumbbell.ply", "dumbbell_coarse.ply", "dumbbell_fine.ply"]
+        torus = [f"torus_{N:06d}_he.ply" for N in [192, 768, 3072, 12288, 49152]]
+        unit_sphere = [
+            f"unit_sphere_{N:06d}_he.ply"
+            for N in [12, 42, 162, 642, 2562, 10242, 40962]
+        ]
+        ply_names = misc + neovius + dumbbell + torus + unit_sphere
+        ply_names_new = misc + neovius + dumbbell
+        ply_names_new = [_[:-4] + "_he.ply" for _ in ply_names_new]
+        ply_names_new += torus + unit_sphere
+        for ply_name, ply_name_new in zip(ply_names, ply_names_new):
+            old_ply_path = f"{old_ply_dir}/{ply_name}"
+            new_ply_path = f"{new_ply_dir}/{ply_name_new}"
+            c = cls.from_target_ply(old_ply_path)
+            c.write_target_ply(target_path=new_ply_path, use_ascii=False)
 
     def source_samples_to_target_samples(self, *source_samples):
         (V, F) = source_samples
-        Nfaces = len(F)
-        Nvertices = len(V)
-
-        H = []
-        h_out_V = Nvertices * [-1]
-        v_origin_H = []
-        h_next_H = []
-        f_left_H = []
-        h_bound_F = Nfaces * [0]
-
-        # h = 0
-        for f in range(Nfaces):
-            h_bound_F[f] = 3 * f
-            for i in range(3):
-                h = 3 * f + i
-                h_next = 3 * f + (i + 1) % 3
-                v0 = F[f][i]
-                v1 = F[f][(i + 1) % 3]
-                H.append([v0, v1])
-                v_origin_H.append(v0)
-                f_left_H.append(f)
-                h_next_H.append(h_next)
-                if h_out_V[v0] == -1:
-                    h_out_V[v0] = h
-        need_twins = set([_ for _ in range(len(H))])
-        need_next = set()
-        h_twin_H = len(H) * [-2]  # -2 means not set
-        while need_twins:
-            h = need_twins.pop()
-            if h_twin_H[h] == -2:  # if twin not set
-                h_twin = self.get_index_of_twin(H, h)  # returns -1 if twin not found
-                if h_twin == -1:  # if twin not found
-                    h_twin = len(H)
-                    v0, v1 = H[h]
-                    H.append([v1, v0])
-                    v_origin_H.append(v1)
-                    need_next.add(h_twin)
-                    h_twin_H[h] = h_twin
-                    h_twin_H.append(h)
-                    f_left_H.append(-1)
-                else:
-                    h_twin_H[h], h_twin_H[h_twin] = h_twin, h
-                    need_twins.remove(h_twin)
-
-        h_next_H.extend([-1] * len(need_next))
-        while need_next:
-            h = need_next.pop()
-            h_next = h_twin_H[h]
-            # rotate ccw around origin of twin until we find nex h on boundary
-            while f_left_H[h_next] != -1:
-                h_next = h_twin_H[h_next_H[h_next_H[h_next]]]
-            h_next_H[h] = h_next
-
-        # find and enumerate boundaries -1,-2,...
-        H_need2visit = set([h for h in range(len(H)) if f_left_H[h] == -1])
-        bdry_count = 0
-        while H_need2visit:
-            bdry_count += 1
-            h_start = H_need2visit.pop()
-            f_left_H[h_start] = -bdry_count
-            h = h_next_H[h_start]
-            while h != h_start:
-                H_need2visit.remove(h)
-                f_left_H[h] = -bdry_count
-                h = h_next_H[h]
-
-        target_samples = (
-            V,
-            h_out_V,
-            v_origin_H,
-            h_next_H,
-            h_twin_H,
-            f_left_H,
-            h_bound_F,
-        )
+        target_samples = vf_samples_to_he_samples(V, F)
         return target_samples
 
     def target_samples_to_source_samples(self, *target_samples):
         (xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H, h_bound_F) = (
             target_samples
         )
-        # Nfaces = len(h_bound_F)
-
-        F = []
-        for h_start in h_bound_F:
-            F.append([])
-            h = h_start
-            while True:
-                F[-1].append(v_origin_H[h])
-                h = h_next_H[h]
-                if h == h_start:
-                    break
-        source_samples = (xyz_coord_V, F)
+        (xyz_coord_V, vvv_of_F) = he_samples_to_vf_samples(
+            xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H, h_bound_F
+        )
+        source_samples = (xyz_coord_V, vvv_of_F)
         return source_samples
-
-    def jit_index_of_twin(self, H, h):
-        return jit_get_halfedge_index_of_twin(H, h)
-
-    def jit_source_samples_to_target_samples(self, *source_samples):
-        _V, _F = source_samples
-        V = np.array(_V)  # [xyz.tolist() for xyz in _V]
-        F = np.array(_F)
-        # print(f"{V=}")
-        # print(f"{F=}")
-        return jit_vf_samples_to_he_samples(V, F)
