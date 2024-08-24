@@ -789,6 +789,14 @@ class HalfEdgeMeshBase:
 
         return Atot
 
+    def barcell_area_V(self):
+
+        N = self.num_vertices
+        A = np.zeros(N, dtype=_NUMPY_FLOAT_)
+        for k in range(N):
+            A[k] = self.barcell_area(k)
+        return A
+
     ######################################################
     # Misc helper functions
     def valence_v(self, v):
@@ -827,6 +835,735 @@ class HalfEdgeMeshBase:
         return self.num_vertices - self.num_edges + self.num_faces
 
     ######################################################
+    # experimental
+    def angle_defect_v(self, v):
+        """
+        2*pi - sum_f (angle_f)
+        """
+        r0 = self.xyz_coord_v(v)
+        defect = 2 * np.pi
+        for h in self.generate_H_out_v_clockwise(v):
+            h_rot = self.h_next_h(self.h_twin_h(h))
+            r1 = self.xyz_coord_v(self.v_head_h(h))
+            r2 = self.xyz_coord_v(self.v_head_h(h_rot))
+            e1 = r1 - r0
+            e2 = r2 - r0
+            norm_e1 = np.sqrt(e1[0] ** 2 + e1[1] ** 2 + e1[2] ** 2)
+            norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
+            cos_angle = (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (
+                norm_e1 * norm_e2
+            )
+            defect -= np.arccos(cos_angle)
+
+        return defect
+
+    def gaussian_curvature_v(self, v):
+        """
+        Compute the Gaussian curvature at vertex v
+        """
+        area_v = self.barcell_area(v)
+        angle_defect_v = self.angle_defect_v(v)
+        return angle_defect_v / area_v
+
+    def laplacian(self, Q):
+        """
+        Computes the cotan Laplacian of Q at each vertex
+        """
+        # Nv = self.num_vertices
+        lapQ = np.zeros_like(Q)
+        for vi in range(self.num_vertices):
+            Atot = 0.0
+            ri = self.xyz_coord_v(vi)
+            qi = Q[vi]
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+            for hij in self.generate_H_out_v_clockwise(vi):
+                hijm1 = self.h_next_h(self.h_twin_h(hij))
+                hijp1 = self.h_twin_h(self.h_prev_h(hij))
+                vjm1 = self.v_head_h(hijm1)
+                vj = self.v_head_h(hij)
+                vjp1 = self.v_head_h(hijp1)
+
+                qj = Q[vj]
+
+                rjm1 = self.xyz_coord_v(vjm1)
+                rj = self.xyz_coord_v(vj)
+                rjp1 = self.xyz_coord_v(vjp1)
+
+                rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
+                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+                ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
+                rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
+                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
+                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+
+                Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
+                Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
+                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
+                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+
+                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
+
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
+
+                cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
+                cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
+
+                Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
+                lapQ[vi] += (cot_thetam + cot_thetap) * (qj - qi) / 2
+            lapQ[vi] /= Atot
+
+        return lapQ
+
+    def compute_curvature_data(self):
+        """
+        Compute the mean curvature vector at all vertices
+        """
+
+        X = self.xyz_coord_V
+        lapX = self.laplacian(X)
+        H = np.zeros_like(X[:, 0])
+        K = np.zeros_like(X[:, 0])
+        n = np.zeros_like(X)
+        for i in range(self.num_vertices):
+
+            mcvec = lapX[i]
+            f = self.f_left_h(self.h_out_v(i))
+            af_vec = self.vec_area_f(f)
+            mcvec_sign = np.sign(np.dot(mcvec, af_vec))
+            n[i] = mcvec_sign * mcvec / np.linalg.norm(mcvec)
+            H[i] = np.dot(n[i], mcvec) / 2
+            K[i] = self.gaussian_curvature_v(i)
+
+        lapH = self.laplacian(H)
+        return H, K, lapH, n
+
+    def update_vertex(self, v, xyz=None, h_out=None):
+        if xyz is not None:
+            self._xyz_coord_V[v] = xyz
+        if h_out is not None:
+            self._h_out_V[v] = h_out
+
+    def update_hedge(self, h, h_next=None, h_twin=None, v_origin=None, f_left=None):
+        if h_next is not None:
+            self._h_next_H[h] = h_next
+        if h_twin is not None:
+            self._h_twin_H[h] = h_twin
+        if v_origin is not None:
+            self._v_origin_H[h] = v_origin
+        if f_left is not None:
+            self._f_left_H[h] = f_left
+
+    def update_face(self, f, h_bound=None):
+        if h_bound is not None:
+            self._h_bound_F[f] = h_bound
+
+    def flip_edge(self, h):
+        r"""
+        h cannot be on boundary!
+                v1                           v1
+              /    \                       /  |  \
+             /      \                     /   |   \
+            /h3    h2\                   /h3  |  h2\
+           /    f0    \                 /     |     \
+          /            \               /  f0  |  f1  \
+         /      h0      \             /       |       \
+        v2--------------v0  |----->  v2     h0|h1     v0
+         \      h1      /             \       |       /
+          \            /               \      |      /
+           \    f1    /                 \     |     /
+            \h4    h5/                   \h4  |  h5/
+             \      /                     \   |   /
+              \    /                       \  |  /
+                v3                           v3
+        v0
+        --
+        h_out
+            pre-flip: may be h1
+            post-flip: set to h2 if needed
+        v2
+        --
+            pre-flip: may be h0
+            post-flip: set to h4 if needed
+        h0
+        --
+        v_origin_h(h0)
+            pre-flip: v2
+            post-flip: v3
+        h_next
+            pre-flip: h2
+            post-flip: h3
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        h1
+        --
+        v_origin
+            pre-flip: v0
+            post-flip: v1
+        h_next
+            pre-flip: h4
+            post-flip: h5
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        h2
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h3
+            post-flip: h1
+        h_twin
+            unchanged
+        f_left
+            pre-flip: f0
+            post-flip: f1
+        h3
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h0
+            post-flip: h4
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        h4
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h5
+            post-flip: h0
+        h_twin
+            unchanged
+        f_left
+            pre-flip: f1
+            post-flip: f0
+        h5
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h1
+            post-flip: h2
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        f0
+        --
+        h_bound
+            pre-flip: may be h2
+            post-flip: set to h3 if needed
+        f1
+        --
+        h_bound
+            pre-flip: may be h4
+            post-flip: set to h5 if needed
+        """
+        # get involved half-edges/vertices/faces
+        h0 = h
+        h1 = self.h_twin_h(h0)
+        h2 = self.h_next_h(h0)
+        h3 = self.h_next_h(h2)
+        h4 = self.h_next_h(h1)
+        h5 = self.h_next_h(h4)
+
+        v0 = self.v_origin_h(h1)
+        v1 = self.v_origin_h(h3)
+        v2 = self.v_origin_h(h0)
+        v3 = self.v_origin_h(h5)
+
+        f0 = self.f_left_h(h0)
+        f1 = self.f_left_h(h1)
+
+        # update vertices
+        if self.h_out_v(v0) == h1:
+            self.update_vertex(v0, h_out=h2)
+        if self.h_out_v(v2) == h0:
+            self.update_vertex(v2, h_out=h4)
+        # update half-edges
+        self.update_hedge(h0, v_origin=v3, h_next=h3)
+        self.update_hedge(h1, v_origin=v1, h_next=h5)
+        self.update_hedge(h2, h_next=h1, f_left=f1)
+        self.update_hedge(h3, h_next=h4)
+        self.update_hedge(h4, h_next=h0, f_left=f0)
+        self.update_hedge(h5, h_next=h2)
+        # update faces
+        if self.h_bound_f(f0) == h2:
+            self.update_face(f0, h_bound=h3)
+        if self.h_bound_f(f1) == h4:
+            self.update_face(f1, h_bound=h5)
+
+    def flip_non_delaunay(self):
+        flip_count = 0
+        for h in range(self.num_half_edges):
+            if not self.h_is_locally_delaunay(h):
+                if self.h_is_flippable(h):
+                    self.flip_edge(h)
+                    flip_count += 1
+        return flip_count
+
+    def run_tests(self):
+        v, h, f = 1, 2, 3
+        # Combinatorial maps
+        self.xyz_coord_v(v)
+        self.h_out_v(v)
+        self.h_bound_f(f)
+        self.v_origin_h(h)
+        self.f_left_h(h)
+        self.h_next_h(h)
+        self.h_twin_h(h)
+        #
+        self.v_head_h(h)
+        self.f_right_h(h)
+        self.h_out_cw_from_h(h)
+        self.h_in_cw_from_h(h)
+        self.h_prev_h(h)
+        self.h_prev_h_by_rot(h)
+        # Predicates
+        self.complement_boundary_contains_h(h)
+        self.interior_boundary_contains_h(h)
+        self.boundary_contains_h(h)
+        self.boundary_contains_v(v)
+        self.h_is_locally_delaunay(h)
+        self.h_is_flippable(h)
+        # Generators
+        self.generate_H_out_v_clockwise(v)
+        self.generate_H_in_cw_from_h(h)
+        self.generate_H_bound_f(f)
+        self.generate_H_next_h(h)
+        self.generate_V_of_f(f)
+        # Data exporters
+        self.V_of_F
+        self.V_of_H
+        self.data_arrays
+        # Simplical operations
+        V, H, F = self.star_of_vertex(v)
+        self.star_of_vertex(v)
+        # self.star_of_edge(h)
+        self.star(V, H, F)
+        self.closure(V, H, F)
+        self.link(V, H, F)
+        # geometry
+        self.vec_area_f(f)
+        self.area_f(f)
+        self.total_area_of_faces()
+        self.barcell_area(v)
+        self.total_area_of_dual_barcells()
+        self.vorcell_area(v)
+        self.total_area_of_dual_vorcells()
+        self.meyercell_area(v)
+        self.total_area_of_dual_meyercells()
+        # Misc helper functions
+        self.valence_v(v)
+        self.num_vertices
+        self.num_edges
+        self.num_faces
+        self.num_boundaries
+        self.genus
+        self.euler_characteristic
+
+
+class HalfEdgePatchBase:
+    """
+    A submanifold of a HalfEdgeMesh topologically equivalent to a disk.
+    """
+
+    def __init__(
+        self,
+        supermesh,
+        V,
+        H,
+        F,
+        h_right_B=None,
+        V_bdry=None,
+    ):
+        self.supermesh = supermesh
+        self.V = V
+        self.H = H
+        self.F = F
+        if h_right_B is None:
+            self.h_right_B = self.find_h_right_B()
+        if V_bdry is None:
+            self.V_bdry = set(self.generate_V_cw_B())
+
+    @property
+    def V(self):
+        return self._V
+
+    @V.setter
+    def V(self, value):
+        if isinstance(value, set):
+            self._V = value
+        elif hasattr(value, "__iter__"):
+            self._V = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
+
+    @property
+    def H(self):
+        return self._H
+
+    @H.setter
+    def H(self, value):
+        if isinstance(value, set):
+            self._H = value
+        elif hasattr(value, "__iter__"):
+            self._H = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
+
+    @property
+    def F(self):
+        return self._F
+
+    @F.setter
+    def F(self, value):
+        if isinstance(value, set):
+            self._F = value
+        elif hasattr(value, "__iter__"):
+            self._F = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
+
+    @property
+    def V_bdry(self):
+        return self._V_bdry
+
+    @V_bdry.setter
+    def V_bdry(self, value):
+        if isinstance(value, set):
+            self._V_bdry = value
+        elif hasattr(value, "__iter__"):
+            self._V_bdry = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
+
+    ##############################################
+    @classmethod
+    def from_seed_vertex(cls, v_seed, supermesh):
+        """
+        Initialize a patch from a seed vertex by including taking the closure of all simplices in supermesh that contain the seed vertex. If v_seed is not in a boundary of supermesh, the patch will be a disk centered at v_seed.
+
+        Parameters:
+            v_seed (int): vertex index
+            supermesh (HalfEdgeMesh): mesh from which the patch is extracted
+        """
+        V, H, F = supermesh.closure(*supermesh.star_of_vertex(v_seed))
+        self = cls(supermesh, V, H, F)
+        # self.h_right_B = self.find_h_right_B()
+
+        return self
+
+    def complement_boundary_contains_h(self, h):
+        """check if half-edge h is in the boundary of the mesh"""
+        return h in self.H and self.supermesh.f_left_h(h) not in self.F
+
+    def interior_boundary_contains_h(self, h):
+        """check if half-edge h is on the boundary of the mesh"""
+        return (
+            h in self.H
+            and self.supermesh.f_left_h(self.supermesh.h_twin_h(h)) not in self.F
+        )
+
+    def boundary_contains_h(self, h):
+        """check if half-edge h is on the boundary of the mesh"""
+        if h in self.H:
+            if self.supermesh.f_left_h(h) not in self.F:
+                return True
+            if self.supermesh.f_left_h(self.supermesh.h_twin_h(h)) not in self.F:
+                return True
+        return False
+
+    # def boundary_contains_v(self, v):
+    #     """check if vertex v is on the boundary of the mesh"""
+    #     return self.boundary_contains_h(self.supermesh.h_out_v(v))
+
+    ##############################################
+    def xyz_coord_v(self, v):
+        """
+        get array of xyz coordinates of vertex v
+
+        Args:
+            v (int): vertex index
+
+        Returns:
+            numpy.array: xyz coordinates
+        """
+        return self.supermesh.xyz_coord_v(v)
+
+    def h_out_v(self, v):
+        """
+        get index of an non-boundary outgoing half-edge incident on vertex v
+
+        Args:
+            v (int): vertex index
+
+        Returns:
+            int: half-edge index
+        """
+        if v not in self.V:
+            raise ValueError("Vertex not in patch.")
+        for h in self.supermesh.generate_H_out_v_clockwise(v):
+            if h not in self.H:
+                continue
+            elif self.supermesh.f_left_h(h) in self.F:
+                return h
+
+    def v_origin_h(self, h):
+        """get index of the vertex at the origin of half-edge h
+
+        Args:
+            h (int): half-edge index
+
+        Returns:
+            int: vertex index
+        """
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
+        return self.supermesh.v_origin_h(h)
+
+    def h_next_h(self, h):
+        """get index of the next half-edge after h in the face/boundary cycle
+        Args:
+            h (int): half-edge index
+
+        Returns:
+            int: half-edge index
+        """
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
+        elif self.supermesh.f_left_h(h) in self.F:
+            return self.supermesh.h_next_h(h)
+        n = self.supermesh.h_next_h(h)
+        while n not in self.H:
+            n = self.supermesh.h_out_cw_from_h(n)
+        return n
+
+    def h_twin_h(self, h):
+        """get index of the half-edge anti-parallel to half-edge h
+
+        Args:
+            h (int): half-edge index
+
+        Returns:
+            int: half-edge index
+        """
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
+        return self.supermesh.h_twin_h(h)
+
+    def f_left_h(self, h):
+        """get index of the face to the left of half-edge h
+
+        Args:
+            h (int): half-edge index
+
+        Returns:
+            int: face index
+        """
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
+        elif self.supermesh.f_left_h(h) in self.F:
+            return self.supermesh.f_left_h(h)
+        else:
+            return -1
+
+    def h_bound_f(self, f):
+        """get index of a half-edge on the boundary of face f
+
+        Args:
+            f (int): face index
+
+        Returns:
+            int: half-edge index
+        """
+        if f not in self.F:
+            raise ValueError("Face not in patch.")
+        return self.supermesh.h_bound_f(f)
+
+    def generate_H_next_h(self, h_start):
+        h = h_start
+        while True:
+            yield h
+            h = self.h_next_h(h)
+            if h == h_start:
+                break
+
+    def generate_H_cw_B(self):
+        for bdry, h in self.h_right_B.items():
+            for h in self.generate_H_next_h(h):
+                yield h
+
+    def generate_V_cw_B(self):
+        for h in self.generate_H_cw_B():
+            yield self.v_origin_h(h)
+
+    def generate_F_cw_B(self):
+        for h in self.generate_H_cw_B():
+            yield self.f_left_h(self.h_twin_h(h))
+
+    def find_h_right_B(self, F_need2check=None):
+        h_right_B = dict()
+        bdry_count = 0
+        H_in_cw_boundary = set()
+        # boundary_is_right_of_H = set()
+        if F_need2check is None:
+            F_need2check = self.F.copy()  # set of faces that need to be checked
+        while F_need2check:
+            f = F_need2check.pop()
+            h = self.h_bound_f(f)
+            for h in self.generate_H_next_h(h):
+                if self.interior_boundary_contains_h(h):
+                    H_in_cw_boundary.add(self.h_twin_h(h))
+        while H_in_cw_boundary:
+            bdry_count += 1
+            h = H_in_cw_boundary.pop()
+            bdry = -bdry_count
+            h_right_B[bdry] = h
+            for h in self.generate_H_next_h(h):
+                H_in_cw_boundary.discard(h)
+        return h_right_B
+
+    def expand_boundary(self):
+        """
+        **slow but actually works***
+        Expand the boundary of the patch by one ring of vertices, edges, and faces.
+
+        Returns:
+            set: set of new boundary vertices
+        """
+        new_boundary_verts = set()
+        V_bdry_old = set(self.generate_V_cw_B())
+        V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
+        V_bdry_new = V - self.V
+        self.V.update(V)
+        self.H.update(H)
+        self.F.update(F)
+        self.h_right_B = self.find_h_right_B(F_need2check=F)
+        return V_bdry_new
+
+    def _expand_boundary(self):
+        """
+        ***this screws up something with boundaries, maybe in generate_H_cw_B/generate_F_cw_B?***
+        Expand the boundary of the patch by one ring of vertices, edges, and faces.
+
+        Returns:
+            set: set of new boundary vertices
+        """
+        new_boundary_verts = set()
+        V, H, F = set(), set(), set()
+        V_bdry_old = set(self.generate_V_cw_B())
+        for h_start in self.generate_H_cw_B():
+            if self.supermesh.complement_boundary_contains_h(h_start):
+                continue
+            for h in self.supermesh.generate_H_in_cw_from_h(h_start):
+                f = self.supermesh.f_left_h(h)
+                if f in self.F:
+                    break
+                n = self.supermesh.h_next_h(h)
+                v = self.supermesh.v_origin_h(h)
+                V.add(v)
+                H.update([h, n])
+                if f >= 0:
+                    nn = self.supermesh.h_next_h(n)
+                    H.update([nn, self.supermesh.h_twin_h(nn)])
+                    F.add(f)
+
+        # V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
+        V_bdry_new = V - self.V
+        self.V.update(V)
+        self.H.update(H)
+        self.F.update(F)
+        self.h_right_B = self.find_h_right_B(F_need2check=F)
+        return V_bdry_new
+
+    def expand_boundary_doesnt_work_yet(self):
+        """
+        Expand the boundary of the patch by one ring of vertices, edges, and faces.
+
+        Returns:
+            set: set of new boundary vertices
+        """
+        new_boundary_verts = set()
+        V, H, F = set(), set(), set()
+        V_bdry_old = set(self.generate_V_cw_B())
+        for h_start in self.generate_H_cw_B():
+            if self.supermesh.complement_boundary_contains_h(h_start):
+                continue
+            for h in self.supermesh.generate_H_in_cw_from_h(h_start):
+                f = self.supermesh.f_left_h(h)
+                if f in self.F:
+                    break
+                n = self.supermesh.h_next_h(h)
+                v = self.supermesh.v_origin_h(h)
+                V.add(v)
+                H.update([h, n])
+                if f >= 0:
+                    nn = self.supermesh.h_next_h(n)
+                    H.update([nn, self.supermesh.h_twin_h(nn)])
+                    F.add(f)
+
+        # V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
+        V_bdry_new = V - self.V
+        self.V = V
+        self.H = H
+        self.F = F.copy()
+        self.h_right_B = self.find_h_right_B(F_need2check=F)
+        return V_bdry_new
+
+    ##############################################
+    def to_half_edge_mesh(self):
+        V = sorted(self.V)
+        F = sorted(self.F)
+        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
+        F = [
+            [
+                V.index(self.v_origin_h(h))
+                for h in self.generate_H_next_h(self.h_bound_f(f))
+            ]
+            for f in F
+        ]
+        return HalfEdgeMesh.from_vert_face_list(xyz_coord_V, F)
+
+    @property
+    def data_lists(self):
+        """ """
+        V = sorted(self.V)
+        H = sorted(self.H)
+        F = sorted(self.F)
+        # [x if x<.5 else 33 for x in X]
+        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
+        h_out_V = [H.index(self.h_out_v(v)) for v in V]
+        v_origin_H = [V.index(self.v_origin_h(h)) for h in H]
+        h_next_H = [H.index(self.h_next_h(h)) for h in H]
+        h_twin_H = [H.index(self.h_twin_h(h)) for h in H]
+        f_left_H = [
+            self.f_left_h(h) if self.f_left_h(h) < 0 else F.index(self.f_left_h(h))
+            for h in H
+        ]
+        h_bound_F = [H.index(self.h_bound_f(f)) for f in F]
+
+        return (
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+        )
+
+    ##############################################
+    ##############################################
     # to be deprecated
 
 

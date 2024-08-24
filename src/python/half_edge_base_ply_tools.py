@@ -736,6 +736,32 @@ class VertTri2HalfEdgeMeshConverter(MeshConverter):
             c = cls.from_target_ply(old_ply_path)
             c.write_target_ply(target_path=new_ply_path, use_ascii=False)
 
+    @classmethod
+    def _oblatify_the_spheres(cls, ratio=0.75):
+        old_ply_dir = "./data/half_edge_base/ply"
+        new_ply_dir = "./data/half_edge_base/ply"
+        ply_names = [
+            f"unit_sphere_{N:06d}_he.ply"
+            for N in [12, 42, 162, 642, 2562, 10242, 40962]
+        ]
+        ply_names_new = [
+            f"oblate_{N:06d}_he.ply" for N in [12, 42, 162, 642, 2562, 10242, 40962]
+        ]
+        # ply_names = [f"torus_{N:06d}_he.ply" for N in [192, 768, 3072, 12288, 49152]]
+        # ply_names_new = [
+        #     f"oblate_{N:06d}_he.ply" for N in [192, 768, 3072, 12288, 49152]
+        # ]
+
+        for ply_name, ply_name_new in zip(ply_names, ply_names_new):
+            old_ply_path = f"{old_ply_dir}/{ply_name}"
+            new_ply_path = f"{new_ply_dir}/{ply_name_new}"
+            c0 = cls.from_target_ply(old_ply_path)
+            xyz_coord_V = c0.target_samples[0]
+            xyz_coord_V[:, 2] *= ratio
+            target_samples = (xyz_coord_V, *c0.target_samples[1:])
+            c = cls.from_target_samples(*target_samples)
+            c.write_target_ply(target_path=new_ply_path, use_ascii=False)
+
     def source_samples_to_target_samples(self, *source_samples):
         (V, F) = source_samples
         target_samples = vf_samples_to_he_samples(V, F)
