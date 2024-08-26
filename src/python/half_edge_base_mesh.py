@@ -293,7 +293,7 @@ class HalfEdgeMeshBase:
         """
         return self._h_twin_H[h]
 
-    def h_comp_b(self, b):
+    def h_right_b(self, b):
         """get index of a half-edge contained in boundary b
 
         Args:
@@ -483,12 +483,15 @@ class HalfEdgeMeshBase:
             h_right_B=h_right_B,
         )
 
-    def generate_H_out_v_clockwise(self, v):
+    def generate_H_out_v_clockwise(self, v, h_start=None):
         """
         Generate outgoing half-edges from vertex v in clockwise order until the starting half-edge is reached again
         """
-        h = self.h_out_v(v)
-        h_start = h
+        if h_start is None:
+            h_start = self.h_out_v(v)
+        elif self.v_origin_h(h_start) != v:
+            raise ValueError("Starting half-edge does not originate at vertex v")
+        h = h_start
         while True:
             yield h
             h = self.h_next_h(self.h_twin_h(h))
@@ -532,7 +535,49 @@ class HalfEdgeMeshBase:
             if h == h_start:
                 break
 
+    def generate_V_nearest_v_clockwise(self, v, h_start=None):
+        """Generates nearest neighbor vertices of vertex v in clockwise order"""
+        for h in self.generate_H_out_v_clockwise(v, h_start=h_start):
+            yield self.v_head_h(h)
+
+    @property
+    def num_vertices(self):
+        return len(self._xyz_coord_V)
+
+    @property
+    def num_edges(self):
+        return len(self._v_origin_H) // 2
+
+    @property
+    def num_half_edges(self):
+        return len(self._v_origin_H)
+
+    @property
+    def num_faces(self):
+        return len(self._h_bound_F)
+
+    @property
+    def num_boundaries(self):
+        return len(self._h_right_B)
+
+    @property
+    def genus(self):
+        return 1 - (self.euler_characteristic + self.num_boundaries) // 2
+
+    @property
+    def euler_characteristic(self):
+        return self.num_vertices - self.num_edges + self.num_faces
+
+    def valence_v(self, v):
+        """get the valence of vertex v"""
+        valence = 0
+        for h in self.generate_H_out_v_clockwise(v):
+            valence += 1
+        return valence
+
     ######################################################
+    # Simplical operations
+    #
     # The star St(s) of a k-simplex s consists of: s and all (n>k)-simplices that contain s.
     # The closure Cl(s) of a k-simplex s consists of: s and all (n<k)-simplices that are proper faces of s.
     # The link Lk(s)=Cl(St(s))-St(Cl(s)).
@@ -798,45 +843,97 @@ class HalfEdgeMeshBase:
         return A
 
     ######################################################
-    # Misc helper functions
-    def valence_v(self, v):
-        """get the valence of vertex v"""
-        valence = 0
-        for h in self.generate_H_out_v_clockwise(v):
-            valence += 1
-        return valence
-
-    @property
-    def num_vertices(self):
-        return len(self._xyz_coord_V)
-
-    @property
-    def num_edges(self):
-        return len(self._v_origin_H) // 2
-
-    @property
-    def num_half_edges(self):
-        return len(self._v_origin_H)
-
-    @property
-    def num_faces(self):
-        return len(self._h_bound_F)
-
-    @property
-    def num_boundaries(self):
-        return len(self._h_right_B)
-
-    @property
-    def genus(self):
-        return 1 - (self.euler_characteristic + self.num_boundaries) // 2
-
-    @property
-    def euler_characteristic(self):
-        return self.num_vertices - self.num_edges + self.num_faces
-
-    ######################################################
     # experimental
-    def angle_defect_v(self, v):
+    ######################################################
+    # unit normal methods
+    def normal_some_face_of_v(self, i):
+        h = self.h_out_v(i)
+        f = self.f_left_h(h)
+        if f < 0:
+            h = self.h_out_cw_from_h(h)
+            f = self.f_left_h(h)
+        avec = self.vec_area_f(f)
+        n = avec / np.linalg.norm(avec)
+        return n
+
+    def normal_some_face_of_V(self):
+        n = np.zeros((self.num_vertices, 3), dtype=_NUMPY_FLOAT_)
+        for i in range(self.num_vertices):
+            n[i] = self.normal_some_face_of_v(i)
+        return n
+
+    def normal_other_weighted_v(self, i):
+        """Weights for Computing Vertex Normals from Facet Normals Max99"""
+        n = np.zeros(3)
+        # x = self.xyz_coord_v(i)
+        # neighbors = self.generate_V_nearest_v_clockwise(i)
+        # j = next(neighbors)
+        # r = self.xyz_coord_v(j) - x
+        # for jrot in neighbors:
+        defect = 2 * np.pi
+        x = self.xyz_coord_v(i)
+        h = self.h_out_v(i)
+        r = self.xyz_coord_v(self.v_head_h(h)) - x
+        h = self.h_out_cw_from_h(h)
+        for jrot in self.generate_V_nearest_v_clockwise(i, h_start=h):
+            rrot = self.xyz_coord_v(jrot) - x
+            n += np.cross(rrot, r) / (np.dot(r, r) * np.dot(rrot, rrot))
+            r = rrot
+        n /= np.linalg.norm(n)
+        return n
+
+    def normal_other_weighted_V(self):
+        n = np.zeros((self.num_vertices, 3), dtype=_NUMPY_FLOAT_)
+        for i in range(self.num_vertices):
+            n[i] = self.normal_other_weighted_v(i)
+        return n
+
+    # Curvature
+    def angle_defect_v(self, i):
+        """
+        2*pi - sum_f (angle_f)
+        """
+        defect = 2 * np.pi
+        x = self.xyz_coord_v(i)
+        h = self.h_out_v(i)
+        r = self.xyz_coord_v(self.v_head_h(h)) - x
+        h = self.h_out_cw_from_h(h)
+        for jrot in self.generate_V_nearest_v_clockwise(i, h_start=h):
+            rrot = self.xyz_coord_v(jrot) - x
+            cos_angle = np.dot(r, rrot) / (np.linalg.norm(r) * np.linalg.norm(rrot))
+            defect -= np.arccos(cos_angle)
+            r = rrot
+        return defect
+
+    def gaussian_curvature_v(self, i):
+        """
+        2*pi - sum_f (angle_f)
+        """
+        area = 0.0
+        defect = 2 * np.pi
+        x = self.xyz_coord_v(i)
+        h = self.h_out_v(i)
+        r = self.xyz_coord_v(self.v_head_h(h)) - x
+        norm_r = np.linalg.norm(r)
+        h = self.h_out_cw_from_h(h)
+        # for jrot in self.generate_V_nearest_v_clockwise(i, h_start=h):
+        for hrot in self.generate_H_out_v_clockwise(i, h_start=h):
+            jrot = self.v_head_h(hrot)
+            rrot = self.xyz_coord_v(jrot) - x
+            norm_rrot = np.linalg.norm(rrot)
+            r_dot_rrot = np.dot(r, rrot)
+            cos_angle = r_dot_rrot / (norm_r * norm_rrot)
+            if self.complement_boundary_contains_h(hrot):
+                # do boundary geodesic curvature stuff
+                continue
+            defect -= np.arccos(cos_angle)
+            area += norm_r * norm_rrot * np.sqrt(1 - cos_angle**2) / 6
+
+            r = rrot
+            norm_r = norm_rrot
+        return defect / area
+
+    def _angle_defect_v(self, v):
         """
         2*pi - sum_f (angle_f)
         """
@@ -857,7 +954,7 @@ class HalfEdgeMeshBase:
 
         return defect
 
-    def gaussian_curvature_v(self, v):
+    def _gaussian_curvature_v(self, v):
         """
         Compute the Gaussian curvature at vertex v
         """

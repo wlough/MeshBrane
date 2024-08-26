@@ -20,26 +20,25 @@ from src.python.half_edge_base_mesh import HalfEdgeMeshBase, HalfEdgePatchBase
 # #
 # VertTri2HalfEdgeMeshConverter._oblatify_the_spheres(ratio=0.9)
 
-vf_ply = "./data/half_edge_base/ply/torus_003072_vf.ply"
-he_ply = "./data/half_edge_base/ply/torus_003072_he.ply"
-# he_ply = "./data/half_edge_base/ply/unit_sphere_002562_he.ply"
+vf_ply = "./data/ply/binary/torus_003072_vf.ply"
+he_ply = "./data/ply/binary/torus_003072_he.ply"
+he_ply = "./data/half_edge_base/ply/unit_sphere_002562_he.ply"
 # he_ply = "./data/half_edge_base/ply/oblate_002562_he.ply"
 # he_ply = "./data/half_edge_base/ply/oblate_003072_he.ply"
 
 # he_ply = "./data/half_edge_base/ply/dumbbell_he.ply"
 # he_ply = "./data/half_edge_base/ply/neovius_coarse_he.ply"
-m = HalfEdgeMeshBase.from_half_edge_ply(he_ply)
-m._xyz_coord_V *= -1
-for i in range(m.num_vertices):
-    f0 = m.f_left_h(m.h_out_v(i))
-    avec0 = m.vec_area_f(f0)
-    for h in m.generate_H_out_v_clockwise(i):
-        f = m.f_left_h(h)
-        avec = m.vec_area_f(f)
-        if avec @ avec0 < 0:
-            print("oh no")
-# m.flip_non_delaunay()
+m1 = HalfEdgeMeshBase.from_half_edge_ply(he_ply)
+m2 = HalfEdgeMeshBase.from_vertex_face_ply(vf_ply)
+
+
+# %%
+
+m1._gaussian_curvature_v(0)
+m1.gaussian_curvature_v(0)
+# %%
 # m = HalfEdgeMesh.from_half_edge_ply(he_ply)
+m = m1
 H, K, lapH, n = m.compute_curvature_data()
 H0 = 0
 Kb = 0.1
@@ -51,7 +50,8 @@ FbendA = Fbend * Av
 # mv.plot()
 scale_vec = 10.5
 Fn = FbendA
-vec = scale_vec * np.einsum("i,ij->ij", Fn, n)
+# vec = scale_vec * np.einsum("i,ij->ij", Fn, n)
+vec = 0.1 * n
 # vec=scale_vec*n
 vfdat = [m.xyz_coord_V, vec]
 mv_kwargs = {
@@ -187,3 +187,17 @@ source_ply = "./data/ply/binary/torus.ply"
 source_ply = "./data/ply/binary/neovius.ply"
 source_ply = "./data/ply/binary/dumbbell.ply"
 expanding_patch_vertex_count(source_ply, v_seed=3)
+
+
+# %%
+def gen(i):
+    while i < 13:
+        yield i
+        i += 1
+
+
+I = gen(3)
+j = next(I)
+for jrot in I:
+    print(f"{j=}, {jrot=}")
+    j = jrot
