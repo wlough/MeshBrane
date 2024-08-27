@@ -1,23 +1,11 @@
-import numpy as np
-from src.python.half_edge_mesh import HalfEdgeMesh
-from src.python.mesh_viewer import MeshViewer
-from src.python.half_edge_base_mesh import HalfEdgeMeshBase, HalfEdgePatchBase
+# from src.python.half_edge_mesh import HalfEdgeMesh
+# from src.python.mesh_viewer import MeshViewer
+from src.python.half_edge_base_mesh import Brane
 
-# from src.python.half_edge_base_utils import make_half_edge_base_numba_utils
-# make_half_edge_base_numba_utils()
-# from src.python.half_edge_base_utils import (
-#     find_h_right_B,
-#     vf_samples_to_he_samples,
-#     he_samples_to_vf_samples,
-# )
-# from src.python.half_edge_base_ply_tools import (
-#     VertexTriMeshSchema,
-#     HalfEdgeMeshSchema,
-#     MeshConverter,
-#     VertTri2HalfEdgeMeshConverter,
-# )
-#
-# #
+# from src.python.mesh_viewer import MeshViewer
+from src.python.half_edge_base_viewer import MeshViewer
+
+
 # VertTri2HalfEdgeMeshConverter._oblatify_the_spheres(ratio=0.9)
 
 vf_ply = "./data/ply/binary/torus_003072_vf.ply"
@@ -27,9 +15,80 @@ he_ply = "./data/half_edge_base/ply/unit_sphere_002562_he.ply"
 # he_ply = "./data/half_edge_base/ply/oblate_003072_he.ply"
 
 # he_ply = "./data/half_edge_base/ply/dumbbell_he.ply"
-# he_ply = "./data/half_edge_base/ply/neovius_coarse_he.ply"
-m1 = HalfEdgeMeshBase.from_half_edge_ply(he_ply)
-m2 = HalfEdgeMeshBase.from_vertex_face_ply(vf_ply)
+he_ply = "./data/half_edge_base/ply/neovius_coarse_he.ply"
+b = Brane.from_half_edge_ply(he_ply)
+# b.flip_non_delaunay()
+mv = MeshViewer(*b.data_arrays, target_faces=1000)
+
+mv.simple_plot()
+# %%
+_PLY_INT_ = "int32"
+
+
+def samples_to_ply_data(self, *samples, use_binary=False):
+    """Constructs a PlyData object using the schema"""
+
+    (
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+    ) = samples[:7]
+    V_data = np.array(
+        [(x, y, z, h) for (x, y, z), h in zip(xyz_coord_V, h_out_V)],
+        dtype=[
+            ("x", _PLY_FLOAT_),
+            ("y", _PLY_FLOAT_),
+            ("z", _PLY_FLOAT_),
+            ("h", _PLY_INT_),
+        ],
+    )
+    H_data = np.array(
+        [(v, n, t, f) for v, n, t, f in zip(v_origin_H, h_next_H, h_twin_H, f_left_H)],
+        dtype=[
+            ("v", _PLY_INT_),
+            ("n", _PLY_INT_),
+            ("t", _PLY_INT_),
+            ("f", _PLY_INT_),
+        ],
+    )
+    F_data = np.array(h_bound_F, dtype=[("h", _PLY_INT_)])
+    # # ***
+    # print(V_data)
+    # print(type(V_data))
+    # print(self.float_type)
+    # print(self.int_type)
+    # # ***
+    vertex_element = PlyElement.describe(V_data, "vertex")
+    half_edge_element = PlyElement.describe(H_data, "half_edge")
+    face_element = PlyElement.describe(F_data, "face")
+    if len(samples) == 8:
+        h_right_B = samples[7]
+        B_data = np.array(h_right_B, dtype=[("h", _PLY_INT_)])
+        boundary_element = PlyElement.describe(B_data, "boundary")
+        return PlyData(
+            [vertex_element, half_edge_element, face_element, boundary_element],
+            text=not use_binary,
+        )
+
+    h_right_B = find_h_right_B(
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+    )
+    B_data = np.array(h_right_B, dtype=[("h", _PLY_INT_)])
+    boundary_element = PlyElement.describe(B_data, "boundary")
+    return PlyData(
+        [vertex_element, half_edge_element, face_element, boundary_element],
+        text=not use_binary,
+    )
 
 
 # %%
