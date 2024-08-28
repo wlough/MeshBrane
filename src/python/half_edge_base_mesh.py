@@ -130,7 +130,7 @@ class HalfEdgeMeshBase:
         )
 
     @classmethod
-    def from_half_edge_ply(cls, ply_path):
+    def from_half_edge_ply(cls, ply_path, **kwargs):
         """Initialize a half-edge mesh from a ply file containing half-edge mesh data.
 
         Args:
@@ -140,7 +140,8 @@ class HalfEdgeMeshBase:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
         """
         return cls(
-            *VertTri2HalfEdgeMeshConverter.from_target_ply(ply_path).target_samples
+            *VertTri2HalfEdgeMeshConverter.from_target_ply(ply_path).target_samples,
+            **kwargs
         )
 
     #######################################################
@@ -542,6 +543,188 @@ class HalfEdgeMeshBase:
         for h in self.generate_H_out_v_clockwise(v, h_start=h_start):
             yield self.v_head_h(h)
 
+    def generate_H_next_h(self, h):
+        """Generate half-edges in the face/boundary cycle containing half-edge h"""
+        h_start = h
+        while True:
+            yield h
+            h = self.h_next_h(h)
+            if h == h_start:
+                break
+
+    #######################################################
+    # Mesh modification
+    def update_vertex(self, v, xyz=None, h_out=None):
+        if xyz is not None:
+            self._xyz_coord_V[v] = xyz
+        if h_out is not None:
+            self._h_out_V[v] = h_out
+
+    def update_half_edge(self, h, h_next=None, h_twin=None, v_origin=None, f_left=None):
+        if h_next is not None:
+            self._h_next_H[h] = h_next
+        if h_twin is not None:
+            self._h_twin_H[h] = h_twin
+        if v_origin is not None:
+            self._v_origin_H[h] = v_origin
+        if f_left is not None:
+            self._f_left_H[h] = f_left
+
+    def update_face(self, f, h_bound=None):
+        if h_bound is not None:
+            self._h_bound_F[f] = h_bound
+
+    def flip_edge(self, h):
+        r"""
+        h cannot be on boundary!
+                v1                           v1
+              /    \                       /  |  \
+             /      \                     /   |   \
+            /h3    h2\                   /h3  |  h2\
+           /    f0    \                 /     |     \
+          /            \               /  f0  |  f1  \
+         /      h0      \             /       |       \
+        v2--------------v0  |----->  v2     h0|h1     v0
+         \      h1      /             \       |       /
+          \            /               \      |      /
+           \    f1    /                 \     |     /
+            \h4    h5/                   \h4  |  h5/
+             \      /                     \   |   /
+              \    /                       \  |  /
+                v3                           v3
+        v0
+        --
+        h_out
+            pre-flip: may be h1
+            post-flip: set to h2 if needed
+        v2
+        --
+            pre-flip: may be h0
+            post-flip: set to h4 if needed
+        h0
+        --
+        v_origin_h(h0)
+            pre-flip: v2
+            post-flip: v3
+        h_next
+            pre-flip: h2
+            post-flip: h3
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        h1
+        --
+        v_origin
+            pre-flip: v0
+            post-flip: v1
+        h_next
+            pre-flip: h4
+            post-flip: h5
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        h2
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h3
+            post-flip: h1
+        h_twin
+            unchanged
+        f_left
+            pre-flip: f0
+            post-flip: f1
+        h3
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h0
+            post-flip: h4
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        h4
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h5
+            post-flip: h0
+        h_twin
+            unchanged
+        f_left
+            pre-flip: f1
+            post-flip: f0
+        h5
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h1
+            post-flip: h2
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        f0
+        --
+        h_bound
+            pre-flip: may be h2
+            post-flip: set to h3 if needed
+        f1
+        --
+        h_bound
+            pre-flip: may be h4
+            post-flip: set to h5 if needed
+        """
+        # get involved half-edges/vertices/faces
+        h0 = h
+        h1 = self.h_twin_h(h0)
+        h2 = self.h_next_h(h0)
+        h3 = self.h_next_h(h2)
+        h4 = self.h_next_h(h1)
+        h5 = self.h_next_h(h4)
+
+        v0 = self.v_origin_h(h1)
+        v1 = self.v_origin_h(h3)
+        v2 = self.v_origin_h(h0)
+        v3 = self.v_origin_h(h5)
+
+        f0 = self.f_left_h(h0)
+        f1 = self.f_left_h(h1)
+
+        # update vertices
+        if self.h_out_v(v0) == h1:
+            self.update_vertex(v0, h_out=h2)
+        if self.h_out_v(v2) == h0:
+            self.update_vertex(v2, h_out=h4)
+        # update half-edges
+        self.update_half_edge(h0, v_origin=v3, h_next=h3)
+        self.update_half_edge(h1, v_origin=v1, h_next=h5)
+        self.update_half_edge(h2, h_next=h1, f_left=f1)
+        self.update_half_edge(h3, h_next=h4)
+        self.update_half_edge(h4, h_next=h0, f_left=f0)
+        self.update_half_edge(h5, h_next=h2)
+        # update faces
+        if self.h_bound_f(f0) == h2:
+            self.update_face(f0, h_bound=h3)
+        if self.h_bound_f(f1) == h4:
+            self.update_face(f1, h_bound=h5)
+
+    def flip_non_delaunay(self):
+        flip_count = 0
+        for h in range(self.num_half_edges):
+            if not self.h_is_locally_delaunay(h):
+                if self.h_is_flippable(h):
+                    self.flip_edge(h)
+                    flip_count += 1
+        return flip_count
+
     #######################################################
     # Miscellaneous methods
     def valence_v(self, v):
@@ -747,6 +930,14 @@ class Brane(HalfEdgeMeshBase):
         f_left_H,
         h_bound_F,
         h_right_B,
+        #
+        length_reg_stiffness=1e-9,
+        area_reg_stiffness=1e-3,
+        volume_reg_stiffness=1e1,
+        bending_modulus=1e-1,
+        splay_modulus=1e0,
+        spontaneous_curvature=0.0,
+        linear_drag_coeff=1e0,
     ):
         super().__init__(
             xyz_coord_V,
@@ -758,6 +949,13 @@ class Brane(HalfEdgeMeshBase):
             h_bound_F,
             h_right_B,
         )
+        self.length_reg_stiffness = length_reg_stiffness
+        self.area_reg_stiffness = area_reg_stiffness
+        self.volume_reg_stiffness = volume_reg_stiffness
+        self.bending_modulus = bending_modulus
+        self.splay_modulus = splay_modulus
+        self.spontaneous_curvature = spontaneous_curvature
+        self.linear_drag_coeff = linear_drag_coeff
 
     ######################################################
     # experimental stuff
@@ -852,20 +1050,17 @@ class Brane(HalfEdgeMeshBase):
     def normal_other_weighted_v(self, i):
         """Weights for Computing Vertex Normals from Facet Normals Max99"""
         n = np.zeros(3)
-        # x = self.xyz_coord_v(i)
-        # neighbors = self.generate_V_nearest_v_clockwise(i)
-        # j = next(neighbors)
-        # r = self.xyz_coord_v(j) - x
-        # for jrot in neighbors:
-        defect = 2 * np.pi
         x = self.xyz_coord_v(i)
         h = self.h_out_v(i)
-        r = self.xyz_coord_v(self.v_head_h(h)) - x
+        rrot = self.xyz_coord_v(self.v_head_h(h)) - x
         h = self.h_rotcw_h(h)
-        for jrot in self.generate_V_nearest_v_clockwise(i, h_start=h):
-            rrot = self.xyz_coord_v(jrot) - x
-            n += np.cross(rrot, r) / (np.dot(r, r) * np.dot(rrot, rrot))
+        for hrot in self.generate_H_out_v_clockwise(i, h_start=h):
             r = rrot
+            jrot = self.v_head_h(hrot)
+            rrot = self.xyz_coord_v(jrot) - x
+            if self.negative_boundary_contains_h(hrot):
+                continue
+            n += np.cross(rrot, r) / (np.dot(r, r) * np.dot(rrot, rrot))
         n /= np.linalg.norm(n)
         return n
 
@@ -877,22 +1072,6 @@ class Brane(HalfEdgeMeshBase):
 
     ###################
     # Curvature methods
-    def angle_defect_v(self, i):
-        """
-        2*pi - sum_f (angle_f)
-        """
-        defect = 2 * np.pi
-        x = self.xyz_coord_v(i)
-        h = self.h_out_v(i)
-        r = self.xyz_coord_v(self.v_head_h(h)) - x
-        h = self.h_rotcw_h(h)
-        for jrot in self.generate_V_nearest_v_clockwise(i, h_start=h):
-            rrot = self.xyz_coord_v(jrot) - x
-            cos_angle = np.dot(r, rrot) / (np.linalg.norm(r) * np.linalg.norm(rrot))
-            defect -= np.arccos(cos_angle)
-            r = rrot
-        return defect
-
     def gaussian_curvature_v(self, i):
         """
         2*pi - sum_f (angle_f)
@@ -901,54 +1080,25 @@ class Brane(HalfEdgeMeshBase):
         defect = 2 * np.pi
         x = self.xyz_coord_v(i)
         h = self.h_out_v(i)
-        r = self.xyz_coord_v(self.v_head_h(h)) - x
-        norm_r = np.linalg.norm(r)
+        rrot = self.xyz_coord_v(self.v_head_h(h)) - x
+        norm_rrot = np.linalg.norm(rrot)
         h = self.h_rotcw_h(h)
         # for jrot in self.generate_V_nearest_v_clockwise(i, h_start=h):
         for hrot in self.generate_H_out_v_clockwise(i, h_start=h):
+            r = rrot
+            norm_r = norm_rrot
             jrot = self.v_head_h(hrot)
             rrot = self.xyz_coord_v(jrot) - x
             norm_rrot = np.linalg.norm(rrot)
-            r_dot_rrot = np.dot(r, rrot)
-            cos_angle = r_dot_rrot / (norm_r * norm_rrot)
             if self.negative_boundary_contains_h(hrot):
                 # do boundary geodesic curvature stuff
                 continue
+            # r_dot_rrot = np.dot(r, rrot)
+            cos_angle = np.dot(r, rrot) / (norm_r * norm_rrot)
             defect -= np.arccos(cos_angle)
             area += norm_r * norm_rrot * np.sqrt(1 - cos_angle**2) / 6
 
-            r = rrot
-            norm_r = norm_rrot
         return defect / area
-
-    def _angle_defect_v(self, v):
-        """
-        2*pi - sum_f (angle_f)
-        """
-        r0 = self.xyz_coord_v(v)
-        defect = 2 * np.pi
-        for h in self.generate_H_out_v_clockwise(v):
-            h_rot = self.h_next_h(self.h_twin_h(h))
-            r1 = self.xyz_coord_v(self.v_head_h(h))
-            r2 = self.xyz_coord_v(self.v_head_h(h_rot))
-            e1 = r1 - r0
-            e2 = r2 - r0
-            norm_e1 = np.sqrt(e1[0] ** 2 + e1[1] ** 2 + e1[2] ** 2)
-            norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
-            cos_angle = (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (
-                norm_e1 * norm_e2
-            )
-            defect -= np.arccos(cos_angle)
-
-        return defect
-
-    def _gaussian_curvature_v(self, v):
-        """
-        Compute the Gaussian curvature at vertex v
-        """
-        area_v = self.barcell_area(v)
-        angle_defect_v = self.angle_defect_v(v)
-        return angle_defect_v / area_v
 
     def laplacian(self, Q):
         """
@@ -1025,176 +1175,15 @@ class Brane(HalfEdgeMeshBase):
         lapH = self.laplacian(H)
         return H, K, lapH, n
 
-    def update_vertex(self, v, xyz=None, h_out=None):
-        if xyz is not None:
-            self._xyz_coord_V[v] = xyz
-        if h_out is not None:
-            self._h_out_V[v] = h_out
+    def compute_bending_force(self):
+        H, K, lapH, n = self.compute_curvature_data()
+        H0 = self.spontaneous_curvature
+        Kb = self.bending_modulus
+        Fdensity = -2 * Kb * (lapH + 2 * (H - H0) * (H**2 + H0 * H - K))
+        Av = self.barcell_area_V()
+        Fbend = np.einsum("i,i,ij->ij", Av, Fdensity, n)
 
-    def update_hedge(self, h, h_next=None, h_twin=None, v_origin=None, f_left=None):
-        if h_next is not None:
-            self._h_next_H[h] = h_next
-        if h_twin is not None:
-            self._h_twin_H[h] = h_twin
-        if v_origin is not None:
-            self._v_origin_H[h] = v_origin
-        if f_left is not None:
-            self._f_left_H[h] = f_left
-
-    def update_face(self, f, h_bound=None):
-        if h_bound is not None:
-            self._h_bound_F[f] = h_bound
-
-    def flip_edge(self, h):
-        r"""
-        h cannot be on boundary!
-                v1                           v1
-              /    \                       /  |  \
-             /      \                     /   |   \
-            /h3    h2\                   /h3  |  h2\
-           /    f0    \                 /     |     \
-          /            \               /  f0  |  f1  \
-         /      h0      \             /       |       \
-        v2--------------v0  |----->  v2     h0|h1     v0
-         \      h1      /             \       |       /
-          \            /               \      |      /
-           \    f1    /                 \     |     /
-            \h4    h5/                   \h4  |  h5/
-             \      /                     \   |   /
-              \    /                       \  |  /
-                v3                           v3
-        v0
-        --
-        h_out
-            pre-flip: may be h1
-            post-flip: set to h2 if needed
-        v2
-        --
-            pre-flip: may be h0
-            post-flip: set to h4 if needed
-        h0
-        --
-        v_origin_h(h0)
-            pre-flip: v2
-            post-flip: v3
-        h_next
-            pre-flip: h2
-            post-flip: h3
-        h_twin
-            unchanged
-        f_left
-            unchanged
-        h1
-        --
-        v_origin
-            pre-flip: v0
-            post-flip: v1
-        h_next
-            pre-flip: h4
-            post-flip: h5
-        h_twin
-            unchanged
-        f_left
-            unchanged
-        h2
-        --
-        v_origin
-            unchanged
-        h_next
-            pre-flip: h3
-            post-flip: h1
-        h_twin
-            unchanged
-        f_left
-            pre-flip: f0
-            post-flip: f1
-        h3
-        --
-        v_origin
-            unchanged
-        h_next
-            pre-flip: h0
-            post-flip: h4
-        h_twin
-            unchanged
-        f_left
-            unchanged
-        h4
-        --
-        v_origin
-            unchanged
-        h_next
-            pre-flip: h5
-            post-flip: h0
-        h_twin
-            unchanged
-        f_left
-            pre-flip: f1
-            post-flip: f0
-        h5
-        --
-        v_origin
-            unchanged
-        h_next
-            pre-flip: h1
-            post-flip: h2
-        h_twin
-            unchanged
-        f_left
-            unchanged
-        f0
-        --
-        h_bound
-            pre-flip: may be h2
-            post-flip: set to h3 if needed
-        f1
-        --
-        h_bound
-            pre-flip: may be h4
-            post-flip: set to h5 if needed
-        """
-        # get involved half-edges/vertices/faces
-        h0 = h
-        h1 = self.h_twin_h(h0)
-        h2 = self.h_next_h(h0)
-        h3 = self.h_next_h(h2)
-        h4 = self.h_next_h(h1)
-        h5 = self.h_next_h(h4)
-
-        v0 = self.v_origin_h(h1)
-        v1 = self.v_origin_h(h3)
-        v2 = self.v_origin_h(h0)
-        v3 = self.v_origin_h(h5)
-
-        f0 = self.f_left_h(h0)
-        f1 = self.f_left_h(h1)
-
-        # update vertices
-        if self.h_out_v(v0) == h1:
-            self.update_vertex(v0, h_out=h2)
-        if self.h_out_v(v2) == h0:
-            self.update_vertex(v2, h_out=h4)
-        # update half-edges
-        self.update_hedge(h0, v_origin=v3, h_next=h3)
-        self.update_hedge(h1, v_origin=v1, h_next=h5)
-        self.update_hedge(h2, h_next=h1, f_left=f1)
-        self.update_hedge(h3, h_next=h4)
-        self.update_hedge(h4, h_next=h0, f_left=f0)
-        self.update_hedge(h5, h_next=h2)
-        # update faces
-        if self.h_bound_f(f0) == h2:
-            self.update_face(f0, h_bound=h3)
-        if self.h_bound_f(f1) == h4:
-            self.update_face(f1, h_bound=h5)
-
-    def flip_non_delaunay(self):
-        flip_count = 0
-        for h in range(self.num_half_edges):
-            if not self.h_is_locally_delaunay(h):
-                if self.h_is_flippable(h):
-                    self.flip_edge(h)
-                    flip_count += 1
-        return flip_count
+        return Fbend
 
     ######################################################
     # To be deprecated
@@ -1210,15 +1199,6 @@ class Brane(HalfEdgeMeshBase):
             if h == h_start:
                 break
 
-    def generate_H_next_h(self, h):
-        """Generate half-edges in the face/boundary cycle containing half-edge h"""
-        h_start = h
-        while True:
-            yield h
-            h = self.h_next_h(h)
-            if h == h_start:
-                break
-
     def xyz_com_f(self, f):
         h0 = self.h_bound_f(f)
         h1 = self.h_next_h(h0)
@@ -1227,3 +1207,32 @@ class Brane(HalfEdgeMeshBase):
         r1 = self.xyz_coord_v(self.v_origin_h(h1))
         r2 = self.xyz_coord_v(self.v_origin_h(h2))
         return (r0 + r1 + r2) / 3
+
+    def _angle_defect_v(self, v):
+        """
+        2*pi - sum_f (angle_f)
+        """
+        r0 = self.xyz_coord_v(v)
+        defect = 2 * np.pi
+        for h in self.generate_H_out_v_clockwise(v):
+            h_rot = self.h_next_h(self.h_twin_h(h))
+            r1 = self.xyz_coord_v(self.v_head_h(h))
+            r2 = self.xyz_coord_v(self.v_head_h(h_rot))
+            e1 = r1 - r0
+            e2 = r2 - r0
+            norm_e1 = np.sqrt(e1[0] ** 2 + e1[1] ** 2 + e1[2] ** 2)
+            norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
+            cos_angle = (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (
+                norm_e1 * norm_e2
+            )
+            defect -= np.arccos(cos_angle)
+
+        return defect
+
+    def _gaussian_curvature_v(self, v):
+        """
+        Compute the Gaussian curvature at vertex v
+        """
+        area_v = self.barcell_area(v)
+        angle_defect_v = self.angle_defect_v(v)
+        return angle_defect_v / area_v
