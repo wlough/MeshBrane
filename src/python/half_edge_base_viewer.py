@@ -6,6 +6,9 @@ from src.python.pyvista_utils import decimate_VF
 from src.python.global_vars import _INT_TYPE_, _FLOAT_TYPE_
 import pyvista as pv
 
+# from mayavi.modules.vectors import Vectors
+# mlab.pipeline.vector_field
+
 
 def get_half_edge_vector_field(self):
     """halfedge vector shifted toward face centroid for visualization"""
@@ -345,12 +348,13 @@ class MeshViewer:
         self.rgba_H = self.update_rgba_H(self.rgba_half_edge)
         self.rgba_F = self.update_rgba_F(self.rgba_face)
 
-    def add_vector_field(self, points, vectors, rgba=None, name=""):
+    def add_vector_field(self, points, vectors, rgba=None, name="", mask_points=1):
         vec_field = {
             "points": points,
             "vectors": vectors,
             "rgba": rgba,
             "name": name,
+            "mask_points": mask_points,
         }
         self.vector_field_data.append(vec_field)
 
@@ -504,6 +508,7 @@ class MeshViewer:
         tip_length=0.25,
         tip_radius=0.03,
         shaft_radius=0.01,
+        mask_points=1,
     ):
         clamping = False
         color_mode = "color_by_scalar"
@@ -512,6 +517,7 @@ class MeshViewer:
             "mode": "arrow",
             "scale_mode": "vector",
             "scale_factor": 1.0,
+            "mask_points": mask_points,
         }
         if rgba is None:
             rgba = np.array(len(points) * [self.colors["black"]])
@@ -522,7 +528,10 @@ class MeshViewer:
         rgba_int = (rgba * 255).round().astype(int)
         color_scalars = np.linspace(0, 1, rgba_int.shape[0])
         vfield = mlab.quiver3d(*points.T, *vectors.T, **quiver3d_kwargs)
-
+        ###
+        # vfield_src = mlab.pipeline.vector_field(*points.T, *vectors.T)
+        # vfield = mlab.pipeline.vectors(vfield_src, mask_points=20, **quiver3d_kwargs)
+        ####
         vfield.glyph.glyph.clamping = clamping
         vfield.glyph.glyph_source.glyph_source.tip_length = tip_length
         vfield.glyph.glyph_source.glyph_source.tip_radius = tip_radius
@@ -632,6 +641,33 @@ class MeshViewer:
             show_vertex_colored_surface=self.show_vertex_colored_surface,
             show_vertices=self.show_vertices,
             show_half_edges=self.show_half_edges,
+            show_vector_fields=self.show_vector_fields,
+            show_plot_axes=self.show_plot_axes,
+            view=self.view,
+            figsize=self.figsize,
+            fig_path=fig_path,
+            downsampled=downsampled,
+        )
+
+    def fast_plot(self, show=True, save=False, title="", downsampled=False):
+        """
+        Default plot with options set in __init__
+        """
+        if save:
+            fig_path = self.get_fig_path()
+            self.image_count += 1
+        else:
+            fig_path = None
+        self.options_plot(
+            show=show,
+            save=save,
+            title=title,
+            show_wireframe_surface=self.show_wireframe_surface,
+            show_face_colored_surface=self.show_face_colored_surface,
+            show_vertex_colored_surface=self.show_vertex_colored_surface,
+            show_vertices=self.show_vertices,
+            show_half_edges=self.show_half_edges,
+            show_vector_fields=self.show_vector_fields,
             show_plot_axes=self.show_plot_axes,
             view=self.view,
             figsize=self.figsize,

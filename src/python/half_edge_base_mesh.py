@@ -824,6 +824,14 @@ class HalfEdgeMeshBase:
 
         return Atot
 
+    def vorcell_area_V(self):
+
+        N = self.num_vertices
+        A = np.zeros(N, dtype=_FLOAT_TYPE_)
+        for k in range(N):
+            A[k] = self.vorcell_area(k)
+        return A
+
     def total_area_of_dual_vorcells(self):
         Atot = 0.0
         for v in range(self.num_vertices):
@@ -918,48 +926,24 @@ class HalfEdgeMeshBase:
             A[k] = self.barcell_area(k)
         return A
 
-
-class Brane(HalfEdgeMeshBase):
-    def __init__(
-        self,
-        xyz_coord_V,
-        h_out_V,
-        v_origin_H,
-        h_next_H,
-        h_twin_H,
-        f_left_H,
-        h_bound_F,
-        h_right_B,
-        #
-        length_reg_stiffness=1e-9,
-        area_reg_stiffness=1e-3,
-        volume_reg_stiffness=1e1,
-        bending_modulus=1e-1,
-        splay_modulus=1e0,
-        spontaneous_curvature=0.0,
-        linear_drag_coeff=1e0,
-    ):
-        super().__init__(
-            xyz_coord_V,
-            h_out_V,
-            v_origin_H,
-            h_next_H,
-            h_twin_H,
-            f_left_H,
-            h_bound_F,
-            h_right_B,
-        )
-        self.length_reg_stiffness = length_reg_stiffness
-        self.area_reg_stiffness = area_reg_stiffness
-        self.volume_reg_stiffness = volume_reg_stiffness
-        self.bending_modulus = bending_modulus
-        self.splay_modulus = splay_modulus
-        self.spontaneous_curvature = spontaneous_curvature
-        self.linear_drag_coeff = linear_drag_coeff
+    def total_volume(self):
+        Nf = self.num_faces
+        vol = 0.0
+        for f in range(Nf):
+            h0 = self.h_bound_f(f)
+            h1 = self.h_next_h(h0)
+            h2 = self.h_next_h(h1)
+            v0 = self.v_origin_h(h0)
+            v1 = self.v_origin_h(h1)
+            v2 = self.v_origin_h(h2)
+            x0 = self.xyz_coord_v(v0)
+            x1 = self.xyz_coord_v(v1)
+            x2 = self.xyz_coord_v(v2)
+            vol_f = np.dot(x0, np.cross(x1, x2)) / 6
+            vol += vol_f
+        return abs(vol)
 
     ######################################################
-    # experimental stuff
-    ######################
     # Simplical operations
     def star_of_vertex(self, v):
         """Star of a vertex is the set of all simplices that contain the vertex."""
@@ -1029,76 +1013,90 @@ class Brane(HalfEdgeMeshBase):
         ClSt_V, ClSt_H, ClSt_F = self.closure(*self.star(V, H, F))
         return ClSt_V - StCl_V, ClSt_H - StCl_H, ClSt_F - StCl_F
 
-    #####################
-    # unit normal methods
-    def normal_some_face_of_v(self, i):
-        h = self.h_out_v(i)
-        f = self.f_left_h(h)
-        if f < 0:
-            h = self.h_rotcw_h(h)
-            f = self.f_left_h(h)
-        avec = self.vec_area_f(f)
-        n = avec / np.linalg.norm(avec)
-        return n
 
-    def normal_some_face_of_V(self):
-        n = np.zeros((self.num_vertices, 3), dtype=_FLOAT_TYPE_)
-        for i in range(self.num_vertices):
-            n[i] = self.normal_some_face_of_v(i)
-        return n
+# Forces
+# -bending force
+# -area force
+# -volume force
+# -tether force
+# -stochastic flips
+# -external force
+# Compute data for forces fun()
+# Timestepping
+# -Velocity Verlet
+class Brane(HalfEdgeMeshBase):
+    def __init__(
+        self,
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+        h_right_B,
+        #
+        length_reg_stiffness=1e-9,
+        area_reg_stiffness=1e-3,
+        volume_reg_stiffness=1e1,
+        bending_modulus=1e-1,
+        splay_modulus=1e0,
+        spontaneous_curvature=0.0,
+        linear_drag_coeff=1e0,
+        spontaneous_edge_length=None,
+        spontaneous_face_area=None,
+        spontaneous_volume=None,
+    ):
+        super().__init__(
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+            h_right_B,
+        )
+        self.length_reg_stiffness = length_reg_stiffness
+        self.area_reg_stiffness = area_reg_stiffness
+        self.volume_reg_stiffness = volume_reg_stiffness
+        self.bending_modulus = bending_modulus
+        self.splay_modulus = splay_modulus
+        self.spontaneous_curvature = spontaneous_curvature
+        self.linear_drag_coeff = linear_drag_coeff
 
-    def normal_other_weighted_v(self, i):
-        """Weights for Computing Vertex Normals from Facet Normals Max99"""
-        n = np.zeros(3)
-        x = self.xyz_coord_v(i)
-        h = self.h_out_v(i)
-        rrot = self.xyz_coord_v(self.v_head_h(h)) - x
-        h = self.h_rotcw_h(h)
-        for hrot in self.generate_H_out_v_clockwise(i, h_start=h):
-            r = rrot
-            jrot = self.v_head_h(hrot)
-            rrot = self.xyz_coord_v(jrot) - x
-            if self.negative_boundary_contains_h(hrot):
-                continue
-            n += np.cross(rrot, r) / (np.dot(r, r) * np.dot(rrot, rrot))
-        n /= np.linalg.norm(n)
-        return n
+        (
+            default_spontaneous_edge_length,
+            default_spontaneous_face_area,
+            default_spontaneous_volume,
+        ) = self.default_spontaneous_length_area_volume()
+        if spontaneous_edge_length is None:
+            spontaneous_edge_length = default_spontaneous_edge_length
+        if spontaneous_face_area is None:
+            spontaneous_face_area = default_spontaneous_face_area
+        if spontaneous_volume is None:
+            spontaneous_volume = default_spontaneous_volume
+        self.spontaneous_edge_length = spontaneous_edge_length
+        self.spontaneous_face_area = spontaneous_face_area
+        self.spontaneous_volume = spontaneous_volume
 
-    def normal_other_weighted_V(self):
-        n = np.zeros((self.num_vertices, 3), dtype=_FLOAT_TYPE_)
-        for i in range(self.num_vertices):
-            n[i] = self.normal_other_weighted_v(i)
-        return n
+    def default_spontaneous_length_area_volume(self):
+        Nf = self.num_faces
+        Nv = self.num_vertices
+        volume = self.total_volume()
+        area = self.total_area_of_faces()
+        Rv = (3 * volume / (4 * np.pi)) ** (1 / 3)
+        Ra = np.sqrt(area / (4 * np.pi))
+        w = 0.75
+        R = (1 - w) * Ra + w * Rv
+        spontaneous_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
+        spontaneous_face_area = 4 * np.pi * R**2 / Nf
+        spontaneous_volume = 4 * np.pi * R**3 / 3
+        return spontaneous_edge_length, spontaneous_face_area, spontaneous_volume
 
-    ###################
-    # Curvature methods
-    def gaussian_curvature_v(self, i):
-        """
-        2*pi - sum_f (angle_f)
-        """
-        area = 0.0
-        defect = 2 * np.pi
-        x = self.xyz_coord_v(i)
-        h = self.h_out_v(i)
-        rrot = self.xyz_coord_v(self.v_head_h(h)) - x
-        norm_rrot = np.linalg.norm(rrot)
-        h = self.h_rotcw_h(h)
-        # for jrot in self.generate_V_nearest_v_clockwise(i, h_start=h):
-        for hrot in self.generate_H_out_v_clockwise(i, h_start=h):
-            r = rrot
-            norm_r = norm_rrot
-            jrot = self.v_head_h(hrot)
-            rrot = self.xyz_coord_v(jrot) - x
-            norm_rrot = np.linalg.norm(rrot)
-            if self.negative_boundary_contains_h(hrot):
-                # do boundary geodesic curvature stuff
-                continue
-            # r_dot_rrot = np.dot(r, rrot)
-            cos_angle = np.dot(r, rrot) / (norm_r * norm_rrot)
-            defect -= np.arccos(cos_angle)
-            area += norm_r * norm_rrot * np.sqrt(1 - cos_angle**2) / 6
-
-        return defect / area
+    ######################################################
+    # experimental stuff
+    ######################
 
     def laplacian(self, Q):
         """
@@ -1152,9 +1150,97 @@ class Brane(HalfEdgeMeshBase):
 
         return lapQ
 
+    #####################
+    # unit normal methods
+    def normal_some_face_of_v(self, i):
+        h = self.h_out_v(i)
+        f = self.f_left_h(h)
+        if f < 0:
+            h = self.h_rotcw_h(h)
+            f = self.f_left_h(h)
+        avec = self.vec_area_f(f)
+        n = avec / np.linalg.norm(avec)
+        return n
+
+    def normal_some_face_of_V(self):
+        n = np.zeros((self.num_vertices, 3), dtype=_FLOAT_TYPE_)
+        for i in range(self.num_vertices):
+            n[i] = self.normal_some_face_of_v(i)
+        return n
+
+    def normal_other_weighted_v(self, i):
+        """Weights for Computing Vertex Normals from Facet Normals Max99"""
+        n = np.zeros(3)
+        x = self.xyz_coord_v(i)
+        h = self.h_out_v(i)
+        rrot = self.xyz_coord_v(self.v_head_h(h)) - x
+        h = self.h_rotcw_h(h)
+        for hrot in self.generate_H_out_v_clockwise(i, h_start=h):
+            r = rrot
+            jrot = self.v_head_h(hrot)
+            rrot = self.xyz_coord_v(jrot) - x
+            if self.negative_boundary_contains_h(hrot):
+                continue
+            n += np.cross(rrot, r) / (np.dot(r, r) * np.dot(rrot, rrot))
+        n /= np.linalg.norm(n)
+        return n
+
+    def normal_other_weighted_V(self):
+        n = np.zeros((self.num_vertices, 3), dtype=_FLOAT_TYPE_)
+        for i in range(self.num_vertices):
+            n[i] = self.normal_other_weighted_v(i)
+        return n
+
+    def normal_laplacian_V(self):
+        """
+        Compute unit normals from mean curvature vector at all vertices
+        """
+        X = self.xyz_coord_V
+        lapX = self.laplacian(X)
+        n = np.zeros_like(X)
+        for i in range(self.num_vertices):
+
+            mcvec = lapX[i]
+            f = self.f_left_h(self.h_out_v(i))
+            af_vec = self.vec_area_f(f)
+            mcvec_sign = np.sign(np.dot(mcvec, af_vec))
+            n[i] = mcvec_sign * mcvec / np.linalg.norm(mcvec)
+
+        return n
+
+    ###################
+    # Curvature methods
+    def gaussian_curvature_v(self, i):
+        """
+        2*pi - sum_f (angle_f)
+        """
+        area = 0.0
+        defect = 2 * np.pi
+        x = self.xyz_coord_v(i)
+        h = self.h_out_v(i)
+        rrot = self.xyz_coord_v(self.v_head_h(h)) - x
+        norm_rrot = np.linalg.norm(rrot)
+        h = self.h_rotcw_h(h)
+        # for jrot in self.generate_V_nearest_v_clockwise(i, h_start=h):
+        for hrot in self.generate_H_out_v_clockwise(i, h_start=h):
+            r = rrot
+            norm_r = norm_rrot
+            jrot = self.v_head_h(hrot)
+            rrot = self.xyz_coord_v(jrot) - x
+            norm_rrot = np.linalg.norm(rrot)
+            if self.negative_boundary_contains_h(hrot):
+                # do boundary geodesic curvature stuff
+                continue
+            # r_dot_rrot = np.dot(r, rrot)
+            cos_angle = np.dot(r, rrot) / (norm_r * norm_rrot)
+            defect -= np.arccos(cos_angle)
+            area += norm_r * norm_rrot * np.sqrt(1 - cos_angle**2) / 6
+
+        return defect / area
+
     def compute_curvature_data(self):
         """
-        Compute the mean curvature vector at all vertices
+        Compute (H, K, lapH, n) at all vertices
         """
 
         X = self.xyz_coord_V
@@ -1175,15 +1261,273 @@ class Brane(HalfEdgeMeshBase):
         lapH = self.laplacian(H)
         return H, K, lapH, n
 
-    def compute_bending_force(self):
-        H, K, lapH, n = self.compute_curvature_data()
+    ######################################
+    ############### Forces ###############
+    ######################################
+    def Fbend_density(self):
         H0 = self.spontaneous_curvature
-        Kb = self.bending_modulus
-        Fdensity = -2 * Kb * (lapH + 2 * (H - H0) * (H**2 + H0 * H - K))
+        B = self.bending_modulus
+
+        X = self.xyz_coord_V
+        lapX = self.laplacian(X)
+        H = np.zeros_like(X[:, 0])
+        K = np.zeros_like(X[:, 0])
+        n = np.zeros_like(X)
+        for i in range(self.num_vertices):
+
+            mcvec = lapX[i]
+            f = self.f_left_h(self.h_out_v(i))
+            af_vec = self.vec_area_f(f)
+            mcvec_sign = np.sign(np.dot(mcvec, af_vec))
+            n[i] = mcvec_sign * mcvec / np.linalg.norm(mcvec)
+            H[i] = np.dot(n[i], mcvec) / 2
+            K[i] = self.gaussian_curvature_v(i)
+
+        lapH = self.laplacian(H)
+        Fdensity = -2 * B * (lapH + 2 * (H - H0) * (H**2 + H0 * H - K))
+
+        return Fdensity
+
+    def Fbend_analytic(self):
+        H0 = self.spontaneous_curvature
+        B = self.bending_modulus
+
+        X = self.xyz_coord_V
+        lapX = self.laplacian(X)
+        H = np.zeros_like(X[:, 0])
+        K = np.zeros_like(X[:, 0])
+        n = np.zeros_like(X)
+        for i in range(self.num_vertices):
+
+            mcvec = lapX[i]
+            f = self.f_left_h(self.h_out_v(i))
+            af_vec = self.vec_area_f(f)
+            mcvec_sign = np.sign(np.dot(mcvec, af_vec))
+            n[i] = mcvec_sign * mcvec / np.linalg.norm(mcvec)
+            H[i] = np.dot(n[i], mcvec) / 2
+            K[i] = self.gaussian_curvature_v(i)
+
+        lapH = self.laplacian(H)
+        Fdensity = -2 * B * (lapH + 2 * (H - H0) * (H**2 + H0 * H - K))
         Av = self.barcell_area_V()
         Fbend = np.einsum("i,i,ij->ij", Av, Fdensity, n)
 
         return Fbend
+
+    def Farea_harmonic(self):
+        """local cell area regulation"""
+        Nv = self.num_vertices
+        F = np.zeros((Nv, 3))
+        A0 = self.spontaneous_face_area
+        k_a = self.area_reg_stiffness
+        for i in range(Nv):
+            p = self.xyz_coord_v(i)
+            h = self.h_out_v(i)
+            xrot = self.xyz_coord_v(self.v_head_h(h))
+            h = self.h_rotcw_h(h)
+            for hrot in self.generate_H_out_v_clockwise(i, h_start=h):
+                x = xrot
+                jrot = self.v_head_h(hrot)
+                xrot = self.xyz_coord_v(jrot)
+                if self.negative_boundary_contains_h(hrot):
+                    continue
+                f = self.f_left_h(hrot)
+                vecAf = self.vec_area_f(f)
+                Af = np.linalg.norm(vecAf)
+                F[i] += -k_a * (Af - A0) * np.cross(vecAf, x - xrot) / (2 * A0 * Af)
+        return F
+
+    def Fvolume_harmonic(self):
+        Nv = self.num_vertices
+        F = np.zeros((Nv, 3))
+        V0 = self.spontaneous_volume
+        V = self.total_volume()
+        k_v = self.volume_reg_stiffness
+        for i in range(Nv):
+            p = self.xyz_coord_v(i)
+            h = self.h_out_v(i)
+            xrot = self.xyz_coord_v(self.v_head_h(h))
+            h = self.h_rotcw_h(h)
+            for hrot in self.generate_H_out_v_clockwise(i, h_start=h):
+                x = xrot
+                jrot = self.v_head_h(hrot)
+                xrot = self.xyz_coord_v(jrot)
+                F[i] += -k_v * (V - V0) * np.cross(xrot, x) / (6 * V0)
+        return F
+
+    ##
+    def compute_data_for_forces(self):
+        X = self.xyz_coord_V
+        lapX = self.laplacian(X)
+        H = np.zeros_like(X[:, 0])
+        K = np.zeros_like(X[:, 0])
+        n = np.zeros_like(X)
+        for i in range(self.num_vertices):
+
+            mcvec = lapX[i]
+            f = self.f_left_h(self.h_out_v(i))
+            af_vec = self.vec_area_f(f)
+            mcvec_sign = np.sign(np.dot(mcvec, af_vec))
+            n[i] = mcvec_sign * mcvec / np.linalg.norm(mcvec)
+            H[i] = np.dot(n[i], mcvec) / 2
+            K[i] = self.gaussian_curvature_v(i)
+
+        lapH = self.laplacian(H)
+        self.H = H
+        self.lapH = lapH
+        self.K = K
+        self.unit_normal = n
+
+    # Bending
+    def Fbend_harmonic(self, Nsmooth=0):
+        """from Tu"""
+        Kbend = self.bending_modulus
+        H, K = self.get_angle_weighted_arc_curvatures()
+        for _ in range(Nsmooth):
+            H = self.gaussian_smooth_samples(H, 1, a)
+            K = self.gaussian_smooth_samples(K, 1, a)
+        Nv = H.shape[0]
+        lapH = self.cotan_laplacian(H)
+        F = np.zeros((Nv, 3))
+        Fdensity = -2 * B * (lapH + 2 * H * (H**2 - K))
+        Fn = -2 * B * (lapH + 2 * H * (H**2 - K))
+
+        for v in range(Nv):
+            n = self.other_weighted_vertex_normal(v)
+            Av = self.vorcell_area(v)
+            F[v] = Fn[v] * n * Av
+        return F
+
+    # def Flength(self):
+    #     Nv = self.num_vertices
+    #     F = np.zeros((Nv, 3))
+    #     k_l = self.length_reg_stiffness
+    #     L0 = self.spontaneous_edge_length
+    #     for v in range(Nv):
+    #         r = self.xyz_coord_v(v)
+    #         h_start = self.V_hedge[v]
+    #         h = h_start
+    #         while True:
+    #             v0 = self.H_vertex[h]
+    #             r0 = self.V_pq[v0, :3]
+    #             u = r - r0
+    #             L = np.sqrt(u[0] ** 2 + u[1] ** 2 + u[2] ** 2)
+    #             gradL = u / L
+    #             F[v] += -Ke * (L - L0) * gradL / L0
+    #             h = self.H_twin[self.H_prev[h]]
+    #             if h == h_start:
+    #                 break
+    #     return F
+    def Utether_OG(self, s, _a=None):
+        l0 = self.spontaneous_edge_length
+        if _a is None:
+            a = l0
+        else:
+            a = _a
+        Kl = self.length_reg_stiffness
+        Dl = 0.8 * l0
+        normDs = np.abs(s - l0)
+        if normDs > Dl / 4 and normDs < Dl / 2:
+            # U = a * Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
+            U = Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
+        else:
+            U = 0.0
+        return U
+
+    def Utether(self, s, _a=None):
+        l0 = self.spontaneous_edge_length
+        if _a is None:
+            a = l0
+        else:
+            a = _a
+        Kl = self.length_reg_stiffness
+        Dl = 0.8 * l0
+        normDs = np.abs(s - l0)
+        if normDs <= Dl / 4:
+            U = 0.0
+        elif normDs < Dl / 2:
+            U = Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
+        else:
+            U = np.inf
+        return U
+
+    def Ftether_OG(self, _a=None):
+        Nv = self.num_vertices
+        Fl = np.zeros((Nv, 3))
+        l0 = self.spontaneous_edge_length
+        Kl = self.length_reg_stiffness
+        if _a is None:
+            a = l0
+        else:
+            a = _a
+        Dl = 0.8 * l0
+        for i in range(Nv):
+            ri = self.xyz_coord_v(i)
+            for hk in self.generate_H_out_v_clockwise(i):
+                vk = self.v_head_h(hk)
+                rk = self.xyz_coord_v(vk)
+                Drki = ri - rk
+                s = np.sqrt(Drki[0] ** 2 + Drki[1] ** 2 + Drki[2] ** 2)
+                Ds = s - l0
+                normDs = np.abs(Ds)
+                if normDs > Dl / 4 and normDs < Dl / 2:
+                    # U = a * Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
+                    U = Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
+                    Fl[i] += -(
+                        (1 / (Dl / 2 - normDs) + a / (normDs - Dl / 4) ** 2)
+                        * U
+                        * (Ds / normDs)
+                        * Drki
+                        / s
+                    )
+                else:
+                    pass
+        return Fl
+
+    def Ftether(self, _a=None):
+        Nv = self.num_vertices
+        Fl = np.zeros((Nv, 3))
+        l0 = self.spontaneous_edge_length
+        Kl = self.length_reg_stiffness
+        if _a is None:
+            a = l0
+        else:
+            a = _a
+        Dl = 0.8 * l0
+
+        for i in range(Nv):
+            ri = self.xyz_coord_v(i)
+            for hk in self.generate_H_out_v_clockwise(i):
+                vk = self.v_head_h(hk)
+                rk = self.xyz_coord_v(vk)
+                Drki = ri - rk
+                s = np.sqrt(Drki[0] ** 2 + Drki[1] ** 2 + Drki[2] ** 2)
+                Ds = s - l0
+                normDs = np.abs(Ds)
+                if normDs <= Dl / 4:
+                    pass
+                else:
+                    U = Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
+                    Fl[i] += -(
+                        (1 / (Dl / 2 - normDs) + a / (normDs - Dl / 4) ** 2)
+                        * U
+                        * (Ds / normDs)
+                        * Drki
+                        / s
+                    )
+                ############
+        return Fl
+
+    def euler_step(self, dt):
+        """
+        Euler step
+        """
+        Fb = self.Fbend_analytic()
+        Fa = self.Farea_harmonic()
+        Fv = self.Fvolume_harmonic()
+        Ft = self.Ftether()
+        F = Fb + Fa + Fv + Ft
+        self.xyz_coord_V += dt * F / self.linear_drag_coeff
 
     ######################################################
     # To be deprecated

@@ -5,42 +5,97 @@ import numpy as np
 vf_ply = "./data/ply/binary/torus_003072_vf.ply"
 he_ply = "./data/ply/binary/torus_003072_he.ply"
 he_ply = "./data/half_edge_base/ply/unit_sphere_002562_he.ply"
-# he_ply = "./data/half_edge_base/ply/oblate_002562_he.ply"
+he_ply = "./data/half_edge_base/ply/oblate_002562_he.ply"
 # he_ply = "./data/half_edge_base/ply/oblate_003072_he.ply"
 
 # he_ply = "./data/half_edge_base/ply/dumbbell_he.ply"
 # he_ply = "./data/half_edge_base/ply/neovius_he.ply"
+# R = 32
+# kBT = 0.2
+# tau = 1.28e5
+# bending_modulus = 20 * kBT
+# A = 4 * np.pi * R**2
+#
+# spontaneous_volume = 4 * np.pi * R**3 / 3
+# length_reg_stiffness = 80 * kBT
+# area_reg_stiffness = 6.43e6 * kBT / A
+# volume_reg_stiffness = 1.6e7 * kBT / R**3
+# linear_drag_coeff = 0.4 * kBT * tau / R**2
+R = 1.0
+kBT = 0.2 / 32
+tau = 1.28e5
+bending_modulus = 20 * kBT
+A = 4 * np.pi * R**2
+
+spontaneous_volume = 4 * np.pi * R**3 / 3
+length_reg_stiffness = 80 * kBT
+area_reg_stiffness = 6.43e6 * kBT / A
+volume_reg_stiffness = 1.6e7 * kBT / R**3
+linear_drag_coeff = 0.4 * kBT * tau / R**2
 brane_kwargs = {
-    "length_reg_stiffness": 1e-9,
-    "area_reg_stiffness": 1e-3,
-    "volume_reg_stiffness": 1e1,
-    "bending_modulus": 1e1,
+    "length_reg_stiffness": length_reg_stiffness,
+    "area_reg_stiffness": area_reg_stiffness,
+    "volume_reg_stiffness": volume_reg_stiffness,
+    "bending_modulus": bending_modulus,
     "splay_modulus": 1.0,
     "spontaneous_curvature": 0.0,
-    "linear_drag_coeff": 1e3,
+    "linear_drag_coeff": linear_drag_coeff,
+    # "spontaneous_face_area"=spontaneous_face_area,
+    # "spontaneous_volume": spontaneous_volume,
 }
+# brane_kwargs = {
+#     "length_reg_stiffness": 1e-9,
+#     "area_reg_stiffness": 1e-2,
+#     "volume_reg_stiffness": 1e2,
+#     "bending_modulus": 1e1,
+#     "splay_modulus": 1.0,
+#     "spontaneous_curvature": 0.0,
+#     "linear_drag_coeff": 1e3,
+# }
+
+
 b = Brane.from_half_edge_ply(he_ply, **brane_kwargs)
-# b.xyz_coord_V+=.001*(np.random.rand(*b.xyz_coord_V.shape)-.5)
-b._xyz_coord_V[:, 0] = b._xyz_coord_V[:, 0] * 0.9
-Fb = b.compute_bending_force()
-# Fb /= np.max(np.linalg.norm(Fb, axis=-1))
-n = b.normal_other_weighted_V()
+b._xyz_coord_V[:, 2] = b.xyz_coord_V[:, 2] * 0.8
+
+Fb = b.Fbend_analytic()
+Fa = b.Farea_harmonic()
+Fv = b.Fvolume_harmonic()
+Ft = b.Ftether()
+F = Fb + Fa + Fv + Ft
+dt = 1e-2
+Dxyz_coord_V = dt * F / b.linear_drag_coeff
 # %%
-# b.flip_non_delaunay()
-mv = MeshViewer(b, show_half_edges=True, show_wireframe_surface=False)
-# mv2 = MeshViewer(
-#     b,
-#     # show_wireframe_surface=False,
-#     # show_face_colored_surface=True,
-#     # show_vertex_colored_surface=False,
-#     # show_vertices=True,
-#     # show_half_edges=True,
-#     # target_faces=5000,
-# )
-mv.add_vector_field(b.xyz_coord_V, Fb, rgba=None, name="Fb")
-# mv.add_vector_field(b.xyz_coord_V, .1*n, rgba=None, name="Fb")
-# mv2.vector_field_data
-mv.plot()
+#
+# b.euler_step(1e-2)
+mv = MeshViewer(
+    b,
+    show_wireframe_surface=True,
+    show_face_colored_surface=False,
+    show_vertex_colored_surface=False,
+    show_vertices=False,
+    show_half_edges=False,
+    show_plot_axes=True,
+    figsize=(480, 480),
+)
+# mv.add_vector_field(b.xyz_coord_V, 1.1 * valvec, rgba=(1, 0, 0, 1), name="valence")
+# mv.add_vector_field(b.xyz_coord_V, 50*(n_lap-n_other), rgba=(1, 0, 0, 1), name="n-n")
+# mv.add_vector_field(b.xyz_coord_V, Fb, rgba=None, name="Fb", mask_points=1)
+# mv.add_vector_field(b.xyz_coord_V, Fv, rgba=None, name="Fv", mask_points=1)
+# mv.add_vector_field(b.xyz_coord_V, Fa, rgba=None, name="Fa", mask_points=1)
+# mv.add_vector_field(b.xyz_coord_V, Fl_OG, rgba=None, name="Fl", mask_points=1)
+dt = 1e-2
+for iter in range(100):
+    b.euler_step(1e-2)
+    # Fb = b.Fbend_analytic()
+    # Fa = b.Farea_harmonic()
+    # Fv = b.Fvolume_harmonic()
+    # Ft = b.Ftether()
+    # F = Fb + Fa + Fv + Ft
+    # F = Fb + Fa + Fv + Ft
+    # Dxyz_coord_V = dt * F / b.linear_drag_coeff
+    # mv.add_vector_field(b.xyz_coord_V, Dxyz_coord_V, rgba=None, name="Fl", mask_points=1)
+    # mv2.vector_field_data
+    mv.plot(save=True, show=False)
 # %%
 V, F = b.xyz_coord_V, b.V_of_F
 

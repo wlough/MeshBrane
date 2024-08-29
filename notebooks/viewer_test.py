@@ -49,7 +49,11 @@ import vtk
 from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray
 
 
-def downsample(V, F, target_faces=1000, boundary_vertex_deletion=True):
+def vtk_decimate(V, F, target_faces=1000, boundary_vertex_deletion=True):
+    import numpy as np
+    import vtk
+    from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray
+
     num_faces = F.shape[0]
     num_vertices = V.shape[0]
 
