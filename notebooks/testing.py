@@ -1,4 +1,4 @@
-from src.python.half_edge_base_mesh import Brane
+from src.python.half_edge_base_mesh import Brane, HalfEdgeMeshBase
 from src.python.half_edge_base_viewer import MeshViewer
 import numpy as np
 
@@ -9,7 +9,7 @@ he_ply = "./data/half_edge_base/ply/oblate_002562_he.ply"
 # he_ply = "./data/half_edge_base/ply/oblate_003072_he.ply"
 
 # he_ply = "./data/half_edge_base/ply/dumbbell_he.ply"
-# he_ply = "./data/half_edge_base/ply/neovius_he.ply"
+he_ply = "./data/half_edge_base/ply/neovius_he.ply"
 # R = 32
 # kBT = 0.2
 # tau = 1.28e5
@@ -32,6 +32,8 @@ length_reg_stiffness = 80 * kBT
 area_reg_stiffness = 6.43e6 * kBT / A
 volume_reg_stiffness = 1.6e7 * kBT / R**3
 linear_drag_coeff = 0.4 * kBT * tau / R**2
+
+spontaneous_face_area = 1.0
 brane_kwargs = {
     "length_reg_stiffness": length_reg_stiffness,
     "area_reg_stiffness": area_reg_stiffness,
@@ -40,8 +42,8 @@ brane_kwargs = {
     "splay_modulus": 1.0,
     "spontaneous_curvature": 0.0,
     "linear_drag_coeff": linear_drag_coeff,
-    # "spontaneous_face_area"=spontaneous_face_area,
-    # "spontaneous_volume": spontaneous_volume,
+    "spontaneous_face_area": spontaneous_face_area,
+    "spontaneous_volume": spontaneous_volume,
 }
 # brane_kwargs = {
 #     "length_reg_stiffness": 1e-9,
@@ -53,17 +55,17 @@ brane_kwargs = {
 #     "linear_drag_coeff": 1e3,
 # }
 
-
+m = HalfEdgeMeshBase.from_half_edge_ply(he_ply)
 b = Brane.from_half_edge_ply(he_ply, **brane_kwargs)
-b._xyz_coord_V[:, 2] = b.xyz_coord_V[:, 2] * 0.8
+# b._xyz_coord_V[:, 2] = b.xyz_coord_V[:, 2] * 0.8
 
-Fb = b.Fbend_analytic()
-Fa = b.Farea_harmonic()
-Fv = b.Fvolume_harmonic()
-Ft = b.Ftether()
-F = Fb + Fa + Fv + Ft
-dt = 1e-2
-Dxyz_coord_V = dt * F / b.linear_drag_coeff
+# Fb = b.Fbend_analytic()
+# Fa = b.Farea_harmonic()
+# Fv = b.Fvolume_harmonic()
+# Ft = b.Ftether()
+# F = Fb + Fa + Fv + Ft
+# dt = 1e-2
+# Dxyz_coord_V = dt * F / b.linear_drag_coeff
 # %%
 #
 # b.euler_step(1e-2)

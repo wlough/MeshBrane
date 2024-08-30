@@ -4,6 +4,12 @@ from src.python.half_edge_base_utils import (
     he_samples_to_vf_samples,
     find_h_right_B,
 )
+from src.python.utilities import (
+    # make_output_dir,
+    # load_npz,
+    save_npz,
+    # unchunk_file_with_cat,
+)
 import numpy as np
 
 # _NUMPY_INT_ = np.int64
@@ -777,3 +783,35 @@ class VertTri2HalfEdgeMeshConverter(MeshConverter):
         )
         source_samples = (xyz_coord_V, vvv_of_F)
         return source_samples
+
+    def write_half_edge_arrays(
+        self, target_path=None, compressed=False, chunk=False, remove_unchunked=False
+    ):
+
+        (
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+            h_right_B,
+        ) = self.target_samples
+        arr = {
+            "xyz_coord_V": xyz_coord_V,
+            "h_out_V": h_out_V,
+            "v_origin_H": v_origin_H,
+            "h_next_H": h_next_H,
+            "h_twin_H": h_twin_H,
+            "f_left_H": f_left_H,
+            "h_bound_F": h_bound_F,
+            "h_right_B": h_right_B,
+        }
+        save_npz(
+            arr,
+            target_path,
+            compressed=compressed,
+            chunk=chunk,
+            remove_unchunked=remove_unchunked,
+        )
