@@ -56,10 +56,6 @@ class CotanLaplacian(LaplaceTestOperator):
         return lapQ
 
 
-
-
-
-
 ########################################################
 from numba import njit, float64, int32, boolean, prange
 from numba.experimental import jitclass
@@ -827,8 +823,12 @@ class Brane:
                 rkp1 = self.V_pq[vkp1, :3]
                 Fv[i] += -Kv * ((V - V0) / V0) * jitcross(rk, rkp1)
                 ############
-                vecAikkp1 = (jitcross(ri, rk) + jitcross(rk, rkp1) + jitcross(rkp1, ri)) / 2
-                Aikkp1 = np.sqrt(vecAikkp1[0] ** 2 + vecAikkp1[1] ** 2 + vecAikkp1[2] ** 2)
+                vecAikkp1 = (
+                    jitcross(ri, rk) + jitcross(rk, rkp1) + jitcross(rkp1, ri)
+                ) / 2
+                Aikkp1 = np.sqrt(
+                    vecAikkp1[0] ** 2 + vecAikkp1[1] ** 2 + vecAikkp1[2] ** 2
+                )
                 nikkp1 = vecAikkp1 / Aikkp1
                 Fa[i] += -Ka * ((Aikkp1 - A0) / (2 * A0)) * jitcross(nikkp1, rkp1 - rk)
                 ############
@@ -920,7 +920,11 @@ class Brane:
                     # U = a * Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
                     U = Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
                     Fl[i] += -(
-                        (1 / (Dl / 2 - normDs) + a / (normDs - Dl / 4) ** 2) * U * (Ds / normDs) * Drki / s
+                        (1 / (Dl / 2 - normDs) + a / (normDs - Dl / 4) ** 2)
+                        * U
+                        * (Ds / normDs)
+                        * Drki
+                        / s
                     )
                 else:
                     pass
@@ -957,7 +961,11 @@ class Brane:
                 else:
                     U = Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
                     Fl[i] += -(
-                        (1 / (Dl / 2 - normDs) + a / (normDs - Dl / 4) ** 2) * U * (Ds / normDs) * Drki / s
+                        (1 / (Dl / 2 - normDs) + a / (normDs - Dl / 4) ** 2)
+                        * U
+                        * (Ds / normDs)
+                        * Drki
+                        / s
                     )
                 ############
                 hk = self.H_twin[self.H_prev[hk]]
@@ -1031,12 +1039,20 @@ class Brane:
             Drj_cross_Drjp1 = jitcross(Drj, Drjp1)
             normDrj = np.sqrt(Drj[0] ** 2 + Drj[1] ** 2 + Drj[2] ** 2)
             normDrjm1_cross_Drj = np.sqrt(
-                Drjm1_cross_Drj[0] ** 2 + Drjm1_cross_Drj[1] ** 2 + Drjm1_cross_Drj[2] ** 2
+                Drjm1_cross_Drj[0] ** 2
+                + Drjm1_cross_Drj[1] ** 2
+                + Drjm1_cross_Drj[2] ** 2
             )
             Drj_cross_Drjp1 = np.sqrt(
-                Drj_cross_Drjp1[0] ** 2 + Drj_cross_Drjp1[1] ** 2 + Drj_cross_Drjp1[2] ** 2
+                Drj_cross_Drjp1[0] ** 2
+                + Drj_cross_Drjp1[1] ** 2
+                + Drj_cross_Drjp1[2] ** 2
             )
-            sin_Dphi = normDrj * triprod(Drjm1, Drj, Drjp1) / (normDrjm1_cross_Drj * Drj_cross_Drjp1)
+            sin_Dphi = (
+                normDrj
+                * triprod(Drjm1, Drj, Drjp1)
+                / (normDrjm1_cross_Drj * Drj_cross_Drjp1)
+            )
             Dphi = np.arcsin(sin_Dphi)
             Psi += Dphi * Drj / normDrj
             hj = hjp1
@@ -1095,9 +1111,15 @@ class Brane:
                 ni_dot_Drj = ni[0] * Drj[0] + ni[1] * Drj[1] + ni[2] * Drj[2]
                 ni_dot_Drjp1 = ni[0] * Drjp1[0] + ni[1] * Drjp1[1] + ni[2] * Drjp1[2]
                 ni_dot_Drjm1 = ni[0] * Drjm1[0] + ni[1] * Drjm1[1] + ni[2] * Drjm1[2]
-                tjp1 = (Drjp1 - ni_dot_Drjp1 * ni) / np.sqrt(Drjp1_dot_Drjp1 - ni_dot_Drjp1**2)
-                tjm1 = (Drjm1 - ni_dot_Drjm1 * ni) / np.sqrt(Drjm1_dot_Drjm1 - ni_dot_Drjm1**2)
-                tjp1_dot_tjm1 = tjp1[0] * tjm1[0] + tjp1[1] * tjm1[1] + tjp1[2] * tjm1[2]
+                tjp1 = (Drjp1 - ni_dot_Drjp1 * ni) / np.sqrt(
+                    Drjp1_dot_Drjp1 - ni_dot_Drjp1**2
+                )
+                tjm1 = (Drjm1 - ni_dot_Drjm1 * ni) / np.sqrt(
+                    Drjm1_dot_Drjm1 - ni_dot_Drjm1**2
+                )
+                tjp1_dot_tjm1 = (
+                    tjp1[0] * tjm1[0] + tjp1[1] * tjm1[1] + tjp1[2] * tjm1[2]
+                )
                 kappaj = 2 * ni_dot_Drj / Drj_dot_Drj
                 Dthetaj = np.arccos(tjp1_dot_tjm1) / 2
                 kappai += kappaj * Dthetaj / (2 * np.pi)
@@ -1264,21 +1286,46 @@ class Brane:
             normDrjjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
             # normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
             normDrjp1i = np.sqrt(rjp1_rjp1 - 2 * rjp1_ri + ri_ri)
-            cos_thetajijp1 = (ri_ri + rj_rjp1 - ri_rj - rjp1_ri) / (normDrij * normDrjp1i)
-            cos_thetajp1ji = (rj_rj + rjp1_ri - rj_rjp1 - ri_rj) / (normDrij * normDrjjp1)
-            cos_thetaijp1j = (rjp1_rjp1 + ri_rj - rj_rjp1 - rjp1_ri) / (normDrjp1i * normDrjjp1)
+            cos_thetajijp1 = (ri_ri + rj_rjp1 - ri_rj - rjp1_ri) / (
+                normDrij * normDrjp1i
+            )
+            cos_thetajp1ji = (rj_rj + rjp1_ri - rj_rjp1 - ri_rj) / (
+                normDrij * normDrjjp1
+            )
+            cos_thetaijp1j = (rjp1_rjp1 + ri_rj - rj_rjp1 - rjp1_ri) / (
+                normDrjp1i * normDrjjp1
+            )
             if cos_thetajijp1 < 0:
                 semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
-                Atot += np.sqrt(semiP * (semiP - normDrij) * (semiP - normDrjjp1) * (semiP - normDrjp1i)) / 2
+                Atot += (
+                    np.sqrt(
+                        semiP
+                        * (semiP - normDrij)
+                        * (semiP - normDrjjp1)
+                        * (semiP - normDrjp1i)
+                    )
+                    / 2
+                )
                 # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 4
             elif cos_thetajp1ji < 0 or cos_thetaijp1j < 0:
                 semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
-                Atot += np.sqrt(semiP * (semiP - normDrij) * (semiP - normDrjjp1) * (semiP - normDrjp1i)) / 4
+                Atot += (
+                    np.sqrt(
+                        semiP
+                        * (semiP - normDrij)
+                        * (semiP - normDrjjp1)
+                        * (semiP - normDrjp1i)
+                    )
+                    / 4
+                )
                 # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 8
             else:
                 cot_thetaijp1j = cos_thetaijp1j / np.sqrt(1 - cos_thetaijp1j**2)
                 cot_thetajp1ji = cos_thetajp1ji / np.sqrt(1 - cos_thetajp1ji**2)
-                Atot += normDrij**2 * cot_thetaijp1j / 8 + normDrjp1i**2 * cot_thetajp1ji / 8
+                Atot += (
+                    normDrij**2 * cot_thetaijp1j / 8
+                    + normDrjp1i**2 * cot_thetajp1ji / 8
+                )
 
             hij = hijp1
             if hij == h_start:
@@ -1400,10 +1447,18 @@ class Brane:
                 rjp1 = self.V_pq[vjp1, :3]
                 rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
                 ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
-                vecAijjp1 = (jitcross(ri, rj) + jitcross(rj, rjp1) + jitcross(rjp1, ri)) / 2
-                vecAijm1j = (jitcross(ri, rjm1) + jitcross(rjm1, rj) + jitcross(rj, ri)) / 2
-                Aijjp1 = np.sqrt(vecAijjp1[0] ** 2 + vecAijjp1[1] ** 2 + vecAijjp1[2] ** 2)
-                Aijm1j = np.sqrt(vecAijm1j[0] ** 2 + vecAijm1j[1] ** 2 + vecAijm1j[2] ** 2)
+                vecAijjp1 = (
+                    jitcross(ri, rj) + jitcross(rj, rjp1) + jitcross(rjp1, ri)
+                ) / 2
+                vecAijm1j = (
+                    jitcross(ri, rjm1) + jitcross(rjm1, rj) + jitcross(rj, ri)
+                ) / 2
+                Aijjp1 = np.sqrt(
+                    vecAijjp1[0] ** 2 + vecAijjp1[1] ** 2 + vecAijjp1[2] ** 2
+                )
+                Aijm1j = np.sqrt(
+                    vecAijm1j[0] ** 2 + vecAijm1j[1] ** 2 + vecAijm1j[2] ** 2
+                )
                 lapY[vi] += (
                     (Aijjp1 + Aijm1j)
                     * np.exp(-(ri_ri - 2 * ri_rj + rj_rj) / (4 * Ai))
@@ -1437,7 +1492,11 @@ class Brane:
                     rm_rm = rm[0] ** 2 + rm[1] ** 2 + rm[2] ** 2
                     ri_rm = ri[0] * rm[0] + ri[1] * rm[1] + ri[2] * rm[2]
                     Drim_sqr = ri_ri - 2 * ri_rm + rm_rm
-                    lapY[vi] += (Af / (12 * np.pi * Ai**2)) * np.exp(-Drim_sqr / (4 * Ai)) * (Y[vm] - Y[vi])
+                    lapY[vi] += (
+                        (Af / (12 * np.pi * Ai**2))
+                        * np.exp(-Drim_sqr / (4 * Ai))
+                        * (Y[vm] - Y[vi])
+                    )
 
         return lapY
 
@@ -1807,8 +1866,12 @@ class Brane:
             h = self.H_twin[h]
             v2 = self.H_vertex[h]
             r2 = self.V_pq[v2, :3]
-            A_face_vec = jitcross(r, r1) / 2 + jitcross(r1, r2) / 2 + jitcross(r2, r) / 2
-            A_face = np.sqrt(A_face_vec[0] ** 2 + A_face_vec[1] ** 2 + A_face_vec[2] ** 2)
+            A_face_vec = (
+                jitcross(r, r1) / 2 + jitcross(r1, r2) / 2 + jitcross(r2, r) / 2
+            )
+            A_face = np.sqrt(
+                A_face_vec[0] ** 2 + A_face_vec[1] ** 2 + A_face_vec[2] ** 2
+            )
             A += A_face / 3
 
             if h == h_start:
@@ -1893,7 +1956,9 @@ class Brane:
             e2 = r2 - r
             norm_e1 = np.sqrt(e1[0] ** 2 + e1[1] ** 2 + e1[2] ** 2)
             norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
-            cos_angle = (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (norm_e1 * norm_e2)
+            cos_angle = (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (
+                norm_e1 * norm_e2
+            )
             defect -= np.arccos(cos_angle)
             if h == h_start:
                 break
@@ -1922,7 +1987,9 @@ class Brane:
                 v = self.H_vertex[h]  # 2nd vert
                 e2 = self.V_pq[v, :3] - self.V_pq[v0, :3]
                 norm_e2 = np.sqrt(e2[0] ** 2 + e2[1] ** 2 + e2[2] ** 2)
-                cos_angle = (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (norm_e1 * norm_e2)
+                cos_angle = (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (
+                    norm_e1 * norm_e2
+                )
                 defects[v0] -= np.arccos(cos_angle)
 
                 h = self.H_next[self.H_twin[h]]
@@ -2966,7 +3033,9 @@ class Brane:
         F[0 * 3 * Nfaces : (0 + 1) * 3 * Nfaces] = F_rgb.T.ravel()
 
         VHF[Nvdat + Nhdat : Nvdat + Nhdat + Nfdat] = F
-        VHF[-9:] = np.array([F_opacity, H_opacity, V_opacity, Nvertices, nv, Nhalfedges, nh, Nfaces, nf])
+        VHF[-9:] = np.array(
+            [F_opacity, H_opacity, V_opacity, Nvertices, nv, Nhalfedges, nh, Nfaces, nf]
+        )
 
         return VHF
 

@@ -1,4 +1,6 @@
-from src.python.half_edge_base_ply_tools import VertTri2HalfEdgeMeshConverter
+from src.python.half_edge_base_ply_tools import (
+    MeshConverterBase,
+)  # VertTri2HalfEdgeMeshConverter
 from src.python.half_edge_base_utils import V_of_F
 import numpy as np
 from src.python.global_vars import _INT_TYPE_, _FLOAT_TYPE_
@@ -99,7 +101,7 @@ class HalfEdgeMeshBase:
         )
 
     @classmethod
-    def from_vf_data(cls, xyz_coord_V, vvv_of_F, *args, **kwargs):
+    def from_vf_samples(cls, xyz_coord_V, vvv_of_F, *args, **kwargs):
         """
         Initialize a half-edge mesh from vertex/face data.
 
@@ -114,16 +116,21 @@ class HalfEdgeMeshBase:
         -------
             HalfEdgeMesh: An instance of the HalfEdgeMesh class with the given vertices and faces.
         """
+        # return cls(
+        #     *VertTri2HalfEdgeMeshConverter.from_source_samples(
+        #         xyz_coord_V, vvv_of_F
+        #     ).target_samples,
+        #     *args,
+        #     **kwargs
+        # )
         return cls(
-            *VertTri2HalfEdgeMeshConverter.from_source_samples(
-                xyz_coord_V, vvv_of_F
-            ).target_samples,
+            *MeshConverterBase.from_vf_samples(xyz_coord_V, vvv_of_F).he_samples,
             *args,
             **kwargs
         )
 
     @classmethod
-    def from_vertex_face_ply(cls, ply_path, *args, **kwargs):
+    def from_vf_ply(cls, ply_path, *args, **kwargs):
         """Initialize a half-edge mesh from a ply file containing vertex/face data.
 
         Args:
@@ -132,14 +139,15 @@ class HalfEdgeMeshBase:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class with data from the ply file.
         """
-        return cls(
-            *VertTri2HalfEdgeMeshConverter.from_source_ply(ply_path).target_samples,
-            *args,
-            **kwargs
-        )
+        # return cls(
+        #     *VertTri2HalfEdgeMeshConverter.from_source_ply(ply_path).target_samples,
+        #     *args,
+        #     **kwargs
+        # )
+        return cls(*MeshConverterBase.from_vf_ply(ply_path).he_samples, *args, **kwargs)
 
     @classmethod
-    def from_half_edge_ply(cls, ply_path, *args, **kwargs):
+    def from_he_ply(cls, ply_path, *args, **kwargs):
         """Initialize a half-edge mesh from a ply file containing half-edge mesh data.
 
         Args:
@@ -148,11 +156,12 @@ class HalfEdgeMeshBase:
         Returns:
             HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
         """
-        return cls(
-            *VertTri2HalfEdgeMeshConverter.from_target_ply(ply_path).target_samples,
-            *args,
-            **kwargs
-        )
+        # return cls(
+        #     *VertTri2HalfEdgeMeshConverter.from_target_ply(ply_path).target_samples,
+        #     *args,
+        #     **kwargs
+        # )
+        return cls(*MeshConverterBase.from_he_ply(ply_path).he_samples, *args, **kwargs)
 
     #######################################################
     # Fundamental accessors and properties
@@ -1022,3 +1031,20 @@ class HalfEdgeMeshBase:
         StCl_V, StCl_H, StCl_F = self.star(*self.closure(V, H, F))
         ClSt_V, ClSt_H, ClSt_F = self.closure(*self.star(V, H, F))
         return ClSt_V - StCl_V, ClSt_H - StCl_H, ClSt_F - StCl_F
+
+    ######################################################
+    def smooth_by_shifts(self):
+        Nv = self.num_vertices
+        V = np.zeros_like(self.xyz_coord_V)
+        for i in range(Nv):
+            if self.boundary_contains_v(i):
+                V[i] = self.xyz_coord_v(i)
+                continue
+
+            valence = 0
+            for h in self.generate_H_out_v_clockwise(i):
+                valence += 1
+                V[i] += self.xyz_coord_v(self.v_head_h(h))
+            V[i] /= valence
+
+        self.xyz_coord_V = V

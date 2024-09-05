@@ -28,13 +28,13 @@ pip freeze > requirements.txt
 
 ## tests for ply_utils
 ```bash
-cd tests
+cd tests/cpp
 g++ -o test.exe \
 -I /usr/include/eigen3 \
 -I /usr/local/include \
--I ../include \
+-I ../../include \
 ply_utils_test.cpp \
-../source/ply_utils.cpp
+../../src/cpp/ply_utils.cpp
 ```
 
 
@@ -49,6 +49,14 @@ pretty_pictures_test.cpp \
 ../source/ply_utils.cpp
 ```
 
+## tests for half_edge_base_utils
+```bash
+g++ -o half_edge_base_utils_test.exe \
+-I /usr/include/eigen3 \
+-I /usr/local/include \
+half_edge_base_utils_test.cpp \
+half_edge_base_utils.cpp 
+```
 
 
 ### Directory structure

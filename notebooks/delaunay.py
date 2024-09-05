@@ -1,12 +1,12 @@
 import numpy as np
 from scipy.spatial import Delaunay
-from src.python.half_edge_mesh import HalfEdgeMesh
-from src.python.mesh_viewer import MeshViewer
+from src.python.half_edge_base_mesh import HalfEdgeMeshBase
+from src.python.half_edge_base_viewer import MeshViewer
 from src.python.jit_utils import check_vf_list_orientation, fib_sphere, uniform_sphere
-from numba import njit
+from numba import jit
 
 
-@njit
+@jit
 def extract_surface_faces(tetrahedra):
     """
     Extract the 2D triangular faces on the surface from the 3D tetrahedra.
@@ -41,7 +41,7 @@ def extract_surface_faces(tetrahedra):
 
 
 # from numba.typed import List, Dict, Tuple
-@njit
+@jit
 def jit_extract_surface_faces(tetrahedra):
     """
     Extract the 2D triangular faces on the surface from the 3D tetrahedra.
@@ -84,10 +84,13 @@ def jit_extract_surface_faces(tetrahedra):
 
 
 V = fib_sphere(10)
-V = fib_sphere(10)
-V = fib_sphere(10).tolist()
+# V = fib_sphere(10).tolist()
 tets = Delaunay(V).simplices
-extract_surface_faces(tets)
+F1 = extract_surface_faces(tets)
+F2 = jit_extract_surface_faces(tets)
+
+m1 = HalfEdgeMeshBase.from_vf_data(V, F1)
+m2 = HalfEdgeMeshBase.from_vf_data(V, F2)
 # %%
 num_refine = 6
 Nv = np.array([10 * 4**k + 2 for k in range(num_refine)], dtype=np.int32)

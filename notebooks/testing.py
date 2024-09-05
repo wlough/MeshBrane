@@ -1,4 +1,5 @@
-from src.python.half_edge_base_mesh import Brane, HalfEdgeMeshBase
+from src.python.half_edge_base_mesh import HalfEdgeMeshBase
+from src.python.half_edge_base_brane import Brane
 from src.python.half_edge_base_viewer import MeshViewer
 import numpy as np
 
@@ -8,7 +9,7 @@ he_ply = "./data/half_edge_base/ply/unit_sphere_002562_he.ply"
 he_ply = "./data/half_edge_base/ply/oblate_002562_he.ply"
 # he_ply = "./data/half_edge_base/ply/oblate_003072_he.ply"
 
-# he_ply = "./data/half_edge_base/ply/dumbbell_he.ply"
+he_ply = "./data/half_edge_base/ply/dumbbell_fine_he.ply"
 he_ply = "./data/half_edge_base/ply/neovius_he.ply"
 # R = 32
 # kBT = 0.2
@@ -45,6 +46,8 @@ brane_kwargs = {
     "spontaneous_face_area": spontaneous_face_area,
     "spontaneous_volume": spontaneous_volume,
 }
+
+
 # brane_kwargs = {
 #     "length_reg_stiffness": 1e-9,
 #     "area_reg_stiffness": 1e-2,
@@ -54,9 +57,26 @@ brane_kwargs = {
 #     "spontaneous_curvature": 0.0,
 #     "linear_drag_coeff": 1e3,
 # }
+def regularize_by_shifts(m):
+    Nv = m.num_vertices
+    V = np.zeros_like(m.xyz_coord_V)
+    for i in range(Nv):
+        if m.boundary_contains_v(i):
+            continue
 
-m = HalfEdgeMeshBase.from_half_edge_ply(he_ply)
-b = Brane.from_half_edge_ply(he_ply, **brane_kwargs)
+        valence = 0
+        for h in m.generate_H_out_v_clockwise(i):
+            valence += 1
+            V[i] += m.xyz_coord_v(m.v_head_h(h))
+        V[i] /= valence
+    m.xyz_coord_V = V
+
+
+m0 = HalfEdgeMeshBase.from_he_ply(he_ply)
+m = HalfEdgeMeshBase.from_he_ply(he_ply)
+# b = Brane.from_he_ply(he_ply, **brane_kwargs)
+mv = MeshViewer(m)
+mv.plot()
 # b._xyz_coord_V[:, 2] = b.xyz_coord_V[:, 2] * 0.8
 
 # Fb = b.Fbend_analytic()
@@ -66,6 +86,9 @@ b = Brane.from_half_edge_ply(he_ply, **brane_kwargs)
 # F = Fb + Fa + Fv + Ft
 # dt = 1e-2
 # Dxyz_coord_V = dt * F / b.linear_drag_coeff
+# %%
+V, F = m.xyz_coord_V, m.V_of_F
+m1 = HalfEdgeMeshBase.from_vf_data(V, F)
 # %%
 #
 # b.euler_step(1e-2)
@@ -99,69 +122,25 @@ for iter in range(100):
     # mv2.vector_field_data
     mv.plot(save=True, show=False)
 # %%
-V, F = b.xyz_coord_V, b.V_of_F
-
-
-# def fix_VF(V, F, target_faces=1000, boundary_vertex_deletion=True):
-# """
-# Decimate a mesh represented by vertices and faces.
-# """
-import numpy as np
-import pyvista as pv
-
-num_faces = F.shape[0]
-num_vertices = V.shape[0]
-
-F_pv = np.zeros((num_faces, 4), dtype="int32")
-F_pv[:, 0] = 3
-F_pv[:, 1:] = F
-F_pv = F_pv.ravel()
-# Create a PyVista mesh
-M = pv.PolyData(V, F_pv)
-Mclean = M.clean(
-    point_merging=True,
-    tolerance=1e-6,
-    lines_to_points=True,
-    polys_to_lines=True,
-    strips_to_polys=True,
-    absolute=False,
+from src.python.half_edge_base_mesh import HalfEdgeMeshBase
+from src.python.half_edge_base_ply_tools import (
+    VertTri2HalfEdgeMeshConverter,
+    MeshConverterBase,
 )
-M.plot(show_edges=True)
-Mclean.plot(show_edges=True)
-Mclean = Mclean.smooth(n_iter=20, relaxation_factor=0.01)
-# Extract simplified vertices and faces
-Vsimp = np.array(Mclean.points)
-Fsimp = Mclean.faces.reshape(-1, 4)[:, 1:]
-bc = Brane.from_vf_data(Vsimp, Fsimp)
-# %%
 
-m1._gaussian_curvature_v(0)
-m1.gaussian_curvature_v(0)
-# %%
-# m = HalfEdgeMesh.from_half_edge_ply(he_ply)
-m = m1
-H, K, lapH, n = m.compute_curvature_data()
-H0 = 0
-Kb = 0.1
-Fbend = -2 * Kb * (lapH + 2 * (H - H0) * (H**2 + H0 * H - K))
-Av = m.barcell_area_V()
-FbendA = Fbend * Av
-# %%
-# mv = MeshViewer(*m.data_arrays)
-# mv.plot()
-scale_vec = 10.5
-Fn = FbendA
-# vec = scale_vec * np.einsum("i,ij->ij", Fn, n)
-vec = 0.1 * n
-# vec=scale_vec*n
-vfdat = [m.xyz_coord_V, vec]
-mv_kwargs = {
-    "vector_field_data": [vfdat],
-    # "V_rgba": V_rgba,
-    # "color_by_V_rgba": True,
-    # "E_rgba": E_rgba,
-}
-mv = MeshViewer(*m.data_arrays, **mv_kwargs)
-mv.plot()
-# %%
-# from src.python.half_edge_mesh import HalfEdgeMesh
+# he_ply0 = "./data/half_edge_base/ply/dumbbell_he.ply"
+# he_ply = "./data/half_edge_base/ply/dumbbell_he_test.ply"
+# vf_ply = "./data/half_edge_base/ply/dumbbell_vf.ply"
+# he_ply0 = "./data/half_edge_base/ply/annulus_he.ply"
+# he_ply = "./data/half_edge_base/ply/annulus_he_test.ply"
+# vf_ply = "./data/half_edge_base/ply/annulus_vf.ply"
+# m = HalfEdgeMeshBase.from_half_edge_ply(he_ply0)
+# V, F = m.xyz_coord_V, m.V_of_F
+#
+#
+# c = MeshConverterBase.from_no_boundary_he_ply(he_ply0, compute_vf_stuff=True)
+# c.write_he_ply(he_ply)
+# # dir(c.he_ply_data)
+#
+# c.he_ply_data.elements
+MeshConverterBase.update_no_boundary_he_plys()
