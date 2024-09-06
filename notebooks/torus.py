@@ -87,6 +87,11 @@ rho = sp.sqrt(x**2 + y**2)
 # zm = -sp.sqrt(b**2 - (a - rho) ** 2)
 Phi = sp.atan2(y, x)
 Psi = sp.atan2(z, rho - a)
+# surface area
+# A = sp.integrate(J, (phi, 0, 2 * sp.pi), (psi, 0, 2 * sp.pi))
+A = 4 * sp.pi**2 * a * b
+scale_unit_torus = 2 * sp.pi * sp.sqrt(a * b)
+a_unit, b_unit = a / scale_unit_torus, b / scale_unit_torus
 # %%
 ##############################
 # print(some stuff)
@@ -125,6 +130,11 @@ display(Latex(II_str))
 print("Mean and Gaussian curvatures")
 display(Latex(H_str))
 display(Latex(K_str))
+# %%
+# dphi,dpsi = sp.symbols(r"d\phi"), sp.symbols(r"d\psi")
+# dA = J*dphi*dpsi
+# A=sp.integrate(J, (phi, 0, 2*sp.pi), (psi, 0, 2*sp.pi))
+
 
 # %%
 v1 = X.diff(phi, OE).diff(phi, OE)

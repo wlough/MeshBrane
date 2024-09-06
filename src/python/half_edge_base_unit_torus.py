@@ -4,57 +4,85 @@ from src.python.half_edge_base_ply_tools import (
 )  # VertTri2HalfEdgeConverter
 
 
-class DoughnutFactory:
+class UnitDoughnutFactory:
     """
-    Makes and refines meshes for the tori,
-    (sqrt(x**2 + y**2) - Rbig)**2 + z**2 - rad_small**2 = 0.
+    Makes and refines meshes for the unit area torus. The torus is oriented such that the z-axis goes through the donut hole.
 
+    Geometric parameters
+    --------------------
+    scale_phi : int
+        scale_phi ratio parameter
+    scale_psi : int
+        psi ratio parameter
 
-    Refinements are computed by doubling the number of
+    Discretization parameters
+    -------------------------
+    resolution_min : int
+        Resolution parameter for lowest level of refinement.
+    resolution_max : int
+        Resolution parameter for highest level of refinement.
+
+    c = scale_phi / scale_psi
+    Rphi = sqrt(c)/(2*pi)
+    Rpsi = 1/(2*pi*sqrt(c))
+    (sqrt(x**2 + y**2) - Rphi)**2 + z**2 - Rpsi**2 = 0
+
+    Nphi_p = c * 2**p = c * 2**(p0+q)
+    Npsi_p = 2**p = 2**(p0+q)
+
     Attributes
     ----------
-    p0 : int
-        Resolution parameter for lowest level of refinement.
-    num_refinements : int
-        current number of refinements.
+    Rphi : float
+        radius of the circle parameterized by phi (about the z-axis)
+    Rpsi : float
+        radius of the circle parameterized by psi (circle about the z-axis)
+    Phi_rmax : ndarray
+        linspace(0, 2*pi, Nphi_rmax)
+    Psi_rmax : ndarray
+        linspace(-pi, pi, Npsi_rmax)
 
-    p: int
-        Resolution parameter for the current level of refinement.
-    Nphi : list of int
-        Number of azimuthal angle samples in each mesh. Controls resolution along the big circumference. 3 * 2**p by default.
-    Npsi : list of int
-        Number of samples along the small circumference. 2**p by default.
+    Methods
+    -------
+    index_step(p)
+        Returns the index step between resolution p samples in Phi_rmax and Psi_rmax.
+    Phi(self, p)
+        Returns ndarray of azimuthal angle samples for resolution p.
+    Psi(self, p)
+        Returns ndarray of poloidal angle samples for resolution p.
 
-    Attributes
-    ----------
-    name : str
-        Name of the mesh (name="torus")
-    Rbig : float
-        Big radius of the torus. 1 by default.
-    rad_small : float
-        Small radius of the torus. 1/3 by default.
-    p0 : int
-        Resolution parameter for lowest level of refinement.
-    Nphi : list of int
-        Number of azimuthal angle samples in each mesh. Controls resolution along the big circumference. 3 * 2**p by default.
-    Npsi : list of int
-        Number of samples along the small circumference. 2**p by default.
-    ---
-    ---
-    xyz_coord_V : list of numpy.array
-        xyz coordinates of the vertices in the finest mesh.
-    F : list of list
-        Face list for each mesh level.
-    implicit_fun_str : str
-        Implicit function for the torus.
+
+
     """
 
     def __init__(
-        self, p0=3, max_num_refinements=4, Rbig=1, ratio_Rbig2Rsmall=3, name="torus_3_1"
+        self,
+        scale_phi=3,
+        scale_psi=1,
+        resolution_min=3,
+        resolution_max=6,
+        name="torus_3_1",
     ):
+        self.scale_phi = scale_phi
+        self.scale_psi = scale_psi
+        self.resolution_min = resolution_min
+        self.resolution_max = resolution_max
+        self.name = name
+
+        c = scale_phi / scale_psi
+        Nphi_rmax = scale_phi * 2**resolution_max
+        Npsi_rmax = scale_psi * 2**resolution_max
+        self.Rphi = np.sqrt(c) / (2 * np.pi)
+        self.Rpsi = 1 / (2 * np.pi * np.sqrt(c))
+        self.Phi_rmax = np.linspace(0, 2 * np.pi, Nphi_rmax, endpoint=False)
+        self.Psi_rmax = np.linspace(0, 2 * np.pi, Npsi_rmax, endpoint=False)
+
+        ################################
         self._name = "torus_3_1"
         self.p0 = p0
         self.max_num_refinements = max_num_refinements
+        self.Rbig = Rbig
+
+        self.Rsmall = Rbig / ratio_Rbig2Rsmall
         self.current_num_refinemnts = 0
 
         ######
@@ -62,11 +90,11 @@ class DoughnutFactory:
         Npsi = 2**pow
         Nphi = 3 * Npsi
         # Rbig = 1
-        rad_small = Rbig / ratio_Rbig2Rsmall
+        Rsmall = Rbig / ratio_Rbig2Rsmall
         self.Rbig = Rbig
-        self.rad_small = rad_small
+        self.Rsmall = Rsmall
         self.implicit_fun_str = (
-            f"sqrt(x**2 + y**2) - {self.Rbig})**2 + z**2 - {self.rad_small}**2"
+            f"sqrt(x**2 + y**2) - {self.Rbig})**2 + z**2 - {self.Rsmall}**2"
         )
 
         xyz_coord_V = []
@@ -78,9 +106,9 @@ class DoughnutFactory:
             for s in range(Npsi):
                 sp1 = (s + 1) % Npsi
                 phi_small = 2 * np.pi * s / Npsi
-                x = np.cos(phi) * (Rbig + np.cos(phi_small) * rad_small)
-                y = np.sin(phi) * (Rbig + np.cos(phi_small) * rad_small)
-                z = np.sin(phi_small) * rad_small
+                x = np.cos(phi) * (Rbig + np.cos(phi_small) * Rsmall)
+                y = np.sin(phi) * (Rbig + np.cos(phi_small) * Rsmall)
+                z = np.sin(phi_small) * Rsmall
                 xyz_coord_V.append(np.array([x, y, z]))
                 b_s = b * Npsi + s
                 b_sp1 = b * Npsi + sp1
@@ -102,6 +130,40 @@ class DoughnutFactory:
         # self.v2h = [VertTri2HalfEdgeConverter.from_source_samples(*self.VF())]
         self.v2h = [MeshConverterBase.from_vf_samples(*self.VF())]
 
+    def phi_of_xyz(self, x, y, z):
+        return np.arctan2(y, x)
+
+    def psi_of_xyz(self, x, y, z):
+        return np.arctan2(z, np.sqrt(x**2 + y**2))
+
+    def x_of_phi_psi(self, phi, psi):
+        return np.cos(phi) * (self.Rbig + np.cos(psi) * self.Rsmall)
+
+    def y_of_phi_psi(self, phi, psi):
+        return np.sin(phi) * (self.Rbig + np.cos(psi) * self.Rsmall)
+
+    def z_of_phi_psi(self, phi, psi):
+        return np.sin(psi) * self.Rsmall
+
+    def Rphi_of_xyz(self, x, y, z):
+        return np.sqrt(x**2 + y**2)
+
+    ###################################
+    # deprecated
+
+    def write_plys(self, level=-1, ply_dir="./output/torus_plys"):
+        if isinstance(level, int):
+            # p = self.pow[level]
+            # Nv =
+            he_path = f"{ply_dir}/{self.name}_{self.num_vertices(level):06d}_he.ply"
+            print(f"Writing half-edge ply to {he_path}")
+            self.v2h[level].write_target_ply(he_path, use_ascii=False)
+
+        elif level == "all":
+            for level in range(len(self.F)):
+                self.write_plys(level=level)
+            print(f"Done writing {self.name} plys.")
+
     def Nphi(self, num_refinements):
         p = self.p0 + num_refinements
         M = self.ratio_Rbig2Rsmall
@@ -121,34 +183,6 @@ class DoughnutFactory:
     @property
     def current_Npsi(self):
         return self.Npsi(self.current_num_refinemnts)
-
-    def phi_of_xyz(self, x, y, z):
-        return np.arctan2(y, x)
-
-    def psi_of_xyz(self, x, y, z):
-        return np.arctan2(z, np.sqrt(x**2 + y**2))
-
-    def x_of_phi_psi(self, phi, psi):
-        return np.cos(phi) * (self.Rbig + np.cos(psi) * self.rad_small)
-
-    def y_of_phi_psi(self, phi, psi):
-        return np.sin(phi) * (self.Rbig + np.cos(psi) * self.rad_small)
-
-    def z_of_phi_psi(self, phi, psi):
-        return np.sin(psi) * self.rad_small
-
-    def write_plys(self, level=-1, ply_dir="./output/torus_plys"):
-        if isinstance(level, int):
-            # p = self.pow[level]
-            # Nv =
-            he_path = f"{ply_dir}/{self.name}_{self.num_vertices(level):06d}_he.ply"
-            print(f"Writing half-edge ply to {he_path}")
-            self.v2h[level].write_target_ply(he_path, use_ascii=False)
-
-        elif level == "all":
-            for level in range(len(self.F)):
-                self.write_plys(level=level)
-            print(f"Done writing {self.name} plys.")
 
     @classmethod
     def build_test_plys(
@@ -194,7 +228,7 @@ class DoughnutFactory:
 
     def refine(self, convert_to_half_edge=True):
         r_b = self.Rbig
-        r_s = self.rad_small
+        r_s = self.Rsmall
         Npsi_coarse = self.Npsi[-1]
         Nphi_coarse = self.Nphi[-1]
         pow_coarse = self.pow[-1]
