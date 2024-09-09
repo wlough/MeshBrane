@@ -259,7 +259,7 @@ class HalfEdgeMeshBase:
 
     @property
     def V_of_F(self):
-        return V_of_F(*self.data_arrays)
+        return V_of_F(*self.he_samples)
 
     @property
     def V_of_H(self):
@@ -268,7 +268,7 @@ class HalfEdgeMeshBase:
         )
 
     @property
-    def data_arrays(self):
+    def he_samples(self):
         """
         Get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...
         """
@@ -284,7 +284,7 @@ class HalfEdgeMeshBase:
             self.h_right_B,
         )
 
-    def save_data_arrays(self, path):
+    def save_he_samples(self, path):
         """
         Save data arrays to npz file
 
@@ -300,7 +300,7 @@ class HalfEdgeMeshBase:
             f_left_H,
             h_bound_F,
             h_right_B,
-        ) = self.data_arrays
+        ) = self.he_samples
         np.savez(
             path,
             xyz_coord_V=xyz_coord_V,
@@ -1033,7 +1033,7 @@ class HalfEdgeMeshBase:
         return ClSt_V - StCl_V, ClSt_H - StCl_H, ClSt_F - StCl_F
 
     ######################################################
-    def smooth_by_shifts(self):
+    def smooth_by_shifts(self, weight=0.25):
         Nv = self.num_vertices
         V = np.zeros_like(self.xyz_coord_V)
         for i in range(Nv):
@@ -1046,5 +1046,6 @@ class HalfEdgeMeshBase:
                 valence += 1
                 V[i] += self.xyz_coord_v(self.v_head_h(h))
             V[i] /= valence
+            V[i] = weight * V[i] + (1 - weight) * self.xyz_coord_v(i)
 
         self.xyz_coord_V = V

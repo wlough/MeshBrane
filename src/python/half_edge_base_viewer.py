@@ -691,3 +691,12 @@ class MeshViewer:
             movie_dir=self.image_dir,
             movie_format=self.movie_format,
         )
+
+    def apply_fun_iter(self, fun, num_iters=1):
+        m = self.M
+        self.plot(save=True, show=False, title=f"iter_{0}")
+        for i in range(num_iters):
+            print(f"Applying fun to mesh {i+1} of {num_iters}")
+            fun(m)
+            self.plot(save=True, show=False, title=f"iter_{i+1}")
+        self.movie()

@@ -1126,6 +1126,38 @@ class MeshConverterBase:
         self.he_ply_data.text = not use_binary
         self.he_ply_data.write(ply_path)
 
+    def write_he_samples(
+        self, path=None, compressed=False, chunk=False, remove_unchunked=False
+    ):
+
+        (
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+            h_right_B,
+        ) = self.he_samples
+        arr = {
+            "xyz_coord_V": xyz_coord_V,
+            "h_out_V": h_out_V,
+            "v_origin_H": v_origin_H,
+            "h_next_H": h_next_H,
+            "h_twin_H": h_twin_H,
+            "f_left_H": f_left_H,
+            "h_bound_F": h_bound_F,
+            "h_right_B": h_right_B,
+        }
+        save_npz(
+            arr,
+            path,
+            compressed=compressed,
+            chunk=chunk,
+            remove_unchunked=remove_unchunked,
+        )
+
     #####################################
     # for dealing with old data that doesn't include h_right_B
     def no_boundary_he_ply_data_to_samples(self):
