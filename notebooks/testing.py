@@ -26,9 +26,9 @@ R = 1.0
 kBT = 0.2 / 32
 tau = 1.28e5
 bending_modulus = 20 * kBT
-A = 4 * np.pi * R**2
+A = 4 * 3.14159 * R**2
 
-spontaneous_volume = 4 * np.pi * R**3 / 3
+spontaneous_volume = 4 * 3.14159 * R**3 / 3
 length_reg_stiffness = 80 * kBT
 area_reg_stiffness = 6.43e6 * kBT / A
 volume_reg_stiffness = 1.6e7 * kBT / R**3

@@ -84,7 +84,7 @@ class HalfEdgeMeshBase:
     #######################################################
     # Initilization methods
     @classmethod
-    def load_he_data(cls, path, *args, **kwargs):
+    def load_he_samples(cls, path, *args, **kwargs):
         """Initialize a half-edge mesh from npz file containing data arrays."""
         data = np.load(path)
         return cls(
@@ -744,6 +744,106 @@ class HalfEdgeMeshBase:
                     flip_count += 1
         return flip_count
 
+    def cotan_laplacian(self, Q):
+        """
+        Computes the cotan Laplacian of Q at each vertex
+        """
+        # Nv = self.num_vertices
+        lapQ = np.zeros_like(Q)
+        for vi in range(self.num_vertices):
+            Atot = 0.0
+            ri = self.xyz_coord_v(vi)
+            qi = Q[vi]
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+            for hij in self.generate_H_out_v_clockwise(vi):
+                hijm1 = self.h_next_h(self.h_twin_h(hij))
+                hijp1 = self.h_twin_h(self.h_prev_h(hij))
+                vjm1 = self.v_head_h(hijm1)
+                vj = self.v_head_h(hij)
+                vjp1 = self.v_head_h(hijp1)
+
+                qj = Q[vj]
+
+                rjm1 = self.xyz_coord_v(vjm1)
+                rj = self.xyz_coord_v(vj)
+                rjp1 = self.xyz_coord_v(vjp1)
+
+                rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
+                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+                ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
+                rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
+                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
+                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+
+                Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
+                Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
+                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
+                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+
+                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
+
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
+
+                cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
+                cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
+
+                Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
+                lapQ[vi] += (cot_thetam + cot_thetap) * (qj - qi) / 2
+            lapQ[vi] /= Atot
+
+        return lapQ
+
+    def graph_laplacian(self, Q):
+        """
+        Computes the graph Laplacian of Q at each vertex
+        """
+        lapQ = np.zeros_like(Q)
+        for i in range(self.num_vertices):
+            deg = 0
+            for h in self.generate_H_out_v_clockwise(i):
+                lapQ[i] += Q[self.v_head_h(h)]
+                deg += 1
+
+            lapQ[i] /= deg
+            lapQ[i] -= Q[i]
+
+        return lapQ
+
+    def smooth_graph_laplacian(self, weight=0.25, smooth_boundary=False):
+        """ """
+        Q = self.xyz_coord_V
+        if smooth_boundary:
+            lapQ = self.graph_laplacian(Q)
+
+        else:
+            lapQ = np.zeros_like(Q)
+            for i in range(self.num_vertices):
+                if self.boundary_contains_v(i):
+                    # lapQ[i] = Q[i]
+                    continue
+                deg = 0
+                for h in self.generate_H_out_v_clockwise(i):
+                    lapQ[i] += Q[self.v_head_h(h)]
+                    deg += 1
+
+                lapQ[i] /= deg
+                lapQ[i] -= Q[i]
+
+        self.xyz_coord_V += weight * lapQ
+
+    def taubin_smooth_graph_laplacian(
+        self, weight_shrink=0.25, weight_inflate=-0.25, smooth_boundary=False
+    ):
+        self.smooth_graph_laplacian(
+            weight=weight_shrink, smooth_boundary=smooth_boundary
+        )
+        self.smooth_graph_laplacian(
+            weight=weight_inflate, smooth_boundary=smooth_boundary
+        )
+
     #######################################################
     # Miscellaneous methods
     def valence_v(self, v):
@@ -767,6 +867,24 @@ class HalfEdgeMeshBase:
 
     def area_f(self, f):
         return np.linalg.norm(self.vec_area_f(f))
+
+    def area_F(self):
+        N = self.num_faces
+        A = np.zeros(N, dtype=_FLOAT_TYPE_)
+        for k in range(N):
+            A[k] = self.area_f(k)
+        return A
+
+    def length_h(self, h):
+        v0 = self.v_origin_h(h)
+        v1 = self.v_head_h(h)
+        return np.linalg.norm(self.xyz_coord_v(v1) - self.xyz_coord_v(v0))
+
+    def length_H(self):
+        L = np.zeros(self.num_half_edges, dtype=_FLOAT_TYPE_)
+        for h in range(self.num_half_edges):
+            L[h] = self.length_h(h)
+        return L
 
     def total_area_of_faces(self):
         Atot = 0.0
@@ -1033,7 +1151,9 @@ class HalfEdgeMeshBase:
         return ClSt_V - StCl_V, ClSt_H - StCl_H, ClSt_F - StCl_F
 
     ######################################################
-    def smooth_by_shifts(self, weight=0.25):
+    # to be deprecated
+    def _smooth_graph_laplacian(self, weight=0.25):
+        """ """
         Nv = self.num_vertices
         V = np.zeros_like(self.xyz_coord_V)
         for i in range(Nv):

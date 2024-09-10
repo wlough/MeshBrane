@@ -4,7 +4,7 @@ from src.python.half_edge_base_ply_tools import (
 )  # VertTri2HalfEdgeConverter
 
 
-class UnitDoughnutFactory:
+class DoughnutFactory:
     """
     Makes and refines meshes for the unit area torus. The torus is oriented such that the z-axis goes through the donut hole.
 
@@ -56,10 +56,12 @@ class UnitDoughnutFactory:
         scale_psi=1,
         # resolution_min=3,
         # resolution_max=6,
+        name=None,
     ):
         self.scale_phi = scale_phi
         self.scale_psi = scale_psi
-        self.name = f"unit_torus_{scale_phi}_{scale_psi}"
+        if name is None:
+            self.name = f"unit_torus_{scale_phi}_{scale_psi}"
 
         c = scale_phi / scale_psi
 
@@ -120,7 +122,7 @@ class UnitDoughnutFactory:
     def V_of_F_at_resolution_p(self, p):
         Nphi = self.Nphi(p)
         Npsi = self.Npsi(p)
-        Nf = self.num_faces(p)
+        # Nf = self.num_faces(p)
         F = np.array(
             [
                 [
@@ -207,6 +209,7 @@ class UnitDoughnutFactory:
         return phi
 
     def psi_of_xyz(self, x, y, z):
+        a = self.Rphi
         rho = np.sqrt(x**2 + y**2)
         psi = np.arctan2(z, rho - a)
         return psi
@@ -250,166 +253,55 @@ class UnitDoughnutFactory:
         z = np.sin(psi) * self.Rpsi
         return np.array([x, y, z]).T
 
+    @classmethod
+    def mesh_gen(
+        cls,
+        output_dir="./output/torus_mesh_gen_test",
+        scale_phi=3,
+        scale_psi=1,
+        resolution_min=3,
+        resolution_max=8,
+    ):
+        """
+        Generates triangle meshes for unit area torii. Output files are labeled by number of faces in the mesh.
+
+        Rphi:Rpsi=Nphi:Npsi=scale_phi:scale_psi
+        Nphi = scale_phi * 2**resolution
+        Npsi = scale_psi * 2**resolution
+        num_vertices = Nphi * Npsi
+        num_faces = 2 * Nphi * Npsi
+                  = 2 * scale_phi * scale_psi * 4**resolution
+        num_edges = 3 * Nphi * Npsi
+        """
+        from src.python.utilities import make_output_dir
+
+        make_output_dir(output_dir, overwrite=False)
+        ##############################################################
+
+        surfname = f"unit_torus_{scale_phi}_{scale_psi}"
+        Nfaces = [
+            2 * scale_phi * scale_psi * 4**p
+            for p in range(resolution_min, resolution_max + 1)
+        ]
+        plys_raw = [f"{surfname}_raw_{num_faces:06d}_he.ply" for num_faces in Nfaces]
+        samples_raw = [f"{surfname}_raw_{num_faces:06d}_he.npz" for num_faces in Nfaces]
+
+        f = cls(scale_phi=scale_phi, scale_psi=scale_psi, name=surfname)
+
+        for _, p in enumerate(range(resolution_min, resolution_max + 1)):
+            print("------------------------------------------------")
+            print(f"initializing mesh_converter at resolution {p=}")
+            f.init_mesh_converter_at_resolution_p(p)
+            c = f.mesh_converter[p]
+
+            ply_path = f"{output_dir}/{plys_raw[_]}"
+            samples_path = f"{output_dir}/{samples_raw[_]}"
+            print(f"writing {ply_path=}")
+            c.write_he_ply(ply_path, use_binary=True)
+            print(f"writing {samples_path=}")
+            c.write_he_samples(
+                path=samples_path, compressed=False, chunk=False, remove_unchunked=False
+            )
+
     ###################################
     # deprecated
-
-    # def Phi_indices(self, resolution):
-    #     res_diff = self.resolution_max - resolution
-    #     i_skip = 2**res_diff
-    #     return np.arange(0, self.Nphi(self.resolution_max), i_skip, dtype="int32")
-
-    # def Psi_indices(self, resolution):
-    #     res_diff = self.resolution_max - resolution
-    #     i_skip = 2**res_diff
-    #     return np.arange(0, self.Npsi(self.resolution_max), i_skip, dtype="int32")
-
-    # def write_plys(self, level=-1, ply_dir="./output/torus_plys"):
-    #     if isinstance(level, int):
-    #         # p = self.pow[level]
-    #         # Nv =
-    #         he_path = f"{ply_dir}/{self.name}_{self.num_vertices(level):06d}_he.ply"
-    #         print(f"Writing half-edge ply to {he_path}")
-    #         self.v2h[level].write_target_ply(he_path, use_ascii=False)
-
-    #     elif level == "all":
-    #         for level in range(len(self.F)):
-    #             self.write_plys(level=level)
-    #         print(f"Done writing {self.name} plys.")
-
-    # @property
-    # def current_Nphi(self):
-    #     return self.Nphi(self.current_num_refinemnts)
-
-    # @property
-    # def current_Npsi(self):
-    #     return self.Npsi(self.current_num_refinemnts)
-
-    # @classmethod
-    # def build_test_plys(
-    #     cls,
-    #     num_refine=5,
-    #     ply_dir="./output/torus_plys",
-    #     p0=3,
-    #     Rbig=1,
-    #     ratio_Rbig2Rsmall=3,
-    # ):
-    #     b = cls(
-    #         p0=3,
-    #         Rbig=1,
-    #         ratio_Rbig2Rsmall=3,
-    #     )
-    #     b.write_plys(level=0)
-    #     for level in range(1, num_refine + 1):
-    #         b.refine()
-    #         b.write_plys(level=level, ply_dir=ply_dir)
-    #     print("Done.")
-
-    # # @property
-    # # def name(self):
-    # #     return self._name
-
-    # @property
-    # def pow(self):
-    #     return [_ for _ in range(3, 3 + len(self.F))]
-
-    # # def Vindices(self, level=-1):
-    # #     return self.v_BS[level]
-
-    # # def num_vertices(self, level=-1):
-    # #     return len(self.Vindices(level))
-
-    # # def num_faces(self, level=-1):
-    # #     return len(self.Vindices(level))
-
-    # def VF(self, level=-1):
-    #     F = self.F[level]
-    #     V = [self.xyz_coord_V[v] for v in self.Vindices(level)]
-    #     return V, F
-
-    # def refine(self, convert_to_half_edge=True):
-    #     r_b = self.Rbig
-    #     r_s = self.Rsmall
-    #     Npsi_coarse = self.Npsi[-1]
-    #     Nphi_coarse = self.Nphi[-1]
-    #     pow_coarse = self.pow[-1]
-    #     Npsi = 2 * Npsi_coarse
-    #     Nphi = 2 * Nphi_coarse
-    #     pow = pow_coarse + 1
-    #     print(f"Refining {self.name}...")
-    #     print(f"num_vertices: {Nphi_coarse*Npsi_coarse}-->{Nphi*Npsi}")
-    #     self.Npsi.append(Npsi)
-    #     self.Nphi.append(Nphi)
-    #     self.pow.append(pow)
-    #     F = []
-    #     v_BS = []
-    #     v_BS_coarse = self.v_BS[-1]
-
-    #     for b_coarse in range(Nphi_coarse):
-    #         ###################################################
-    #         # add every other vertex to each ring in old mesh
-    #         b = 2 * b_coarse
-    #         bp1 = (b + 1) % Nphi
-    #         phi = 2 * np.pi * b / Nphi
-    #         for s_coarse in range(Npsi_coarse):
-    #             # every other vertex is the same as the coarse mesh
-    #             s = 2 * s_coarse
-    #             b_s_coarse = b_coarse * Npsi_coarse + s_coarse
-    #             v_b_s = v_BS_coarse[b_s_coarse]  # v index
-    #             sp1 = (s + 1) % Npsi
-    #             b_s = b * Npsi + s
-    #             b_sp1 = b * Npsi + sp1
-    #             bp1_s = bp1 * Npsi + s
-    #             bp1_sp1 = bp1 * Npsi + sp1
-    #             # F.append([b_s, bp1_sp1, bp1_s])
-    #             # F.append([b_s, b_sp1, bp1_sp1])
-    #             F.append([b_s, bp1_s, bp1_sp1])
-    #             F.append([b_s, bp1_sp1, b_sp1])
-    #             v_BS.append(v_b_s)
-    #             # every other vertex is new
-    #             s = 2 * s_coarse + 1
-    #             v_b_s = len(self.xyz_coord_V)  # new v index
-    #             psi = 2 * np.pi * s / Npsi
-    #             x = np.cos(phi) * (r_b + np.cos(psi) * r_s)
-    #             y = np.sin(phi) * (r_b + np.cos(psi) * r_s)
-    #             z = np.sin(psi) * r_s
-    #             self.xyz_coord_V.append(np.array([x, y, z]))
-    #             sp1 = (s + 1) % Npsi
-    #             b_s = b * Npsi + s
-    #             b_sp1 = b * Npsi + sp1
-    #             bp1_s = bp1 * Npsi + s
-    #             bp1_sp1 = bp1 * Npsi + sp1
-    #             # bs_V[v_b_s] = b_s
-    #             v_BS.append(v_b_s)
-    #             # F.append([b_s, bp1_sp1, bp1_s])
-    #             # F.append([b_s, b_sp1, bp1_sp1])
-    #             F.append([b_s, bp1_s, bp1_sp1])
-    #             F.append([b_s, bp1_sp1, b_sp1])
-
-    #         ###################################################
-    #         # add every vertex to each new ring not in old mesh
-    #         b = 2 * b_coarse + 1
-    #         bp1 = (b + 1) % Nphi
-    #         phi = 2 * np.pi * b / Nphi
-    #         for s in range(Npsi):
-    #             v_b_s = len(self.xyz_coord_V)  # new v index
-    #             psi = 2 * np.pi * s / Npsi
-    #             x = np.cos(phi) * (r_b + np.cos(psi) * r_s)
-    #             y = np.sin(phi) * (r_b + np.cos(psi) * r_s)
-    #             z = np.sin(psi) * r_s
-    #             self.xyz_coord_V.append(np.array([x, y, z]))
-    #             sp1 = (s + 1) % Npsi
-    #             b_s = b * Npsi + s
-    #             b_sp1 = b * Npsi + sp1
-    #             bp1_s = bp1 * Npsi + s
-    #             bp1_sp1 = bp1 * Npsi + sp1
-    #             v_BS.append(v_b_s)
-    #             # F.append([b_s, bp1_sp1, bp1_s])
-    #             # F.append([b_s, b_sp1, bp1_sp1])
-    #             F.append([b_s, bp1_s, bp1_sp1])
-    #             F.append([b_s, bp1_sp1, b_sp1])
-
-    #     self.F.append(F)
-    #     self.v_BS.append(v_BS)
-    #     if convert_to_half_edge:
-    #         print("Converting to half-edge mesh...")
-    #         self.v2h.append(MeshConverterBase.from_vf_samples(*self.VF()))

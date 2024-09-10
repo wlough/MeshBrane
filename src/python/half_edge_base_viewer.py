@@ -613,6 +613,9 @@ class MeshViewer:
             mlab.orientation_axes()
         if view is not None:
             mlab.view(**view)
+
+        # mview = mlab.view()
+        # print(mview)
         if save:
             if fig_path is None:
                 print("fig_path is None")
@@ -698,5 +701,18 @@ class MeshViewer:
         for i in range(num_iters):
             print(f"Applying fun to mesh {i+1} of {num_iters}")
             fun(m)
+            self.plot(save=True, show=False, title=f"iter_{i+1}")
+        self.movie()
+
+    def vec_field_apply_fun_iter(self, fun, num_iters=1):
+        m = self.M
+        self.plot(save=True, show=False, title=f"iter_{0}")
+        for i in range(num_iters):
+            print(f"Applying fun to mesh {i+1} of {num_iters}")
+            points, vectors = fun(m)
+            self.clear_vector_field_data()
+            self.add_vector_field(points, vectors)
+            com = np.sum(m.xyz_coord_V, axis=0) / m.num_vertices
+            self.view["focalpoint"] = com
             self.plot(save=True, show=False, title=f"iter_{i+1}")
         self.movie()
