@@ -92,6 +92,12 @@ class HalfEdgePatch:
 
         return self
 
+    @classmethod
+    def from_seed_to_radius(cls, v_seed, supermesh, radius):
+        self = cls.from_seed_vertex(v_seed, supermesh)
+        self.expand_to_radius(supermesh.xyz_coord_v(v_seed), radius)
+        return self
+
     def negative_boundary_contains_h(self, h):
         """check if half-edge h is in the boundary of the mesh"""
         return h in self.H and self.supermesh.f_left_h(h) not in self.F
@@ -283,6 +289,43 @@ class HalfEdgePatch:
         self.F.update(F_new)
         self.h_right_B = self.find_h_right_B(F_need2check=F)
         return V_new, H_new, F_new
+
+    def expand_within_radius(self, xyz_center, radius):
+        """ """
+        V_bdry = set(self.generate_V_negative_bdry())
+        V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry, set(), set()))
+        # V_new = V - self.V
+        # H_new = H - self.H
+        F_new = F - self.F
+        F_keep = set()
+        for f in F_new:
+            h0 = self.supermesh.h_bound_f(f)
+            h1 = self.supermesh.h_next_h(h0)
+            h2 = self.supermesh.h_next_h(h1)
+            i0 = self.supermesh.v_origin_h(h0)
+            i1 = self.supermesh.v_origin_h(h1)
+            i2 = self.supermesh.v_origin_h(h2)
+            x0 = self.supermesh.xyz_coord_v(i0)
+            x1 = self.supermesh.xyz_coord_v(i1)
+            x2 = self.supermesh.xyz_coord_v(i2)
+            x = (x0 + x1 + x2) / 3
+            if np.linalg.norm(x - xyz_center) < radius:
+                F_keep.add(f)
+        V, H, F = self.supermesh.closure(set(), set(), F_keep)
+        V_new = V - self.V
+        H_new = H - self.H
+        F_new = F - self.F
+        self.V.update(V_new)
+        self.H.update(H_new)
+        self.F.update(F_new)
+        self.h_right_B = self.find_h_right_B(F_need2check=F)
+        return V_new, H_new, F_new
+
+    def expand_to_radius(self, xyz_center, radius):
+        while True:
+            V_new, H_new, F_new = self.expand_within_radius(xyz_center, radius)
+            if not V_new:
+                break
 
     ##############################################
     def he_samples(self):

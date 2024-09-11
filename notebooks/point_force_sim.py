@@ -6,32 +6,78 @@ import numpy as np
 
 output_dir = "./output/stretch_sim"
 # StretchSim.make_output_dir(output_dir=output_dir, overwrite=True)
-parameters_path = "./output/test.yaml"
+parameters_path = "./output/stretch_test.yaml"
 sim = StretchSim.from_parameters_file(parameters_path, output_dir)
 
+sim.run()
+# sim.time_step()
+# sim.mesh_viewer.plot()
+
+# sim.time_step()
 # %%
 
 m = sim.envelope
 spb = sim.spb_force
-ip, im = spb.find_center_vertices(m)
-Vp, Hp, Fp = m.closure(*m.star_of_vertex(ip))
-Vm, Hm, Fm = m.closure(*m.star_of_vertex(im))
-V, H, F = Vp | Vm, Hp | Hm, Fp | Fm
-patch = HalfEdgePatch(m, V, H, F)
-# 55 in patch.generate_H_next_h(3)
-he_samples = patch.he_samples()
+radius = spb.radius
+center_plus, center_minus = spb.find_center_vertices(m)
+xyz_plus = m.xyz_coord_v(center_plus)
+xyz_minus = m.xyz_coord_v(center_minus)
+patch_plus = HalfEdgePatch.from_seed_vertex(center_plus, m)
+patch_minus = HalfEdgePatch.from_seed_vertex(center_minus, m)
+patch_plus.expand_to_radius(xyz_center, radius)
 
-m = Brane(*he_samples)
 # %%
+p = patch_plus
 
+
+xyz_center = xyz_plus
+self = patch_plus
+V_bdry = set(self.generate_V_negative_bdry())
+V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry, set(), set()))
+# V_new = V - self.V
+# H_new = H - self.H
+F_new = F - self.F
+F_keep = set()
+for f in F_new:
+    h0 = self.supermesh.h_bound_f(f)
+    h1 = self.supermesh.h_next_h(h0)
+    h2 = self.supermesh.h_next_h(h1)
+    i0 = self.supermesh.v_origin_h(h0)
+    i1 = self.supermesh.v_origin_h(h1)
+    i2 = self.supermesh.v_origin_h(h2)
+    x0 = self.supermesh.xyz_coord_v(i0)
+    x1 = self.supermesh.xyz_coord_v(i1)
+    x2 = self.supermesh.xyz_coord_v(i2)
+    x = (x0 + x1 + x2) / 3
+    if np.linalg.norm(x - xyz_center) < radius:
+        F_keep.add(f)
+V, H, F = self.supermesh.closure(set(), set(), F_keep)
+V_new = V - self.V
+H_new = H - self.H
+F_new = F - self.F
+self.V.update(V_new)
+self.H.update(H_new)
+self.F.update(F_new)
+self.h_right_B = self.find_h_right_B(F_need2check=F)
+
+# %%
+# patch_plus.expand_within_radius(xyz_plus, radius)
+# %%
+p = patch_plus
+xyz_center = xyz_plus
 mv = MeshViewer(m)
-# patch = HalfEdgePatch.from_seed_vertex(ip, m)
-# patch.h_right_B
-patch.expand_by_one_ring()
+
+# p.expand_by_one_ring()
+p.expand_to_radius(xyz_center, radius)
 Fcolor = mv.colors["purple50"]
-Findices = np.array(list(patch.F))
+Findices = np.array(list(p.F))
 mv.update_rgba_F(Fcolor, indices=Findices)
 mv.plot()
+[
+    [i, np.linalg.norm(m.xyz_coord_v(i) - xyz_center)]
+    for i in p.V
+    if np.linalg.norm(m.xyz_coord_v(i) - xyz_center) > radius
+]
 
 # %%
 #
@@ -274,12 +320,20 @@ import yaml
 config_data = {
     "initial_conditions": {"temperature": 300, "pressure": 101.3},
     "simulation_params": {"timestep": 0.01, "duration": 1000},
-    "environment_settings": {"gravity": 9.81, "wind_speed": 5.0},
+    "environment_settings": {"gravity": 9.81, "wind_speed": (5.0, 2.1)},
 }
 
 # Write YAML file
-with open("./output/stretch_sim/config.yaml", "w") as file:
+with open("./output/test_config.yaml", "w") as file:
     yaml.dump(config_data, file)
+
+view = {
+    # "azimuth": 45.0,
+    "azimuth": 90.0,
+    "elevation": 54.7,
+    "distance": 216.0,
+    "focalpoint": np.array([0.0, 0.0, 0.0]),
+}
 
 
 # %%
@@ -404,3 +458,221 @@ float(0.5)
 p = vutukuri_vesicle(config_path="./output/stretch_sim/parameters.yaml")
 e = p.pop("envelope")
 p
+# %%
+
+
+Nv = 5120
+Ne = 3 * Nv - 6
+Nf = 2 * Nv - 4
+ply_path = "./data/half_edge_base/ply/unit_sphere_005120_he.ply"
+
+# vesicle radius at equilibrium
+R = 32
+# thermal energy unit
+kBT = 0.2
+# time scale
+tau = 1.28e5
+
+# friction coefficient
+linear_drag_coeff = 0.4 * kBT * tau / R**2
+
+##########################################
+# KMC parameters
+# flipping frequency
+flip_freq = 6.4e6 / tau
+# flipping probability
+flip_prop = 0.3
+
+##########################################
+# Bending force parameters
+# bending rigidity
+bending_modulus = 20 * kBT
+# spontaneous curvature
+spontaneous_curvature = 0.0
+# splay modulus
+splay_modulus = 0.0
+
+##########################################
+# Area constraint/penalty parameters
+# desired vesicle area
+A = 4 * np.pi * R**2
+# desired face area
+spontaneous_face_area = A / Nf
+# local area stiffness
+area_reg_stiffness = 6.43e6 * kBT / A
+
+##########################################
+# Volume constraint/penalty parameters
+# desired vesicle volume
+spontaneous_volume = 4 * np.pi * R**3 / 3
+# volume stiffness
+volume_reg_stiffness = 1.6e7 * kBT / R**3
+
+################################################
+# Edge length and tethering potential parameters
+# bond stiffness
+length_reg_stiffness = 80 * kBT
+# average bond length
+spontaneous_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
+# minimum bond length
+min_edge_length = 0.6 * spontaneous_edge_length
+# potential cutoff lengths
+tether_cutoff_length1 = 0.8 * spontaneous_edge_length  # onset of repulsion
+tether_cutoff_length0 = 1.2 * spontaneous_edge_length  # onset of attraction
+# maximum bond length
+max_edge_length = 1.4 * spontaneous_edge_length
+
+Lscale = 1.0  # length scale
+Dl = 0.5 * (max_edge_length - min_edge_length)  # = 0.4 * spontaneous_edge_length
+mu = (spontaneous_edge_length - tether_cutoff_length1) / Dl  # = .5
+lam = Lscale / Dl
+nu = Lscale / Dl
+
+brane_kwargs = {
+    "length_reg_stiffness": length_reg_stiffness,
+    "area_reg_stiffness": area_reg_stiffness,
+    "volume_reg_stiffness": volume_reg_stiffness,
+    "bending_modulus": bending_modulus,
+    "splay_modulus": splay_modulus,
+    "spontaneous_curvature": spontaneous_curvature,
+    "linear_drag_coeff": linear_drag_coeff,
+    "spontaneous_edge_length": spontaneous_edge_length,
+    "spontaneous_face_area": spontaneous_face_area,
+    "spontaneous_volume": spontaneous_volume,
+    "tether_Dl": Dl,
+    "tether_mu": mu,
+    "tether_lam": lam,
+    "tether_nu": nu,
+}
+from src.python.half_edge_base_ply_tools import MeshConverterBase
+from src.python.half_edge_base_brane import Brane
+
+m = Brane.from_he_ply(ply_path="./data/half_edge_base/ply/unit_sphere_005120_he.ply")
+
+X = m.xyz_coord_V
+Xcm = np.mean(X, axis=0)
+X = X - Xcm
+R = np.linalg.norm(X, axis=-1)
+X = 32 * (X.T / R).T
+m.xyz_coord_V = X
+
+c = MeshConverterBase.from_he_samples(*m.he_samples)
+newply_path = "./data/half_edge_base/ply/vutukuri_vesicle_005120_he.ply"
+c.write_he_ply(newply_path)
+
+
+kBT = 6.25e-3
+tau = 1.28e5
+bending_modulus = 20 * kBT
+
+# spontaneous_volume = 4 * np.pi * R**3 / 3
+length_reg_stiffness = 80 * kBT
+area_reg_stiffness = 5e5 * kBT / surface_area
+volume_reg_stiffness = 7.5e5 * kBT / interior_volume
+linear_drag_coeff = 1e-1 * kBT * tau / surface_area
+
+brane_kwargs = {
+    "length_reg_stiffness": length_reg_stiffness,
+    "area_reg_stiffness": area_reg_stiffness,
+    "volume_reg_stiffness": volume_reg_stiffness,
+    "bending_modulus": bending_modulus,
+    "spontaneous_curvature": 0.0,
+    "linear_drag_coeff": linear_drag_coeff,
+    # "spontaneous_face_area": spontaneous_face_area,
+    # "spontaneous_volume": spontaneous_volume,
+}
+
+
+# %%
+import numpy as np
+
+Nf = 5120
+# vesicle radius at equilibrium
+R = 32
+# thermal energy unit
+kBT = 0.2
+# time scale
+tau = 1.28e5
+
+# friction coefficient
+linear_drag_coeff = 0.4 * kBT * tau / R**2
+
+##########################################
+# KMC parameters
+# flipping frequency
+flip_freq = 6.4e6 / tau
+# flipping probability
+flip_prop = 0.3
+
+##########################################
+# Bending force parameters
+# bending rigidity
+bending_modulus = 20 * kBT
+# spontaneous curvature
+spontaneous_curvature = 0.0
+# splay modulus
+splay_modulus = 0.0
+
+##########################################
+# Area constraint/penalty parameters
+# desired vesicle area
+A = 4 * np.pi * R**2
+# desired face area
+spontaneous_face_area = A / Nf
+# local area stiffness
+area_reg_stiffness = 6.43e6 * kBT / A
+
+##########################################
+# Volume constraint/penalty parameters
+# desired vesicle volume
+spontaneous_volume = 4 * np.pi * R**3 / 3
+# volume stiffness
+volume_reg_stiffness = 1.6e7 * kBT / R**3
+
+################################################
+# Edge length and tethering potential parameters
+# bond stiffness
+length_reg_stiffness = 80 * kBT
+# average bond length
+spontaneous_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
+# minimum bond length
+min_edge_length = 0.6 * spontaneous_edge_length
+# potential cutoff lengths
+tether_cutoff_length1 = 0.8 * spontaneous_edge_length  # onset of repulsion
+tether_cutoff_length0 = 1.2 * spontaneous_edge_length  # onset of attraction
+# maximum bond length
+max_edge_length = 1.4 * spontaneous_edge_length
+
+Lscale = 1.0  # length scale
+Dl = 0.5 * (max_edge_length - min_edge_length)  # = 0.4 * spontaneous_edge_length
+mu = (spontaneous_edge_length - tether_cutoff_length1) / Dl  # = .5
+lam = Lscale / Dl
+nu = Lscale / Dl
+
+brane_kwargs = {
+    "length_reg_stiffness": length_reg_stiffness,
+    "area_reg_stiffness": area_reg_stiffness,
+    "volume_reg_stiffness": volume_reg_stiffness,
+    "bending_modulus": bending_modulus,
+    "splay_modulus": splay_modulus,
+    "spontaneous_curvature": spontaneous_curvature,
+    "linear_drag_coeff": linear_drag_coeff,
+    "spontaneous_edge_length": spontaneous_edge_length,
+    "spontaneous_face_area": spontaneous_face_area,
+    "spontaneous_volume": spontaneous_volume,
+    "tether_Dl": Dl,
+    "tether_mu": mu,
+    "tether_lam": lam,
+    "tether_nu": nu,
+}
+
+
+# Nv = 30000
+Nv = 40962
+Ne = 3 * Nv - 6
+Nf = 2 * Nv - 4
+# ply_path = "./data/half_edge_base/ply/vutukuri_vesicle_he.ply"
+
+Nf = 5120
+Ne = 3 * Nv - 6
+Nf = 2 * Nv - 4
