@@ -5,6 +5,7 @@
 
 
 def mesh_gen_reg_force():
+    """ """
     import sys
 
     sys.path.append("./")
@@ -117,7 +118,7 @@ def mesh_gen_reg_force():
         F += Fb
         print(f"F={np.linalg.norm(F, np.inf)}")
         v = 0
-        fp_mag = 1e1
+        fp_mag = 1e2
         fp = fp_mag * m.normal_other_weighted_v(v)
         F[v] += fp
         Dxyz_coord_V = dt * F / m.linear_drag_coeff

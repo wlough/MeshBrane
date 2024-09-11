@@ -6,7 +6,7 @@ import os
 import subprocess
 
 
-def make_output_dir(output_dir, overwrite=False):
+def make_output_dir(output_dir, overwrite=False, sub_dirs=None):
     if os.path.exists(output_dir) and overwrite:
         os.system(f"rm -r {output_dir}")
     elif not os.path.exists(output_dir):
@@ -16,6 +16,10 @@ def make_output_dir(output_dir, overwrite=False):
             f"{output_dir} already exists. Choose a different output_dir, or set overwrite=True"
         )
     os.system(f"mkdir -p {output_dir}")
+    if hasattr(sub_dirs, "__iter__"):
+        for sub_dir in sub_dirs:
+            sub_dir_path = os.path.join(output_dir, sub_dir)
+            os.system(f"mkdir -p {sub_dir_path}")
 
 
 def chunk_file_with_split(filename, chunk_size="40M"):

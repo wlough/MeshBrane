@@ -1,7 +1,8 @@
 from src.python.half_edge_base_mesh import HalfEdgeMeshBase
+import numpy as np
 
 
-class HalfEdgePatchBase:
+class HalfEdgePatch:
     """
     A submanifold of a HalfEdgeMesh topologically equivalent to a disk.
     """
@@ -13,7 +14,7 @@ class HalfEdgePatchBase:
         H,
         F,
         h_right_B=None,
-        V_bdry=None,
+        # V_bdry=None,
     ):
         self.supermesh = supermesh
         self.V = V
@@ -21,8 +22,8 @@ class HalfEdgePatchBase:
         self.F = F
         if h_right_B is None:
             self.h_right_B = self.find_h_right_B()
-        if V_bdry is None:
-            self.V_bdry = set(self.generate_V_cw_B())
+        # if V_bdry is None:
+        #     self.V_bdry = set(self.generate_V_negative_bdry())
 
     @property
     def V(self):
@@ -91,11 +92,11 @@ class HalfEdgePatchBase:
 
         return self
 
-    def complement_boundary_contains_h(self, h):
+    def negative_boundary_contains_h(self, h):
         """check if half-edge h is in the boundary of the mesh"""
         return h in self.H and self.supermesh.f_left_h(h) not in self.F
 
-    def interior_boundary_contains_h(self, h):
+    def positive_boundary_contains_h(self, h):
         """check if half-edge h is on the boundary of the mesh"""
         return (
             h in self.H
@@ -110,10 +111,6 @@ class HalfEdgePatchBase:
             if self.supermesh.f_left_h(self.supermesh.h_twin_h(h)) not in self.F:
                 return True
         return False
-
-    # def boundary_contains_v(self, v):
-    #     """check if vertex v is on the boundary of the mesh"""
-    #     return self.boundary_contains_h(self.supermesh.h_out_v(v))
 
     ##############################################
     def xyz_coord_v(self, v):
@@ -203,7 +200,27 @@ class HalfEdgePatchBase:
         elif self.supermesh.f_left_h(h) in self.F:
             return self.supermesh.f_left_h(h)
         else:
-            return -1
+            b = self.b_left_h(h)
+            return -(b + 1)
+
+    def b_left_h(self, h):
+        """get index of the negative boundary containing half-edge h
+
+        Args:
+            h (int): half-edge index
+
+        Returns:
+            int: boundary index
+        """
+        # if h not in self.H:
+        #     raise ValueError("Half-edge not in patch.")
+        # elif self.supermesh.f_left_h(h) in self.F:
+        #     raise ValueError("Half-edge not in negative boundary.")
+        # else:
+        for b, h_start in enumerate(self.h_right_B):
+            if h in self.generate_H_next_h(h_start):
+                return b
+        raise ValueError("Half-edge not in negative boundary.")
 
     def h_bound_f(self, f):
         """get index of a half-edge on the boundary of face f
@@ -226,23 +243,10 @@ class HalfEdgePatchBase:
             if h == h_start:
                 break
 
-    def generate_H_cw_B(self):
-        for bdry, h in self.h_right_B.items():
-            for h in self.generate_H_next_h(h):
-                yield h
-
-    def generate_V_cw_B(self):
-        for h in self.generate_H_cw_B():
-            yield self.v_origin_h(h)
-
-    def generate_F_cw_B(self):
-        for h in self.generate_H_cw_B():
-            yield self.f_left_h(self.h_twin_h(h))
-
     def find_h_right_B(self, F_need2check=None):
-        h_right_B = dict()
+        h_right_B = []
         bdry_count = 0
-        H_in_cw_boundary = set()
+        H_in_positive_boundary = set()
         # boundary_is_right_of_H = set()
         if F_need2check is None:
             F_need2check = self.F.copy()  # set of faces that need to be checked
@@ -250,38 +254,123 @@ class HalfEdgePatchBase:
             f = F_need2check.pop()
             h = self.h_bound_f(f)
             for h in self.generate_H_next_h(h):
-                if self.interior_boundary_contains_h(h):
-                    H_in_cw_boundary.add(self.h_twin_h(h))
-        while H_in_cw_boundary:
+                if self.positive_boundary_contains_h(h):
+                    H_in_positive_boundary.add(self.h_twin_h(h))
+        while H_in_positive_boundary:
             bdry_count += 1
-            h = H_in_cw_boundary.pop()
+            h = H_in_positive_boundary.pop()
             bdry = -bdry_count
-            h_right_B[bdry] = h
+            # h_right_B[bdry] = h
+            h_right_B.append(h)
             for h in self.generate_H_next_h(h):
-                H_in_cw_boundary.discard(h)
-        return h_right_B
+                H_in_positive_boundary.discard(h)
+        return np.array(h_right_B, dtype="int32")
 
-    def expand_boundary(self):
+    def expand_by_one_ring(self):
         """
-        **slow but actually works***
         Expand the boundary of the patch by one ring of vertices, edges, and faces.
 
         Returns:
-            set: set of new boundary vertices
+            set: set of new vertices
         """
-        new_boundary_verts = set()
-        V_bdry_old = set(self.generate_V_cw_B())
-        V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
-        V_bdry_new = V - self.V
-        self.V.update(V)
-        self.H.update(H)
-        self.F.update(F)
+        V_bdry = set(self.generate_V_negative_bdry())
+        V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry, set(), set()))
+        V_new = V - self.V
+        H_new = H - self.H
+        F_new = F - self.F
+        self.V.update(V_new)
+        self.H.update(H_new)
+        self.F.update(F_new)
         self.h_right_B = self.find_h_right_B(F_need2check=F)
-        return V_bdry_new
+        return V_new, H_new, F_new
+
+    ##############################################
+    def he_samples(self):
+
+        V = sorted(self.V)
+        H = sorted(self.H)
+        F = sorted(self.F)
+        xyz_coord_V = np.array([self.xyz_coord_v(v) for v in V])
+        h_out_V = np.array([H.index(self.h_out_v(v)) for v in V], dtype="int32")
+        v_origin_H = np.array([V.index(self.v_origin_h(h)) for h in H], dtype="int32")
+        h_next_H = np.array([H.index(self.h_next_h(h)) for h in H], dtype="int32")
+        h_twin_H = np.array([H.index(self.h_twin_h(h)) for h in H], dtype="int32")
+        f_left_H = np.array(
+            [
+                self.f_left_h(h) if self.f_left_h(h) < 0 else F.index(self.f_left_h(h))
+                for h in H
+            ],
+            dtype="int32",
+        )
+        h_bound_F = np.array([H.index(self.h_bound_f(f)) for f in F], dtype="int32")
+        h_right_B = np.array([H.index(h) for h in self.h_right_B], dtype="int32")
+        return (
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+            h_right_B,
+        )
+
+    ##############################################
+    def generate_H_negative_bdry(self):
+        for h in self.h_right_B:
+            for h in self.generate_H_next_h(h):
+                yield h
+
+    def generate_V_negative_bdry(self):
+        for h in self.generate_H_negative_bdry():
+            yield self.v_origin_h(h)
+
+    ##############################################
+    # to be deprecated
+    @property
+    def data_lists(self):
+        """ """
+        V = sorted(self.V)
+        H = sorted(self.H)
+        F = sorted(self.F)
+        # [x if x<.5 else 33 for x in X]
+        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
+        h_out_V = [H.index(self.h_out_v(v)) for v in V]
+        v_origin_H = [V.index(self.v_origin_h(h)) for h in H]
+        h_next_H = [H.index(self.h_next_h(h)) for h in H]
+        h_twin_H = [H.index(self.h_twin_h(h)) for h in H]
+        f_left_H = [
+            self.f_left_h(h) if self.f_left_h(h) < 0 else F.index(self.f_left_h(h))
+            for h in H
+        ]
+        h_bound_F = [H.index(self.h_bound_f(f)) for f in F]
+
+        return (
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+        )
+
+    def _generate_H_negative_bdry(self):
+        for bdry, h in self.h_right_B.items():
+            for h in self.generate_H_next_h(h):
+                yield h
+
+    def _generate_V_negative_bdry(self):
+        for h in self.generate_H_negative_bdry():
+            yield self.v_origin_h(h)
+
+    def _generate_F_cw_B(self):
+        for h in self.generate_H_negative_bdry():
+            yield self.f_left_h(self.h_twin_h(h))
 
     def _expand_boundary(self):
         """
-        ***this screws up something with boundaries, maybe in generate_H_cw_B/generate_F_cw_B?***
+        ***this screws up something with boundaries, maybe in generate_H_negative_bdry/generate_F_cw_B?***
         Expand the boundary of the patch by one ring of vertices, edges, and faces.
 
         Returns:
@@ -289,11 +378,12 @@ class HalfEdgePatchBase:
         """
         new_boundary_verts = set()
         V, H, F = set(), set(), set()
-        V_bdry_old = set(self.generate_V_cw_B())
-        for h_start in self.generate_H_cw_B():
-            if self.supermesh.complement_boundary_contains_h(h_start):
+        V_bdry_old = set(self.generate_V_negative_bdry())
+        for h_start in self.generate_H_negative_bdry():
+            if self.supermesh.negative_boundary_contains_h(h_start):
                 continue
-            for h in self.supermesh.generate_H_in_cw_from_h(h_start):
+            # for h in self.supermesh.generate_H_in_cw_from_h(h_start): # ***
+            for ht in self.supermesh.generate_H_out_v_clockwise(self, v, h_start=None):
                 f = self.supermesh.f_left_h(h)
                 if f in self.F:
                     break
@@ -323,9 +413,9 @@ class HalfEdgePatchBase:
         """
         new_boundary_verts = set()
         V, H, F = set(), set(), set()
-        V_bdry_old = set(self.generate_V_cw_B())
-        for h_start in self.generate_H_cw_B():
-            if self.supermesh.complement_boundary_contains_h(h_start):
+        V_bdry_old = set(self.generate_V_negative_bdry())
+        for h_start in self.generate_H_negative_bdry():
+            if self.supermesh.negative_boundary_contains_h(h_start):
                 continue
             for h in self.supermesh.generate_H_in_cw_from_h(h_start):
                 f = self.supermesh.f_left_h(h)
@@ -348,51 +438,23 @@ class HalfEdgePatchBase:
         self.h_right_B = self.find_h_right_B(F_need2check=F)
         return V_bdry_new
 
-    ##############################################
-    def to_half_edge_mesh(self):
-        V = sorted(self.V)
-        F = sorted(self.F)
-        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
-        F = [
-            [
-                V.index(self.v_origin_h(h))
-                for h in self.generate_H_next_h(self.h_bound_f(f))
-            ]
-            for f in F
-        ]
-        return HalfEdgeMesh.from_vert_face_list(xyz_coord_V, F)
+    def _expand_boundary(self):
+        """
+        **slow but actually works***
+        Expand the boundary of the patch by one ring of vertices, edges, and faces.
 
-    @property
-    def data_lists(self):
-        """ """
-        V = sorted(self.V)
-        H = sorted(self.H)
-        F = sorted(self.F)
-        # [x if x<.5 else 33 for x in X]
-        xyz_coord_V = [self.xyz_coord_v(v) for v in V]
-        h_out_V = [H.index(self.h_out_v(v)) for v in V]
-        v_origin_H = [V.index(self.v_origin_h(h)) for h in H]
-        h_next_H = [H.index(self.h_next_h(h)) for h in H]
-        h_twin_H = [H.index(self.h_twin_h(h)) for h in H]
-        f_left_H = [
-            self.f_left_h(h) if self.f_left_h(h) < 0 else F.index(self.f_left_h(h))
-            for h in H
-        ]
-        h_bound_F = [H.index(self.h_bound_f(f)) for f in F]
-
-        return (
-            xyz_coord_V,
-            h_out_V,
-            v_origin_H,
-            h_next_H,
-            h_twin_H,
-            f_left_H,
-            h_bound_F,
-        )
-
-    ##############################################
-    ##############################################
-    # to be deprecated
+        Returns:
+            set: set of new boundary vertices
+        """
+        new_boundary_verts = set()
+        V_bdry_old = set(self.generate_V_negative_bdry())
+        V, H, F = self.supermesh.closure(*self.supermesh.star(V_bdry_old, set(), set()))
+        V_bdry_new = V - self.V
+        self.V.update(V)
+        self.H.update(H)
+        self.F.update(F)
+        self.h_right_B = self.find_h_right_B(F_need2check=F)
+        return V_bdry_new
 
 
 ######################################

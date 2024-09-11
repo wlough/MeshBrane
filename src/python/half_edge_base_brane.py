@@ -25,13 +25,13 @@ class Brane(HalfEdgeMeshBase):
         h_bound_F,
         h_right_B,
         #
-        length_reg_stiffness=1e-9,
-        area_reg_stiffness=1e-3,
-        volume_reg_stiffness=1e1,
-        bending_modulus=1e-1,
-        splay_modulus=1e0,
-        spontaneous_curvature=0.0,
-        linear_drag_coeff=1e0,
+        length_reg_stiffness=None,
+        area_reg_stiffness=None,
+        volume_reg_stiffness=None,
+        bending_modulus=None,
+        splay_modulus=None,
+        spontaneous_curvature=None,
+        linear_drag_coeff=None,
         spontaneous_edge_length=None,
         spontaneous_face_area=None,
         spontaneous_volume=None,
@@ -58,17 +58,17 @@ class Brane(HalfEdgeMeshBase):
         self.spontaneous_curvature = spontaneous_curvature
         self.linear_drag_coeff = linear_drag_coeff
 
-        (
-            default_spontaneous_edge_length,
-            default_spontaneous_face_area,
-            default_spontaneous_volume,
-        ) = self.default_spontaneous_length_area_volume()
-        if spontaneous_edge_length is None:
-            spontaneous_edge_length = default_spontaneous_edge_length
-        if spontaneous_face_area is None:
-            spontaneous_face_area = default_spontaneous_face_area
-        if spontaneous_volume is None:
-            spontaneous_volume = default_spontaneous_volume
+        # (
+        #     default_spontaneous_edge_length,
+        #     default_spontaneous_face_area,
+        #     default_spontaneous_volume,
+        # ) = self.default_spontaneous_length_area_volume()
+        # if spontaneous_edge_length is None:
+        #     spontaneous_edge_length = default_spontaneous_edge_length
+        # if spontaneous_face_area is None:
+        #     spontaneous_face_area = default_spontaneous_face_area
+        # if spontaneous_volume is None:
+        # spontaneous_volume = default_spontaneous_volume
         self.spontaneous_edge_length = spontaneous_edge_length
         self.spontaneous_face_area = spontaneous_face_area
         self.spontaneous_volume = spontaneous_volume
