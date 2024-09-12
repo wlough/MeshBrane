@@ -34,11 +34,13 @@ class Brane(HalfEdgeMeshBase):
         linear_drag_coeff=None,
         spontaneous_edge_length=None,
         spontaneous_face_area=None,
+        spontaneous_area=None,
         spontaneous_volume=None,
         tether_Dl=None,
         tether_mu=None,
         tether_lam=None,
         tether_nu=None,
+        **kwargs
     ):
         super().__init__(
             xyz_coord_V,
@@ -58,24 +60,207 @@ class Brane(HalfEdgeMeshBase):
         self.spontaneous_curvature = spontaneous_curvature
         self.linear_drag_coeff = linear_drag_coeff
 
-        # (
-        #     default_spontaneous_edge_length,
-        #     default_spontaneous_face_area,
-        #     default_spontaneous_volume,
-        # ) = self.default_spontaneous_length_area_volume()
+        if spontaneous_area is None:
+            self.spontaneous_area = self.total_area_of_faces()
+        else:
+            self.spontaneous_area = spontaneous_area
+        if spontaneous_volume is None:
+            self.spontaneous_volume = self.total_volume()
+        else:
+            self.spontaneous_volume = spontaneous_volume
+
+        self.spontaneous_face_area = self.spontaneous_area / self.num_faces
+        self.spontaneous_edge_length = np.sqrt(
+            4 * self.spontaneous_face_area / np.sqrt(3) * self.num_faces
+        )
         # if spontaneous_edge_length is None:
-        #     spontaneous_edge_length = default_spontaneous_edge_length
+        #     spontaneous_edge_length = self.default_spontaneous_edge_length()
         # if spontaneous_face_area is None:
-        #     spontaneous_face_area = default_spontaneous_face_area
-        # if spontaneous_volume is None:
-        # spontaneous_volume = default_spontaneous_volume
-        self.spontaneous_edge_length = spontaneous_edge_length
-        self.spontaneous_face_area = spontaneous_face_area
-        self.spontaneous_volume = spontaneous_volume
+        #     spontaneous_face_area = self.default_spontaneous_face_area()
+
+        # self.spontaneous_edge_length = spontaneous_edge_length
+        # self.spontaneous_face_area = spontaneous_face_area
+        # self.spontaneous_volume = spontaneous_volume
         self.tether_Dl = tether_Dl
         self.tether_mu = tether_mu
         self.tether_lam = tether_lam
         self.tether_nu = tether_nu
+
+    def update_params(self, **kwargs):
+        for key, val in kwargs.items():
+            setattr(self, key, val)
+
+    @staticmethod
+    def nondim_params(num_faces=5120, radius=1.0):
+        Nf = num_faces
+        # vesicle radius at equilibrium
+        R = radius
+        # thermal energy unit
+        kBT = 0.2
+        # time scale
+        tau = 1.28e5
+
+        # friction coefficient
+        linear_drag_coeff = 0.4 * kBT * tau / R**2
+
+        ##########################################
+        # KMC parameters
+        # flipping frequency
+        flip_freq = 6.4e6 / tau
+        # flipping probability
+        flip_prop = 0.3
+
+        ##########################################
+        # Bending force parameters
+        # bending rigidity
+        bending_modulus = 20 * kBT
+        # spontaneous curvature
+        spontaneous_curvature = 0.0
+        # splay modulus
+        splay_modulus = 0.0
+
+        ##########################################
+        # Area constraint/penalty parameters
+        # desired vesicle area
+        A = 4 * np.pi * R**2
+        # desired face area
+        spontaneous_face_area = A / Nf
+        # local area stiffness
+        area_reg_stiffness = 6.43e6 * kBT / A
+
+        ##########################################
+        # Volume constraint/penalty parameters
+        # desired vesicle volume
+        spontaneous_volume = 4 * np.pi * R**3 / 3
+        # volume stiffness
+        volume_reg_stiffness = 1.6e7 * kBT / R**3
+
+        ################################################
+        # Edge length and tethering potential parameters
+        # bond stiffness
+        length_reg_stiffness = 80 * kBT
+        # average bond length
+        spontaneous_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
+        # minimum bond length
+        min_edge_length = 0.6 * spontaneous_edge_length
+        # potential cutoff lengths
+        tether_cutoff_length1 = 0.8 * spontaneous_edge_length  # onset of repulsion
+        tether_cutoff_length0 = 1.2 * spontaneous_edge_length  # onset of attraction
+        # maximum bond length
+        max_edge_length = 1.4 * spontaneous_edge_length
+
+        Lscale = 1.0  # length scale
+        Dl = 0.5 * (
+            max_edge_length - min_edge_length
+        )  # = 0.4 * spontaneous_edge_length
+        mu = (spontaneous_edge_length - tether_cutoff_length1) / Dl  # = .5
+        lam = Lscale / Dl
+        nu = Lscale / Dl
+
+        brane_kwargs = {
+            "length_reg_stiffness": length_reg_stiffness,
+            "area_reg_stiffness": area_reg_stiffness,
+            "volume_reg_stiffness": volume_reg_stiffness,
+            "bending_modulus": bending_modulus,
+            "splay_modulus": splay_modulus,
+            "spontaneous_curvature": spontaneous_curvature,
+            "linear_drag_coeff": linear_drag_coeff,
+            "spontaneous_edge_length": spontaneous_edge_length,
+            "spontaneous_face_area": spontaneous_face_area,
+            "spontaneous_volume": spontaneous_volume,
+            "tether_Dl": Dl,
+            "tether_mu": mu,
+            "tether_lam": lam,
+            "tether_nu": nu,
+        }
+        brane_kwargs = {key: float(val) for key, val in brane_kwargs.items()}
+        return brane_kwargs
+
+    @staticmethod
+    def vutukuri_params(num_faces=5120, radius=1.0):
+        Nf = num_faces
+        # vesicle radius at equilibrium
+        R = radius
+        # thermal energy unit
+        kBT = 0.2
+        # time scale
+        tau = 1.28e5
+
+        # friction coefficient
+        linear_drag_coeff = 0.4 * kBT * tau / R**2
+
+        ##########################################
+        # KMC parameters
+        # flipping frequency
+        flip_freq = 6.4e6 / tau
+        # flipping probability
+        flip_prop = 0.3
+
+        ##########################################
+        # Bending force parameters
+        # bending rigidity
+        bending_modulus = 20 * kBT
+        # spontaneous curvature
+        spontaneous_curvature = 0.0
+        # splay modulus
+        splay_modulus = 0.0
+
+        ##########################################
+        # Area constraint/penalty parameters
+        # desired vesicle area
+        A = 4 * np.pi * R**2
+        # desired face area
+        spontaneous_face_area = A / Nf
+        # local area stiffness
+        area_reg_stiffness = 6.43e6 * kBT / A
+
+        ##########################################
+        # Volume constraint/penalty parameters
+        # desired vesicle volume
+        spontaneous_volume = 4 * np.pi * R**3 / 3
+        # volume stiffness
+        volume_reg_stiffness = 1.6e7 * kBT / R**3
+
+        ################################################
+        # Edge length and tethering potential parameters
+        # bond stiffness
+        length_reg_stiffness = 80 * kBT
+        # average bond length
+        spontaneous_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
+        # minimum bond length
+        min_edge_length = 0.6 * spontaneous_edge_length
+        # potential cutoff lengths
+        tether_cutoff_length1 = 0.8 * spontaneous_edge_length  # onset of repulsion
+        tether_cutoff_length0 = 1.2 * spontaneous_edge_length  # onset of attraction
+        # maximum bond length
+        max_edge_length = 1.4 * spontaneous_edge_length
+
+        Lscale = 1.0  # length scale
+        Dl = 0.5 * (
+            max_edge_length - min_edge_length
+        )  # = 0.4 * spontaneous_edge_length
+        mu = (spontaneous_edge_length - tether_cutoff_length1) / Dl  # = .5
+        lam = Lscale / Dl
+        nu = Lscale / Dl
+
+        brane_kwargs = {
+            "length_reg_stiffness": length_reg_stiffness,
+            "area_reg_stiffness": area_reg_stiffness,
+            "volume_reg_stiffness": volume_reg_stiffness,
+            "bending_modulus": bending_modulus,
+            "splay_modulus": splay_modulus,
+            "spontaneous_curvature": spontaneous_curvature,
+            "linear_drag_coeff": linear_drag_coeff,
+            "spontaneous_edge_length": spontaneous_edge_length,
+            "spontaneous_face_area": spontaneous_face_area,
+            "spontaneous_volume": spontaneous_volume,
+            "tether_Dl": Dl,
+            "tether_mu": mu,
+            "tether_lam": lam,
+            "tether_nu": nu,
+        }
+        brane_kwargs = {key: float(val) for key, val in brane_kwargs.items()}
+        return brane_kwargs
 
     @classmethod
     def vutukuri_vesicle(cls):
@@ -177,7 +362,7 @@ class Brane(HalfEdgeMeshBase):
         return m
 
     @classmethod
-    def unscaled_vutukuri_vesicle(cls):
+    def unit_vutukuri_vesicle(cls):
 
         # number of vertices/edges/faces
         # Nf-Ne+Nv=2
@@ -190,13 +375,14 @@ class Brane(HalfEdgeMeshBase):
         # Nf = 2 * Nv - 4
         # ply_path = "./data/half_edge_base/ply/vutukuri_vesicle_he.ply"
 
-        Nv = 5120
-        Ne = 3 * Nv - 6
-        Nf = 2 * Nv - 4
+        # Nv = 5120
+        # Ne = 3 * Nv - 6
+        # Nf = 2 * Nv - 4
+        Nf = 5120
         ply_path = "./data/half_edge_base/ply/unit_sphere_005120_he.ply"
 
         # vesicle radius at equilibrium
-        R = 32
+        R = 1.0
         # thermal energy unit
         kBT = 0.2
         # time scale
@@ -280,19 +466,14 @@ class Brane(HalfEdgeMeshBase):
 
         return m
 
-    def default_spontaneous_length_area_volume(self):
-        Nf = self.num_faces
-        Nv = self.num_vertices
-        volume = self.total_volume()
-        area = self.total_area_of_faces()
-        Rv = (3 * volume / (4 * np.pi)) ** (1 / 3)
-        Ra = np.sqrt(area / (4 * np.pi))
-        w = 0.75
-        R = (1 - w) * Ra + w * Rv
-        spontaneous_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
-        spontaneous_face_area = 4 * np.pi * R**2 / Nf
-        spontaneous_volume = 4 * np.pi * R**3 / 3
-        return spontaneous_edge_length, spontaneous_face_area, spontaneous_volume
+    def default_spontaneous_edge_length(self):
+        return np.mean(self.length_H())
+
+    def default_spontaneous_face_area(self):
+        return self.total_area_of_faces() / self.num_faces
+
+    def default_spontaneous_volume(self):
+        return self.total_volume()
 
     ######################################################
     # experimental stuff
@@ -580,23 +761,69 @@ class Brane(HalfEdgeMeshBase):
         self.unit_normal = n
 
     # Bending
-    def Fbend_harmonic(self, Nsmooth=0):
+    def Fbend_harmonic(self):
         """from Tu"""
-        Kbend = self.bending_modulus
-        H, K = self.get_angle_weighted_arc_curvatures()
-        for _ in range(Nsmooth):
-            H = self.gaussian_smooth_samples(H, 1, a)
-            K = self.gaussian_smooth_samples(K, 1, a)
-        Nv = H.shape[0]
-        lapH = self.cotan_laplacian(H)
-        F = np.zeros((Nv, 3))
-        Fdensity = -2 * B * (lapH + 2 * H * (H**2 - K))
-        Fn = -2 * B * (lapH + 2 * H * (H**2 - K))
 
-        for v in range(Nv):
-            n = self.other_weighted_vertex_normal(v)
-            Av = self.vorcell_area(v)
-            F[v] = Fn[v] * n * Av
+        def delta(i, j):
+            return 1 if i == j else 0
+
+        def L(i, j):
+            return np.linalg.norm(self.xyz_coord_v(i) - self.xyz_coord_v(j))
+
+        def dL2_dx(i, j, l):
+            xi = self.xyz_coord_v(i)
+            xj = self.xyz_coord_v(j)
+            dil = delta(i, l)
+            djl = delta(j, l)
+            return 2 * (xi - xj) * (dil - djl)
+
+        def chi(i, j, m):
+            xi = self.xyz_coord_v(i)
+            xj = self.xyz_coord_v(j)
+            xm = self.xyz_coord_v(m)
+            Lim = L(i, m)
+            Ljm = L(j, m)
+            return np.dot(xi - xm, xj - xm) / (L(i, m) * L(j, m))
+
+        def T(i, j, jm1, jp1):
+            chi_ijjp1 = chi(i, j, jp1)
+            chi_ijjm1 = chi(i, j, jm1)
+            return chi_ijjp1 / np.sqrt(1 - chi_ijjp1**2) + chi_ijjm1 / np.sqrt(
+                1 - chi_ijjm1**2
+            )
+
+        def dchi_dx(i, j, m, l):
+            xi = self.xyz_coord_v(i)
+            xj = self.xyz_coord_v(j)
+            xm = self.xyz_coord_v(m)
+            Lim = L(i, m)
+            Ljm = L(j, m)
+            dil = delta(i, l)
+            dml = delta(m, l)
+            djl = delta(j, l)
+            chi_ijm = chi(i, j, m)
+
+            return (
+                (dil - dml) * (xj - xm)
+                + (djl - dml) * (xi - xm)
+                - (dil - dml) * (xi - xm) * chi_ijm * Ljm / Lim
+                - (djl - dml) * (xj - xm) * chi_ijm * Lim / Ljm
+            ) / (Lim * Ljm)
+
+        def dT_dx(i, j, jm1, jp1, l):
+            chi_ijjp1 = chi(i, j, jp1)
+            chi_ijjm1 = chi(i, j, jm1)
+            dchi_ijjp1_dxl = dchi_dx(i, j, jp1, l)
+            dchi_ijjm1_dxl = dchi_dx(i, j, jm1, l)
+            return (
+                dchi_ijjm1_dxl / (1 - chi_ijjm1**2) ** 1.5
+                + dchi_ijjp1_dxl / (1 - chi_ijjp1**2) ** 1.5
+            )
+
+        F = np.zeros_like(self.xyz_coord_V)
+        Nv = self.num_vertices
+        for l in range(Nv):
+            pass
         return F
 
     # def Flength(self):

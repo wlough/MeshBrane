@@ -10,14 +10,14 @@ from src.python.half_edge_base_viewer import MeshViewer
 
 
 def unit_bump(s):
-    if abs(s) < 1:
-        return np.exp(1 + -1 / (1 - s**2))
-    else:
-        return 0
+    val = np.zeros_like(s)
+    I = np.abs(s) < 1.0
+    val[I] = np.exp(1 + -1 / (1 - s[I] ** 2))
+    return val
 
 
 def bump3(xyz, center, radius):
-    s = np.linalg.norm(xyz - center) / radius
+    s = np.linalg.norm(xyz - center, axis=-1) / radius
     return unit_bump(s)
 
 
@@ -40,9 +40,11 @@ class SpbForce:
 
         V_plus = np.array(sorted(patch_plus.V))
         center_plus = envelope.xyz_coord_v(seed_plus)
-        f_plus = np.array(
-            [bump3(envelope.xyz_coord_v(i), center_plus, radius) for i in V_plus]
-        )
+        # f_plus = np.array(
+        #     [bump3(envelope.xyz_coord_v(i), center_plus, radius) for i in V_plus]
+        # )
+        f_plus = bump3(envelope.xyz_coord_V[V_plus], center_plus, radius)
+
         f_plus *= self.magnitude / np.sum(f_plus)
         F_plus = np.einsum("i,j->ij", f_plus, [1, 0, 0])
 
@@ -131,9 +133,9 @@ class StretchSim:
         mesh_viewer_params["figsize"] = (720, 720)
         mesh_viewer_params["image_dir"] = s.temp_images_dir
         s.mesh_viewer = MeshViewer(m, **mesh_viewer_params)
-        s.logger.info(f"Initialized envelope with parameters: {s.envelope.__dict__}")
+        s.logger.info(f"Initialized envelope with parameters: {envelope_params}")
         s.spb_force = SpbForce(m, **spb_force_params)
-        s.logger.info(f"Initialized SPB force with parameters: {s.spb_force.__dict__}")
+        s.logger.info(f"Initialized SPB force with parameters: {spb_force_params}")
 
         Fcolor = s.mesh_viewer.colors["purple50"]
         Findices = np.array(list(s.spb_force.patch_plus.F | s.spb_force.patch_minus.F))
@@ -195,28 +197,35 @@ class StretchSim:
     def run(self):
         mv = self.mesh_viewer
         # mv.view = None
-        print(mv.view)
-        mv.view.pop("distance")
+        # print(mv.view)
+        # mv.view.pop("distance")
         m = self.envelope
         spb = self.spb_force
+        spb_num_verts = len(spb.V_plus) + len(spb.V_minus)
+        spb_scale = spb_num_verts * spb.radius / spb.magnitude
         t = 0
         dt = self.dt
         T = self.T
         points, vectors = spb.points_vecs()
-        mag = spb.magnitude
-        scale = 320 / mag
+        # mag = spb.magnitude
+        # scale = 320 / mag
 
         mv.clear_vector_field_data()
-        mv.add_vector_field(points, scale * vectors)
+        mv.add_vector_field(points, spb_scale * vectors)
         mv.plot(save=True, show=False, title=f"{t=}")
         while t <= T:
             self.time_step()
             points, vectors = spb.points_vecs()
-            mag = spb.magnitude
-            scale = 320 / mag
+            # mag = spb.magnitude
+            # rad = spb.radius
+            # spb_scale = spb.radius / spb.magnitude
+            # Aspb = np.pi*rad**2
+            # Fave = mag/Aspb
+            # scale = 320 / mag
+            # scale = 1
 
             mv.clear_vector_field_data()
-            mv.add_vector_field(points, scale * vectors)
+            mv.add_vector_field(points, spb_scale * vectors)
             t += dt
             print(f"{t=}                ", end="\r")
             mv.plot(save=True, show=False, title=f"{t=}")

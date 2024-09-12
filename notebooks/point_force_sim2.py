@@ -4,18 +4,14 @@ from src.python.stetch_sim import StretchSim, SpbForce
 from src.python.half_edge_base_patch import HalfEdgePatch
 import numpy as np
 
-output_dir = "./output/stretch_test"
+output_dir = "./output/stretch_sim"
 # StretchSim.make_output_dir(output_dir=output_dir, overwrite=True)
-# parameters_path = "./output/stretch_test.yaml"
-parameters_path = "./data/shane.yaml"
+parameters_path = "./output/stretch_test.yaml"
 sim = StretchSim.from_parameters_file(parameters_path, output_dir)
 
 sim.run()
-# %%
 # sim.time_step()
 # sim.mesh_viewer.plot()
-R = 1
-A = 4 * np.pi * R**2
 
 # sim.time_step()
 # %%

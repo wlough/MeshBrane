@@ -1,3 +1,10 @@
+# os.path.exists
+# os.path.join
+# os.path.relpath
+# os.getcwd
+# os.chdir
+# os.path.basename
+
 from src.python.half_edge_base_mesh import HalfEdgeMeshBase
 from src.python.half_edge_base_brane import Brane
 from src.python.half_edge_base_viewer import MeshViewer

@@ -1,0 +1,35 @@
+run_name: run_0000
+T: 50
+dt: 0.005
+dt_record_data: 0.1
+dt_write_data: 0.5
+dt_checkpoint: 1
+envelope:
+  ply_path: ./data/half_edge_base/ply/unit_sphere_001280_he.ply
+  length_reg_stiffness: 16.1 # 80.5
+  area_reg_stiffness: 0.1 # 1 # 5.03
+  volume_reg_stiffness: 0.3 # 3.0 # 15.2
+  bending_modulus: 0.4 # 4.0 # 20.1
+  splay_modulus: 0.0
+  spontaneous_curvature: 0.0
+  # linear_drag_coeff: 0.2 # 0.02
+  linear_drag_coeff: 1.0 # 0.02
+  # spontaneous_edge_length: 2.4
+  # spontaneous_face_area: 2.5
+  # spontaneous_volume: 137258.0
+  tether_Dl: 0.96
+  tether_mu: 0.5
+  tether_lam: 1.04
+  tether_nu: 1.04
+spb_force:
+  magnitude: 32.0
+  radius: .25
+mesh_viewer:
+  view:
+    azimuth: 90.0
+    elevation: 55.0
+    # distance: 216.0
+    focalpoint:
+      - 0.0
+      - 0.0
+      - 0.0
