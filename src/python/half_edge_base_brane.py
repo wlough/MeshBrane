@@ -14,6 +14,56 @@ from src.python.global_vars import _INT_TYPE_, _FLOAT_TYPE_
 # Timestepping
 # -Velocity Verlet
 class Brane(HalfEdgeMeshBase):
+    """
+    Membrane model
+
+    HalfEdgeMesh parameters
+    -----------------------
+    ...
+
+    Parameters
+    ----------
+    preferred_area : float (Length^2)
+        preferred surface area
+    preferred_volume : float (Length^3)
+        preferred interior volume
+    spontaneous_curvature : float (1/Length)
+        spontaneous mean curvature
+    bending_modulus : float (Energy)
+        bending rigidity
+    splay_modulus : float (Energy)
+        splay modulus
+    volume_reg_stiffness : float (Energy/Length^3)
+        volume constraint stiffness
+    area_reg_stiffness : float (Energy/Length^2)
+        area constraint stiffness
+
+    tether_stiffness : float (Energy)
+        edge length constraint stiffness
+    tether_repulsive_onset : float (Dimensionless)
+        onset of repulsive penalty
+    tether_repulsive_singularity : float (Dimensionless)
+        tethering potential minimum length
+    tether_attractive_onset : float (Dimensionless)
+        onset of attractive penalty
+    tether_attractive_singularity : float (Dimensionless)
+        tethering potential max length
+
+    drag_coefficient : float
+        friction coefficient
+    flipping_frequency : float
+        flipping frequency
+    flipping_probability : float
+        flipping probability
+
+    length_unit : float
+        characteristic length scale
+    energy_unit : float
+        characteristic energy scale
+    time_unit : float
+        characteristic time scale
+    """
+
     def __init__(
         self,
         xyz_coord_V,
@@ -25,21 +75,30 @@ class Brane(HalfEdgeMeshBase):
         h_bound_F,
         h_right_B,
         #
-        length_reg_stiffness=None,
-        area_reg_stiffness=None,
-        volume_reg_stiffness=None,
+        preferred_area=None,
+        preferred_volume=None,
+        #
+        spontaneous_curvature=None,
         bending_modulus=None,
         splay_modulus=None,
-        spontaneous_curvature=None,
-        linear_drag_coeff=None,
-        spontaneous_edge_length=None,
-        spontaneous_face_area=None,
-        spontaneous_area=None,
-        spontaneous_volume=None,
-        tether_Dl=None,
-        tether_mu=None,
-        tether_lam=None,
-        tether_nu=None,
+        #
+        volume_reg_stiffness=None,
+        area_reg_stiffness=None,
+        #
+        tether_stiffness=None,
+        tether_repulsive_onset=None,
+        tether_repulsive_singularity=None,
+        tether_attractive_onset=None,
+        tether_attractive_singularity=None,
+        #
+        drag_coefficient=None,
+        #
+        flipping_frequency=None,
+        flipping_probability=None,
+        #
+        # length_unit=1.0,
+        # energy_unit=1.0,
+        # time_unit=1.0,
         **kwargs
     ):
         super().__init__(
@@ -52,126 +111,88 @@ class Brane(HalfEdgeMeshBase):
             h_bound_F,
             h_right_B,
         )
-        self.length_reg_stiffness = length_reg_stiffness
-        self.area_reg_stiffness = area_reg_stiffness
-        self.volume_reg_stiffness = volume_reg_stiffness
+        if preferred_area is None:
+            preferred_area = self.total_area_of_faces()
+        if preferred_volume is None:
+            preferred_volume = self.total_volume()
+        self.preferred_area = preferred_area
+        self.preferred_volume = preferred_volume
+        #
+        self.spontaneous_curvature = spontaneous_curvature
         self.bending_modulus = bending_modulus
         self.splay_modulus = splay_modulus
-        self.spontaneous_curvature = spontaneous_curvature
-        self.linear_drag_coeff = linear_drag_coeff
-
-        if spontaneous_area is None:
-            self.spontaneous_area = self.total_area_of_faces()
-        else:
-            self.spontaneous_area = spontaneous_area
-        if spontaneous_volume is None:
-            self.spontaneous_volume = self.total_volume()
-        else:
-            self.spontaneous_volume = spontaneous_volume
-
-        self.spontaneous_face_area = self.spontaneous_area / self.num_faces
-        self.spontaneous_edge_length = np.sqrt(
-            4 * self.spontaneous_face_area / np.sqrt(3) * self.num_faces
-        )
-        # if spontaneous_edge_length is None:
-        #     spontaneous_edge_length = self.default_spontaneous_edge_length()
-        # if spontaneous_face_area is None:
-        #     spontaneous_face_area = self.default_spontaneous_face_area()
-
-        # self.spontaneous_edge_length = spontaneous_edge_length
-        # self.spontaneous_face_area = spontaneous_face_area
-        # self.spontaneous_volume = spontaneous_volume
-        self.tether_Dl = tether_Dl
-        self.tether_mu = tether_mu
-        self.tether_lam = tether_lam
-        self.tether_nu = tether_nu
+        #
+        self.volume_reg_stiffness = volume_reg_stiffness
+        self.area_reg_stiffness = area_reg_stiffness
+        #
+        self.tether_stiffness = tether_stiffness
+        self.tether_repulsive_onset = tether_repulsive_onset
+        self.tether_repulsive_singularity = tether_repulsive_singularity
+        self.tether_attractive_onset = tether_attractive_onset
+        self.tether_attractive_singularity = tether_attractive_singularity
+        #
+        self.drag_coefficient = drag_coefficient
+        #
+        self.flipping_frequency = flipping_frequency
+        self.flipping_probability = flipping_probability
+        ################################################
+        self.preferred_face_area = self.preferred_area / self.num_faces
+        self.preferred_edge_length = np.sqrt(4 * self.preferred_face_area / np.sqrt(3))
 
     def update_params(self, **kwargs):
         for key, val in kwargs.items():
             setattr(self, key, val)
 
+        if "preferred_area" not in kwargs:
+            self.preferred_area = self.total_area_of_faces()
+        if "preferred_volume" not in kwargs:
+            self.preferred_volume = self.total_volume()
+        self.preferred_face_area = self.preferred_area / self.num_faces
+        self.preferred_edge_length = np.sqrt(4 * self.preferred_face_area / np.sqrt(3))
+
     @staticmethod
-    def nondim_params(num_faces=5120, radius=1.0):
-        Nf = num_faces
-        # vesicle radius at equilibrium
-        R = radius
-        # thermal energy unit
-        kBT = 0.2
-        # time scale
-        tau = 1.28e5
+    def default_params():
+        length_unit = 1.0
+        energy_unit = 6.25e-3  # .2/32
+        time_unit = 1e5
 
-        # friction coefficient
-        linear_drag_coeff = 0.4 * kBT * tau / R**2
-
-        ##########################################
-        # KMC parameters
-        # flipping frequency
-        flip_freq = 6.4e6 / tau
-        # flipping probability
-        flip_prop = 0.3
-
-        ##########################################
-        # Bending force parameters
-        # bending rigidity
-        bending_modulus = 20 * kBT
-        # spontaneous curvature
-        spontaneous_curvature = 0.0
-        # splay modulus
-        splay_modulus = 0.0
-
-        ##########################################
-        # Area constraint/penalty parameters
-        # desired vesicle area
-        A = 4 * np.pi * R**2
-        # desired face area
-        spontaneous_face_area = A / Nf
-        # local area stiffness
-        area_reg_stiffness = 6.43e6 * kBT / A
-
-        ##########################################
-        # Volume constraint/penalty parameters
-        # desired vesicle volume
-        spontaneous_volume = 4 * np.pi * R**3 / 3
-        # volume stiffness
-        volume_reg_stiffness = 1.6e7 * kBT / R**3
-
-        ################################################
-        # Edge length and tethering potential parameters
-        # bond stiffness
-        length_reg_stiffness = 80 * kBT
-        # average bond length
-        spontaneous_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
-        # minimum bond length
-        min_edge_length = 0.6 * spontaneous_edge_length
-        # potential cutoff lengths
-        tether_cutoff_length1 = 0.8 * spontaneous_edge_length  # onset of repulsion
-        tether_cutoff_length0 = 1.2 * spontaneous_edge_length  # onset of attraction
-        # maximum bond length
-        max_edge_length = 1.4 * spontaneous_edge_length
-
-        Lscale = 1.0  # length scale
-        Dl = 0.5 * (
-            max_edge_length - min_edge_length
-        )  # = 0.4 * spontaneous_edge_length
-        mu = (spontaneous_edge_length - tether_cutoff_length1) / Dl  # = .5
-        lam = Lscale / Dl
-        nu = Lscale / Dl
+        spontaneous_curvature = 0.0 / length_unit
+        bending_modulus = 20.0 * energy_unit
+        splay_modulus = 0.0 * energy_unit
+        #
+        volume_reg_stiffness = 1.6e7 * energy_unit / length_unit**3
+        area_reg_stiffness = 6.43e6 * energy_unit / length_unit**2
+        #
+        tether_stiffness = 80.0 * energy_unit
+        tether_repulsive_onset = 0.8
+        tether_repulsive_singularity = 0.6
+        tether_attractive_onset = 1.2
+        tether_attractive_singularity = 1.4
+        #
+        drag_coefficient = 0.4 * energy_unit * time_unit / length_unit**2
+        #
+        flipping_frequency = 1e6 / time_unit
+        flipping_probability = 0.3
+        #
 
         brane_kwargs = {
-            "length_reg_stiffness": length_reg_stiffness,
-            "area_reg_stiffness": area_reg_stiffness,
-            "volume_reg_stiffness": volume_reg_stiffness,
+            "spontaneous_curvature": spontaneous_curvature,
             "bending_modulus": bending_modulus,
             "splay_modulus": splay_modulus,
-            "spontaneous_curvature": spontaneous_curvature,
-            "linear_drag_coeff": linear_drag_coeff,
-            "spontaneous_edge_length": spontaneous_edge_length,
-            "spontaneous_face_area": spontaneous_face_area,
-            "spontaneous_volume": spontaneous_volume,
-            "tether_Dl": Dl,
-            "tether_mu": mu,
-            "tether_lam": lam,
-            "tether_nu": nu,
+            #
+            "volume_reg_stiffness": volume_reg_stiffness,
+            "area_reg_stiffness": area_reg_stiffness,
+            #
+            "tether_stiffness": tether_stiffness,
+            "tether_repulsive_onset": tether_repulsive_onset,
+            "tether_repulsive_singularity": tether_repulsive_singularity,
+            "tether_attractive_onset": tether_attractive_onset,
+            "tether_attractive_singularity": tether_attractive_singularity,
+            #
+            "drag_coefficient": drag_coefficient,
+            #
+            "flipping_frequency": flipping_frequency,
+            "flipping_probability": flipping_probability,
         }
         brane_kwargs = {key: float(val) for key, val in brane_kwargs.items()}
         return brane_kwargs
@@ -187,7 +208,7 @@ class Brane(HalfEdgeMeshBase):
         tau = 1.28e5
 
         # friction coefficient
-        linear_drag_coeff = 0.4 * kBT * tau / R**2
+        drag_coefficient = 0.4 * kBT * tau / R**2
 
         ##########################################
         # KMC parameters
@@ -210,50 +231,48 @@ class Brane(HalfEdgeMeshBase):
         # desired vesicle area
         A = 4 * np.pi * R**2
         # desired face area
-        spontaneous_face_area = A / Nf
+        preferred_face_area = A / Nf
         # local area stiffness
         area_reg_stiffness = 6.43e6 * kBT / A
 
         ##########################################
         # Volume constraint/penalty parameters
         # desired vesicle volume
-        spontaneous_volume = 4 * np.pi * R**3 / 3
+        preferred_volume = 4 * np.pi * R**3 / 3
         # volume stiffness
         volume_reg_stiffness = 1.6e7 * kBT / R**3
 
         ################################################
         # Edge length and tethering potential parameters
         # bond stiffness
-        length_reg_stiffness = 80 * kBT
+        tether_stiffness = 80 * kBT
         # average bond length
-        spontaneous_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
+        preferred_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
         # minimum bond length
-        min_edge_length = 0.6 * spontaneous_edge_length
+        min_edge_length = 0.6 * preferred_edge_length
         # potential cutoff lengths
-        tether_cutoff_length1 = 0.8 * spontaneous_edge_length  # onset of repulsion
-        tether_cutoff_length0 = 1.2 * spontaneous_edge_length  # onset of attraction
+        tether_cutoff_length1 = 0.8 * preferred_edge_length  # onset of repulsion
+        tether_cutoff_length0 = 1.2 * preferred_edge_length  # onset of attraction
         # maximum bond length
-        max_edge_length = 1.4 * spontaneous_edge_length
+        max_edge_length = 1.4 * preferred_edge_length
 
         Lscale = 1.0  # length scale
-        Dl = 0.5 * (
-            max_edge_length - min_edge_length
-        )  # = 0.4 * spontaneous_edge_length
-        mu = (spontaneous_edge_length - tether_cutoff_length1) / Dl  # = .5
+        Dl = 0.5 * (max_edge_length - min_edge_length)  # = 0.4 * preferred_edge_length
+        mu = (preferred_edge_length - tether_cutoff_length1) / Dl  # = .5
         lam = Lscale / Dl
         nu = Lscale / Dl
 
         brane_kwargs = {
-            "length_reg_stiffness": length_reg_stiffness,
+            "tether_stiffness": tether_stiffness,
             "area_reg_stiffness": area_reg_stiffness,
             "volume_reg_stiffness": volume_reg_stiffness,
             "bending_modulus": bending_modulus,
             "splay_modulus": splay_modulus,
             "spontaneous_curvature": spontaneous_curvature,
-            "linear_drag_coeff": linear_drag_coeff,
-            "spontaneous_edge_length": spontaneous_edge_length,
-            "spontaneous_face_area": spontaneous_face_area,
-            "spontaneous_volume": spontaneous_volume,
+            "drag_coefficient": drag_coefficient,
+            "preferred_edge_length": preferred_edge_length,
+            "preferred_face_area": preferred_face_area,
+            "preferred_volume": preferred_volume,
             "tether_Dl": Dl,
             "tether_mu": mu,
             "tether_lam": lam,
@@ -284,7 +303,7 @@ class Brane(HalfEdgeMeshBase):
         tau = 1.28e5
 
         # friction coefficient
-        linear_drag_coeff = 0.4 * kBT * tau / R**2
+        drag_coefficient = 0.4 * kBT * tau / R**2
 
         ##########################################
         # KMC parameters
@@ -307,50 +326,48 @@ class Brane(HalfEdgeMeshBase):
         # desired vesicle area
         A = 4 * np.pi * R**2
         # desired face area
-        spontaneous_face_area = A / Nf
+        preferred_face_area = A / Nf
         # local area stiffness
         area_reg_stiffness = 6.43e6 * kBT / A
 
         ##########################################
         # Volume constraint/penalty parameters
         # desired vesicle volume
-        spontaneous_volume = 4 * np.pi * R**3 / 3
+        preferred_volume = 4 * np.pi * R**3 / 3
         # volume stiffness
         volume_reg_stiffness = 1.6e7 * kBT / R**3
 
         ################################################
         # Edge length and tethering potential parameters
         # bond stiffness
-        length_reg_stiffness = 80 * kBT
+        tether_stiffness = 80 * kBT
         # average bond length
-        spontaneous_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
+        preferred_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
         # minimum bond length
-        min_edge_length = 0.6 * spontaneous_edge_length
+        min_edge_length = 0.6 * preferred_edge_length
         # potential cutoff lengths
-        tether_cutoff_length1 = 0.8 * spontaneous_edge_length  # onset of repulsion
-        tether_cutoff_length0 = 1.2 * spontaneous_edge_length  # onset of attraction
+        tether_cutoff_length1 = 0.8 * preferred_edge_length  # onset of repulsion
+        tether_cutoff_length0 = 1.2 * preferred_edge_length  # onset of attraction
         # maximum bond length
-        max_edge_length = 1.4 * spontaneous_edge_length
+        max_edge_length = 1.4 * preferred_edge_length
 
         Lscale = 1.0  # length scale
-        Dl = 0.5 * (
-            max_edge_length - min_edge_length
-        )  # = 0.4 * spontaneous_edge_length
-        mu = (spontaneous_edge_length - tether_cutoff_length1) / Dl  # = .5
+        Dl = 0.5 * (max_edge_length - min_edge_length)  # = 0.4 * preferred_edge_length
+        mu = (preferred_edge_length - tether_cutoff_length1) / Dl  # = .5
         lam = Lscale / Dl
         nu = Lscale / Dl
 
         brane_kwargs = {
-            "length_reg_stiffness": length_reg_stiffness,
+            "tether_stiffness": tether_stiffness,
             "area_reg_stiffness": area_reg_stiffness,
             "volume_reg_stiffness": volume_reg_stiffness,
             "bending_modulus": bending_modulus,
             "splay_modulus": splay_modulus,
             "spontaneous_curvature": spontaneous_curvature,
-            "linear_drag_coeff": linear_drag_coeff,
-            "spontaneous_edge_length": spontaneous_edge_length,
-            "spontaneous_face_area": spontaneous_face_area,
-            "spontaneous_volume": spontaneous_volume,
+            "drag_coefficient": drag_coefficient,
+            "preferred_edge_length": preferred_edge_length,
+            "preferred_face_area": preferred_face_area,
+            "preferred_volume": preferred_volume,
             "tether_Dl": Dl,
             "tether_mu": mu,
             "tether_lam": lam,
@@ -389,7 +406,7 @@ class Brane(HalfEdgeMeshBase):
         tau = 1.28e5
 
         # friction coefficient
-        linear_drag_coeff = 0.4 * kBT * tau / R**2
+        drag_coefficient = 0.4 * kBT * tau / R**2
 
         ##########################################
         # KMC parameters
@@ -412,50 +429,48 @@ class Brane(HalfEdgeMeshBase):
         # desired vesicle area
         A = 4 * np.pi * R**2
         # desired face area
-        spontaneous_face_area = A / Nf
+        preferred_face_area = A / Nf
         # local area stiffness
         area_reg_stiffness = 6.43e6 * kBT / A
 
         ##########################################
         # Volume constraint/penalty parameters
         # desired vesicle volume
-        spontaneous_volume = 4 * np.pi * R**3 / 3
+        preferred_volume = 4 * np.pi * R**3 / 3
         # volume stiffness
         volume_reg_stiffness = 1.6e7 * kBT / R**3
 
         ################################################
         # Edge length and tethering potential parameters
         # bond stiffness
-        length_reg_stiffness = 80 * kBT
+        tether_stiffness = 80 * kBT
         # average bond length
-        spontaneous_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
+        preferred_edge_length = 4 * R * np.sqrt(np.pi / (Nf * np.sqrt(3)))
         # minimum bond length
-        min_edge_length = 0.6 * spontaneous_edge_length
+        min_edge_length = 0.6 * preferred_edge_length
         # potential cutoff lengths
-        tether_cutoff_length1 = 0.8 * spontaneous_edge_length  # onset of repulsion
-        tether_cutoff_length0 = 1.2 * spontaneous_edge_length  # onset of attraction
+        tether_cutoff_length1 = 0.8 * preferred_edge_length  # onset of repulsion
+        tether_cutoff_length0 = 1.2 * preferred_edge_length  # onset of attraction
         # maximum bond length
-        max_edge_length = 1.4 * spontaneous_edge_length
+        max_edge_length = 1.4 * preferred_edge_length
 
         Lscale = 1.0  # length scale
-        Dl = 0.5 * (
-            max_edge_length - min_edge_length
-        )  # = 0.4 * spontaneous_edge_length
-        mu = (spontaneous_edge_length - tether_cutoff_length1) / Dl  # = .5
+        Dl = 0.5 * (max_edge_length - min_edge_length)  # = 0.4 * preferred_edge_length
+        mu = (preferred_edge_length - tether_cutoff_length1) / Dl  # = .5
         lam = Lscale / Dl
         nu = Lscale / Dl
 
         brane_kwargs = {
-            "length_reg_stiffness": length_reg_stiffness,
+            "tether_stiffness": tether_stiffness,
             "area_reg_stiffness": area_reg_stiffness,
             "volume_reg_stiffness": volume_reg_stiffness,
             "bending_modulus": bending_modulus,
             "splay_modulus": splay_modulus,
             "spontaneous_curvature": spontaneous_curvature,
-            "linear_drag_coeff": linear_drag_coeff,
-            "spontaneous_edge_length": spontaneous_edge_length,
-            "spontaneous_face_area": spontaneous_face_area,
-            "spontaneous_volume": spontaneous_volume,
+            "drag_coefficient": drag_coefficient,
+            "preferred_edge_length": preferred_edge_length,
+            "preferred_face_area": preferred_face_area,
+            "preferred_volume": preferred_volume,
             "tether_Dl": Dl,
             "tether_mu": mu,
             "tether_lam": lam,
@@ -466,14 +481,39 @@ class Brane(HalfEdgeMeshBase):
 
         return m
 
-    def default_spontaneous_edge_length(self):
+    def average_edge_length(self):
         return np.mean(self.length_H())
 
-    def default_spontaneous_face_area(self):
+    def average_face_area(self):
         return self.total_area_of_faces() / self.num_faces
 
-    def default_spontaneous_volume(self):
-        return self.total_volume()
+    ######################
+    def pressure_soft_penalty(self):
+        """
+        Compute the effective pressure
+        """
+        Kvol = self.volume_reg_stiffness
+        V0 = self.preferred_volume
+        V = self.total_volume()
+        return Kvol * (V - V0) / V0
+
+    def surface_tension_soft_penalty_f(self, f):
+        """
+        Compute the effective surface tension
+        """
+        Karea = self.area_reg_stiffness
+        A0 = self.preferred_area
+        A = self.area_f(f)
+        return Karea * (A - A0) / A0
+
+    def surface_tension_soft_penalty_F(self):
+        """
+        Compute the effective surface tension
+        """
+        Karea = self.area_reg_stiffness
+        A0 = self.preferred_area
+        A = self.area_F()
+        return Karea * (A - A0) / A0
 
     ######################################################
     # experimental stuff
@@ -700,7 +740,7 @@ class Brane(HalfEdgeMeshBase):
         """local cell area regulation"""
         Nv = self.num_vertices
         F = np.zeros((Nv, 3))
-        A0 = self.spontaneous_face_area
+        A0 = self.preferred_face_area
         k_a = self.area_reg_stiffness
         for i in range(Nv):
             p = self.xyz_coord_v(i)
@@ -722,7 +762,7 @@ class Brane(HalfEdgeMeshBase):
     def Fvolume_harmonic(self):
         Nv = self.num_vertices
         F = np.zeros((Nv, 3))
-        V0 = self.spontaneous_volume
+        V0 = self.preferred_volume
         V = self.total_volume()
         k_v = self.volume_reg_stiffness
         for i in range(Nv):
@@ -762,8 +802,6 @@ class Brane(HalfEdgeMeshBase):
 
     # Bending
     def Fbend_harmonic(self):
-        """from Tu"""
-
         def delta(i, j):
             return 1 if i == j else 0
 
@@ -783,7 +821,7 @@ class Brane(HalfEdgeMeshBase):
             xm = self.xyz_coord_v(m)
             Lim = L(i, m)
             Ljm = L(j, m)
-            return np.dot(xi - xm, xj - xm) / (L(i, m) * L(j, m))
+            return np.dot(xi - xm, xj - xm) / (Lim * Ljm)
 
         def T(i, j, jm1, jp1):
             chi_ijjp1 = chi(i, j, jp1)
@@ -820,39 +858,173 @@ class Brane(HalfEdgeMeshBase):
                 + dchi_ijjp1_dxl / (1 - chi_ijjp1**2) ** 1.5
             )
 
+        kappa = self.bending_modulus
         F = np.zeros_like(self.xyz_coord_V)
+        I = np.eye(3)
         Nv = self.num_vertices
         for l in range(Nv):
-            pass
+            Fl = np.zeros(3)
+            #################
+            i = l
+            #################
+            dil = delta(i, l)
+            xi = self.xyz_coord_v(i)
+            sum_Lij2_Tij = 0.0
+            sum_xi_xj_Tij = np.zeros(3)
+            # sum_xi_xj_dTij_dxl = np.zeros(3, 3)
+            sum_xi_xj_dTij_dxl_Tij_dil_dij = np.zeros((3, 3))
+            sum_Tij_dLij2_dxl_Lij2_dTij_dxl = np.zeros(3)
+            for hij in self.generate_H_out_v_clockwise(i):
+                hijp1 = self.h_twin_h(self.h_prev_h(hij))
+                hijm1 = self.h_next_h(self.h_twin_h(hij))
+                j = self.v_head_h(hij)
+                jp1 = self.v_head_h(hijp1)
+                jm1 = self.v_head_h(hijm1)
+
+                djl = delta(j, l)
+                xj = self.xyz_coord_v(j)
+
+                Lij = L(i, j)
+                dLij2_dxl = dL2_dx(i, j, l)
+                Tij = T(i, j, jm1, jp1)
+                dTij_dxl = dT_dx(i, j, jm1, jp1, l)
+
+                sum_Lij2_Tij += Lij**2 * Tij
+                sum_xi_xj_Tij += (xi - xj) * Tij
+                sum_xi_xj_dTij_dxl_Tij_dil_dij += (
+                    np.outer((xi - xj) * Tij, dTij_dxl) + Tij * (dil - djl) * I
+                )
+                sum_Tij_dLij2_dxl_Lij2_dTij_dxl += Tij * dLij2_dxl + Lij**2 * dTij_dxl
+
+            Fl += (
+                4 * np.dot(sum_xi_xj_Tij, sum_xi_xj_dTij_dxl_Tij_dil_dij) / sum_Lij2_Tij
+            )
+            Fl += (
+                -2
+                * np.linalg.norm(sum_xi_xj_Tij) ** 2
+                * sum_Tij_dLij2_dxl_Lij2_dTij_dxl
+                / sum_Lij2_Tij**2
+            )
+            #################
+            # i in j(l)
+            #################
+            for hli in self.generate_H_out_v_clockwise(l):
+                #################
+                i = self.v_head_h(hli)
+                #################
+                dil = delta(i, l)
+                xi = self.xyz_coord_v(i)
+                sum_Lij2_Tij = 0.0
+                sum_xi_xj_Tij = np.zeros(3)
+                # sum_xi_xj_dTij_dxl = np.zeros(3, 3)
+                sum_xi_xj_dTij_dxl_Tij_dil_dij = np.zeros((3, 3))
+                sum_Tij_dLij2_dxl_Lij2_dTij_dxl = np.zeros(3)
+                for hij in self.generate_H_out_v_clockwise(i):
+                    hijp1 = self.h_twin_h(self.h_prev_h(hij))
+                    hijm1 = self.h_next_h(self.h_twin_h(hij))
+                    j = self.v_head_h(hij)
+                    jp1 = self.v_head_h(hijp1)
+                    jm1 = self.v_head_h(hijm1)
+
+                    djl = delta(j, l)
+                    xj = self.xyz_coord_v(j)
+
+                    Lij = L(i, j)
+                    dLij2_dxl = dL2_dx(i, j, l)
+                    Tij = T(i, j, jm1, jp1)
+                    dTij_dxl = dT_dx(i, j, jm1, jp1, l)
+
+                    sum_Lij2_Tij += Lij**2 * Tij
+                    sum_xi_xj_Tij += (xi - xj) * Tij
+                    sum_xi_xj_dTij_dxl_Tij_dil_dij += (
+                        np.outer((xi - xj) * Tij, dTij_dxl) + Tij * (dil - djl) * I
+                    )
+                    sum_Tij_dLij2_dxl_Lij2_dTij_dxl += (
+                        Tij * dLij2_dxl + Lij**2 * dTij_dxl
+                    )
+
+                Fl += (
+                    4
+                    * np.dot(sum_xi_xj_Tij, sum_xi_xj_dTij_dxl_Tij_dil_dij)
+                    / sum_Lij2_Tij
+                )
+                Fl += (
+                    -2
+                    * np.linalg.norm(sum_xi_xj_Tij) ** 2
+                    * sum_Tij_dLij2_dxl_Lij2_dTij_dxl
+                    / sum_Lij2_Tij**2
+                )
+
+            ####################################
+            Fl *= -0.5 * kappa
+            F[l] = Fl
         return F
 
-    # def Flength(self):
-    #     Nv = self.num_vertices
-    #     F = np.zeros((Nv, 3))
-    #     k_l = self.length_reg_stiffness
-    #     L0 = self.spontaneous_edge_length
-    #     for v in range(Nv):
-    #         r = self.xyz_coord_v(v)
-    #         h_start = self.V_hedge[v]
-    #         h = h_start
-    #         while True:
-    #             v0 = self.H_vertex[h]
-    #             r0 = self.V_pq[v0, :3]
-    #             u = r - r0
-    #             L = np.sqrt(u[0] ** 2 + u[1] ** 2 + u[2] ** 2)
-    #             gradL = u / L
-    #             F[v] += -Ke * (L - L0) * gradL / L0
-    #             h = self.H_twin[self.H_prev[h]]
-    #             if h == h_start:
-    #                 break
-    #     return F
+    def Fbend_shane(self):
+        Fbend = np.zeros_like(self.xyz_coord_V)
+        Nv = self.num_vertices
+        for vrt in range(Nv):
+            sum_lsqT = 0.0
+            sum_del_lsqT = np.zeros(3)
+            sum_rT = np.zeros(3)
+            sum_del_rT = np.zeros((3, 3))
+            for h in self.generate_H_out_v_clockwise(vrt):
+                h_plus = self.h_twin_h(self.h_prev_h(h))
+                h_minus = self.h_next_h(self.h_twin_h(h))
+                neighb = self.v_head_h(h)
+                neighb_plus = self.v_head_h(h_plus)
+                neighb_minus = self.v_head_h(h_minus)
+
+                r_ij = self.xyz_coord_v(vrt) - self.xyz_coord_v(neighb)
+                r_ij_plus = self.xyz_coord_v(vrt) - self.xyz_coord_v(neighb_plus)
+                r_ij_minus = self.xyz_coord_v(vrt) - self.xyz_coord_v(neighb_minus)
+                r_jj_plus = self.xyz_coord_v(neighb) - self.xyz_coord_v(neighb_plus)
+                r_jj_minus = self.xyz_coord_v(neighb) - self.xyz_coord_v(neighb_minus)
+                #########################################
+                l_ij = np.linalg.norm(r_ij)
+                l_ij_plus = np.linalg.norm(r_ij_plus)
+                l_ij_minus = np.linalg.norm(r_ij_minus)
+                l_jj_plus = np.linalg.norm(r_jj_plus)
+                l_jj_minus = np.linalg.norm(r_jj_minus)
+                chi_minus = np.dot(r_ij_minus, r_jj_minus) / (l_ij_minus * l_jj_minus)
+                chi_plus = np.dot(r_ij_plus, r_jj_plus) / (l_ij_plus * l_jj_plus)
+                T_ij = (chi_minus / np.sqrt(1.0 - chi_minus**2)) + (
+                    chi_plus / np.sqrt(1.0 - chi_plus**2)
+                )
+                grad_lsq = 2 * r_ij
+                grad_chi_plus = (1.0 / (l_ij_plus * l_jj_plus)) * (
+                    r_jj_plus - (l_jj_plus / l_ij_plus) * chi_plus * r_ij_plus
+                )
+                grad_chi_minus = (1.0 / (l_ij_minus * l_jj_minus)) * (
+                    r_jj_minus - (l_jj_minus / l_ij_minus) * chi_minus * r_ij_minus
+                )
+                grad_T = (
+                    grad_chi_plus / (1.0 - chi_plus**2) ** 1.5
+                    + grad_chi_minus / (1.0 - chi_minus**2) ** 1.5
+                )
+                sum_lsqT += l_ij**2 * T_ij
+                sum_rT += r_ij * T_ij
+                sum_del_lsqT += T_ij * grad_lsq + l_ij**2 * grad_T
+                for i_dim in range(3):
+                    sum_del_rT[i_dim] += r_ij[i_dim] * grad_T
+                    if i_dim == i_dim:
+                        sum_del_rT[i_dim] += T_ij
+            # f_bend = np.zeros(3)
+            for i_dim in range(3):
+                Fbend[vrt, i_dim] += (
+                    2 * np.dot(sum_rT, sum_rT) / sum_lsqT**2 * sum_del_lsqT[i_dim]
+                )
+                Fbend[vrt, i_dim] -= 4 * np.dot(sum_rT, sum_del_rT[i_dim]) / sum_lsqT
+                Fbend[vrt, i_dim] *= self.bending_modulus
+        return Fbend
+
     def Utether_OG(self, s, _a=None):
-        l0 = self.spontaneous_edge_length
+        l0 = self.preferred_edge_length
         if _a is None:
             a = l0
         else:
             a = _a
-        Kl = self.length_reg_stiffness
+        Kl = self.tether_stiffness
         Dl = 0.8 * l0
         normDs = np.abs(s - l0)
         if normDs > Dl / 4 and normDs < Dl / 2:
@@ -863,12 +1035,12 @@ class Brane(HalfEdgeMeshBase):
         return U
 
     def Utether(self, s, _a=None):
-        l0 = self.spontaneous_edge_length
+        l0 = self.preferred_edge_length
         if _a is None:
             a = l0
         else:
             a = _a
-        Kl = self.length_reg_stiffness
+        Kl = self.tether_stiffness
         Dl = 0.8 * l0
         normDs = np.abs(s - l0)
         if normDs <= Dl / 4:
@@ -882,8 +1054,8 @@ class Brane(HalfEdgeMeshBase):
     def Ftether_OG(self, _a=None):
         Nv = self.num_vertices
         Fl = np.zeros((Nv, 3))
-        l0 = self.spontaneous_edge_length
-        Kl = self.length_reg_stiffness
+        l0 = self.preferred_edge_length
+        Kl = self.tether_stiffness
         if _a is None:
             a = l0
         else:
@@ -912,44 +1084,11 @@ class Brane(HalfEdgeMeshBase):
                     pass
         return Fl
 
-    # def Ftether(self, _a=None):
-    #     Nv = self.num_vertices
-    #     Fl = np.zeros((Nv, 3))
-    #     l0 = self.spontaneous_edge_length
-    #     Kl = self.length_reg_stiffness
-    #     if _a is None:
-    #         a = l0
-    #     else:
-    #         a = _a
-    #     Dl = 0.8 * l0
-
-    #     for i in range(Nv):
-    #         ri = self.xyz_coord_v(i)
-    #         for hk in self.generate_H_out_v_clockwise(i):
-    #             vk = self.v_head_h(hk)
-    #             rk = self.xyz_coord_v(vk)
-    #             Drki = ri - rk
-    #             s = np.sqrt(Drki[0] ** 2 + Drki[1] ** 2 + Drki[2] ** 2)
-    #             Ds = s - l0
-    #             normDs = np.abs(Ds)
-    #             if normDs <= Dl / 4:
-    #                 pass
-    #             else:
-    #                 U = Kl * np.exp(-a / (normDs - Dl / 4)) / (Dl / 2 - normDs)
-    #                 Fl[i] += -(
-    #                     (1 / (Dl / 2 - normDs) + a / (normDs - Dl / 4) ** 2)
-    #                     * U
-    #                     * (Ds / normDs)
-    #                     * Drki
-    #                     / s
-    #                 )
-    #             ############
-    #     return Fl
     def Ftether(self, _a=None, cutoff=0.99):
         Nv = self.num_vertices
         Fl = np.zeros((Nv, 3))
-        l0 = self.spontaneous_edge_length
-        Kl = self.length_reg_stiffness
+        l0 = self.preferred_edge_length
+        Kl = self.tether_stiffness
         if _a is None:
             a = l0
         else:
@@ -989,6 +1128,8 @@ class Brane(HalfEdgeMeshBase):
                 ############
         return Fl
 
+    ######################################################
+    # To be deprecated
     def euler_step(self, dt):
         """
         Euler step
@@ -998,10 +1139,8 @@ class Brane(HalfEdgeMeshBase):
         Fv = self.Fvolume_harmonic()
         Ft = self.Ftether()
         F = Fb + Fa + Fv + Ft
-        self.xyz_coord_V += dt * F / self.linear_drag_coeff
+        self.xyz_coord_V += dt * F / self.drag_coefficient
 
-    ######################################################
-    # To be deprecated
     def h_in_cw_from_h(self, h):
         return self.h_twin_h(self.h_next_h(h))
 

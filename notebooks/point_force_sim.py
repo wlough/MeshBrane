@@ -4,13 +4,14 @@ from src.python.stetch_sim import StretchSim, SpbForce
 from src.python.half_edge_base_patch import HalfEdgePatch
 import numpy as np
 
+Brane.vutukuri_params()
 output_dir = "./output/stretch_test"
-# StretchSim.make_output_dir(output_dir=output_dir, overwrite=True)
-# parameters_path = "./output/stretch_test.yaml"
-parameters_path = "./data/shane.yaml"
+StretchSim.make_output_dir(output_dir=output_dir, overwrite=True)
+parameters_path = "./output/stretch_test.yaml"
+# parameters_path = "./data/shane.yaml"
 sim = StretchSim.from_parameters_file(parameters_path, output_dir)
 
-sim.run()
+# sim.run()
 # %%
 # sim.time_step()
 # sim.mesh_viewer.plot()
@@ -458,10 +459,9 @@ def vutukuri_vesicle(config_path="./output/stretch_sim/config.yaml"):
     return sim_params
 
 
-float(0.5)
-p = vutukuri_vesicle(config_path="./output/stretch_sim/parameters.yaml")
-e = p.pop("envelope")
-p
+p = vutukuri_vesicle(config_path="./data/vutukuri_vesicle.yaml")
+# e = p.pop("envelope")
+# p
 # %%
 
 
