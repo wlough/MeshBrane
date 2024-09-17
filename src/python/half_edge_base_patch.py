@@ -369,6 +369,26 @@ class HalfEdgePatch:
             yield self.v_origin_h(h)
 
     ##############################################
+    def update_H_and_F_from_V(self):
+        """
+        ...
+        """
+        F = set()
+        for i in self.V:
+            for h in self.supermesh.generate_H_out_v_clockwise(i):
+                j = self.supermesh.v_head_h(h)
+                k = self.supermesh.v_head_h(self.supermesh.h_next_h(h))
+                f = self.supermesh.f_left_h(h)
+                if j in self.V and k in self.V and f >= 0:
+                    F.add(f)
+        V, H, F = self.supermesh.closure(self.V, set(), F)
+        if self.V != V:
+            raise ValueError("Vertices have changed.")
+        self.H = H
+        self.F = F
+        self.h_right_B = self.find_h_right_B()
+
+    ##############################################
     # to be deprecated
     @property
     def data_lists(self):

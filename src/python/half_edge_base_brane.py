@@ -686,6 +686,28 @@ class Brane(HalfEdgeMeshBase):
     ######################################
     ############### Forces ###############
     ######################################
+    # def h_is_flippable(self, h):
+    #     r"""
+    #     edge flip hlj-->hki is allowed unless hlj is on a boundary or vi and vk are already neighbors
+    #     vj
+    #     /|\
+    #   vk | vi
+    #     \|/
+    #     vl
+    #     """
+    #     if self.boundary_contains_h(h):
+    #         return False
+    #     hlj = h
+    #     hjk = self.h_next_h(hlj)
+    #     # hjl = self.h_twin_h(hlj)
+    #     hli = self.h_next_h(self.h_twin_h(hlj))
+    #     vi = self.v_head_h(hli)
+    #     vk = self.v_head_h(hjk)
+
+    #     for him in self.generate_H_out_v_clockwise(vi):
+    #         if self.v_head_h(him) == vk:
+    #             return False
+    #     return True
     def Fbend_density(self):
         H0 = self.spontaneous_curvature
         B = self.bending_modulus
@@ -1018,7 +1040,69 @@ class Brane(HalfEdgeMeshBase):
                 Fbend[vrt, i_dim] *= self.bending_modulus
         return Fbend
 
-    def Utether_OG(self, s, _a=None):
+    #####################################
+    # tethering
+    def _tethering_potential(
+        self,
+        s,
+        preferred_length,
+        repulsive_onset=0.8,
+        repulsive_singularity=0.6,
+        attractive_onset=1.2,
+        attractive_singularity=1.4,
+        length_unit=1.0,
+    ):
+        L0 = preferred_length
+        Lmin = repulsive_singularity * preferred_length
+        Lmax = attractive_singularity * preferred_length
+        Lrep = repulsive_onset * preferred_length
+        Latt = attractive_onset * preferred_length
+
+        U = np.zeros_like(s)
+        Irep = s < Lrep
+        srep = s[Irep]
+        U[Irep] = np.exp(1 / (srep - Lrep)) / (srep - Lmin)
+        Iatt = s > Latt
+        satt = s[Iatt]
+        U[Iatt] = np.exp(1 / (Latt - satt)) / (Lmax - satt)
+        return U
+
+    def Ftether(self):
+        success = True
+        kb = self.tether_stiffness
+        # tether_repulsive_onset
+        # tether_repulsive_singularity
+        # tether_attractive_onset
+        # tether_attractive_singularity
+        L0 = self.preferred_edge_length
+        Lmin = self.tether_repulsive_singularity * L0
+        Lmax = self.tether_attractive_onset * L0
+        Lrep = self.tether_repulsive_onset * L0
+        Latt = self.tether_attractive_onset * L0
+        num_vertices = self.num_vertices
+        F = np.zeros((num_vertices, 3))
+        for p in range(num_vertices):
+            xp = self.xyz_coord_v(p)
+            for h in self.generate_H_out_v_clockwise(p):
+                q = self.v_head_h(h)
+                xq = self.xyz_coord_v(q)
+                r = xp - xq
+                s = np.linalg.norm(r)
+                if s < Lrep and s > Lmin:
+                    U = kb * np.exp(1 / (s - Lrep)) / (s - Lmin)
+                    F[p] += -(-1 / (s - Lmin) - 1 / (s - Lrep) ** 2) * U * r / s
+                elif s > Latt and s < Lmax:
+                    U = kb * np.exp(1 / (Latt - s)) / (Lmax - s)
+                    F[p] += -(1 / (Lmax - s) + 1 / (Latt - s) ** 2) * U * r / s
+                elif s <= Lmin:
+                    self.edge_length_smaller_than_min = True
+                    success = False
+                elif s >= Lmax:
+                    self.edge_length_bigger_than_max = True
+                    success = False
+        return F, success
+
+    def _Utether_OG(self, s, _a=None):
         l0 = self.preferred_edge_length
         if _a is None:
             a = l0
@@ -1034,7 +1118,7 @@ class Brane(HalfEdgeMeshBase):
             U = 0.0
         return U
 
-    def Utether(self, s, _a=None):
+    def _Utether(self, s, _a=None):
         l0 = self.preferred_edge_length
         if _a is None:
             a = l0
@@ -1051,7 +1135,7 @@ class Brane(HalfEdgeMeshBase):
             U = np.inf
         return U
 
-    def Ftether_OG(self, _a=None):
+    def _Ftether_OG(self, _a=None):
         Nv = self.num_vertices
         Fl = np.zeros((Nv, 3))
         l0 = self.preferred_edge_length
@@ -1084,7 +1168,7 @@ class Brane(HalfEdgeMeshBase):
                     pass
         return Fl
 
-    def Ftether(self, _a=None, cutoff=0.99):
+    def _Ftether(self, _a=None, cutoff=0.99):
         Nv = self.num_vertices
         Fl = np.zeros((Nv, 3))
         l0 = self.preferred_edge_length

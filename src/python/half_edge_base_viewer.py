@@ -473,11 +473,11 @@ class MeshViewer:
         if downsampled:
             V = self.Msimp.xyz_coord_V
             F = self.Msimp.V_of_F
-            rgba_V = self.rgba_V[self.indicesVsimp]
+            rgba = self.rgba_V[self.indicesVsimp]
         else:
             V = self.M.xyz_coord_V
             F = self.M.V_of_F
-            rgba_V = self.rgba_V
+            rgba = self.rgba_V
 
         ####################################################
         edge_mesh_kwargs = {

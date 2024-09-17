@@ -1,6 +1,18 @@
 import numpy as np
 
 
+def _unit_bump(s):
+    val = np.zeros_like(s)
+    I = np.abs(s) < 1.0
+    val[I] = np.exp(1 + -1 / (1 - s[I] ** 2))
+    return val
+
+
+def _bump3(xyz, center, radius):
+    s = np.linalg.norm(xyz - center, axis=-1) / radius
+    return unit_bump(s)
+
+
 def unit_bump(s):
     val = np.zeros_like(s)
     I = np.abs(s) < 1.0
@@ -21,15 +33,29 @@ def dimensionless_tethering_potential(xi, lam, mu, nu):
     return val
 
 
-def tethering_potential(s, lam, mu, nu, alpha, L0):
-    dL = L0 * alpha
-    # Lmin = L0 - dL
-    # Lmax = L0 + dL
-    # Lrep = L0-mu*dL
-    # Latt = L0+mu*dL
+def tethering_potential(
+    s,
+    preferred_length,
+    repulsive_onset=0.8,
+    repulsive_singularity=0.6,
+    attractive_onset=1.2,
+    attractive_singularity=1.4,
+    length_unit=1.0,
+):
+    L0 = preferred_length / length_unit
+    Lmin = repulsive_singularity * preferred_length / length_unit
+    Lmax = attractive_singularity * preferred_length / length_unit
+    Lrep = repulsive_onset * preferred_length / length_unit
+    Latt = attractive_onset * preferred_length / length_unit
 
-    xi = (s - L0) / dL
-    return dimensionless_tethering_potential(xi, lam, mu, nu)
+    U = np.zeros_like(s)
+    Irep = s < Lrep
+    srep = s[Irep]
+    U[Irep] = np.exp(1 / (srep - Lrep)) / (srep - Lmin)
+    Iatt = s > Latt
+    satt = s[Iatt]
+    U[Iatt] = np.exp(1 / (Latt - satt)) / (Lmax - satt)
+    return U
 
 
 def tethering_potential_vutukuri0(s, L0):

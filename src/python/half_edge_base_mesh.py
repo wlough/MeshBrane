@@ -45,14 +45,14 @@ class HalfEdgeMeshBase:
                      h_bound_F,
                      h_right_B)
     - From an npz file containing data arrays:
-        HalfEdgeMesh.load_he_data(npz_path)
+        HalfEdgeMesh.load_he_samples(npz_path)
     - From an array of vertex positions and an array of face vertices:
-        HalfEdgeMesh.from_vert_face_dict(xyz_coord_V, vvv_of_F)
+        HalfEdgeMesh.from_vf_samples(xyz_coord_V, vvv_of_F)
     - From a ply file (binary/ascii) containing vertex/face data:
-        HalfEdgeMesh.from_vertex_face_ply(ply_path)
-        * See HalfEdgeMeshBuilder for more details about ply format.
+        HalfEdgeMesh.from_vf_ply(ply_path)
+        * See MeshConverterBase for more details about ply format.
     - From a ply file (binary/ascii) containing half-edge mesh data:
-        HalfEdgeMesh.from_half_edge_ply(ply_path)
+        HalfEdgeMesh.from_he_ply(ply_path)
         * See HalfEdgeMeshBuilder for more details about ply format.
     - From C-Glass binary data:
         HalfEdgeMesh.from_cglass_binary(data)
@@ -84,9 +84,9 @@ class HalfEdgeMeshBase:
     #######################################################
     # Initilization methods
     @classmethod
-    def load_he_samples(cls, path, *args, **kwargs):
+    def load_he_samples(cls, npz_path, *args, **kwargs):
         """Initialize a half-edge mesh from npz file containing data arrays."""
-        data = np.load(path)
+        data = np.load(npz_path)
         return cls(
             data["xyz_coord_V"],
             data["h_out_V"],
@@ -162,6 +162,22 @@ class HalfEdgeMeshBase:
         #     **kwargs
         # )
         return cls(*MeshConverterBase.from_he_ply(ply_path).he_samples, *args, **kwargs)
+
+    @classmethod
+    def load(cls, **kwargs):
+        if "ply_path" in kwargs:
+            try:
+                return cls.from_he_ply(**kwargs)
+            except:
+                return cls.from_vf_ply(**kwargs)
+        elif "npz_path" in kwargs:
+            return cls.load_he_samples(kwargs["npz_path"], **kwargs)
+        elif "xyz_coord_V" in kwargs and "vvv_of_F" in kwargs:
+            return cls.from_vf_samples(
+                kwargs["xyz_coord_V"], kwargs["vvv_of_F"], **kwargs
+            )
+        elif "xyz_coord_V" in kwargs and "h_out_V" in kwargs:
+            return cls(**kwargs)
 
     #######################################################
     # Fundamental accessors and properties
@@ -571,6 +587,146 @@ class HalfEdgeMeshBase:
             if h == h_start:
                 break
 
+    ######################################################
+    # Simplical operations
+    def star_of_vertex(self, v):
+        """Star of a vertex is the set of all simplices that contain the vertex."""
+        V = {v}
+        H = set()
+        F = set()
+        for h in self.generate_H_out_v_clockwise(v):
+            ht = self.h_twin_h(h)
+            H.update([h, ht])
+            if not self.negative_boundary_contains_h(h):
+                F.add(self.f_left_h(h))
+
+        return V, H, F
+
+    def star_of_edge(self, h):
+        """Star of an edge is the set of all simplices that contain the edge."""
+        V = set()
+        H = {h, self.h_twin_h(h)}
+        F = set()
+        for hi in H:
+            if not self.negative_boundary_contains_h(hi):
+                F.add(self.f_left_h(hi))
+
+        return V, H, F
+
+    def star(self, V_in, H_in, F_in):
+        """The star of a single simplex is the set of all simplices that have the simplex as a face. The star St(s) of a k-simplex s consists of: s and all (n>k)-simplices that contain s."""
+        F = F_in.copy()
+        H = H_in.copy()
+        V = V_in.copy()
+
+        for h in H_in:
+            ht = self.h_twin_h(h)
+            H.add(ht)
+            if not self.negative_boundary_contains_h(h):
+                F.add(self.f_left_h(h))
+            if not self.negative_boundary_contains_h(ht):
+                F.add(self.f_left_h(ht))
+        for v in V_in:
+            for h in self.generate_H_out_v_clockwise(v):
+                H.add(h)
+                H.add(self.h_twin_h(h))
+                if not self.negative_boundary_contains_h(h):
+                    F.add(self.f_left_h(h))
+        return V, H, F
+
+    def closure(self, V_in, H_in, F_in):
+        """The closure of a single simplex is the set of all simplices that contain the simplex as a subset of their vertices. The closure Cl(s) of a k-simplex s consists of: s and all (n<k)-simplices that are proper faces of s."""
+        F = F_in.copy()
+        H = H_in.copy()
+        V = V_in.copy()
+
+        for f in F_in:
+            for h in self.generate_H_bound_f(f):
+                H.add(h)
+                H.add(self.h_twin_h(h))
+                V.add(self.v_origin_h(h))
+                V.add(self.v_origin_h(self.h_twin_h(h)))
+        for h in H_in:
+            V.add(self.v_origin_h(h))
+            V.add(self.v_origin_h(self.h_twin_h(h)))
+        return V, H, F
+
+    def link(self, V, H, F):
+        """Lk(s)=Cl(St(s))-St(Cl(s))."""
+        StCl_V, StCl_H, StCl_F = self.star(*self.closure(V, H, F))
+        ClSt_V, ClSt_H, ClSt_F = self.closure(*self.star(V, H, F))
+        return ClSt_V - StCl_V, ClSt_H - StCl_H, ClSt_F - StCl_F
+
+    #######################################################
+    # Differential operators
+    def cotan_laplacian(self, Q):
+        """
+        Computes the cotan Laplacian of Q at each vertex
+        """
+        # Nv = self.num_vertices
+        lapQ = np.zeros_like(Q)
+        for vi in range(self.num_vertices):
+            Atot = 0.0
+            ri = self.xyz_coord_v(vi)
+            qi = Q[vi]
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+            for hij in self.generate_H_out_v_clockwise(vi):
+                hijm1 = self.h_next_h(self.h_twin_h(hij))
+                hijp1 = self.h_twin_h(self.h_prev_h(hij))
+                vjm1 = self.v_head_h(hijm1)
+                vj = self.v_head_h(hij)
+                vjp1 = self.v_head_h(hijp1)
+
+                qj = Q[vj]
+
+                rjm1 = self.xyz_coord_v(vjm1)
+                rj = self.xyz_coord_v(vj)
+                rjp1 = self.xyz_coord_v(vjp1)
+
+                rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
+                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+                ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
+                rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
+                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
+                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+
+                Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
+                Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
+                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
+                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+
+                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
+
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
+
+                cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
+                cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
+
+                Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
+                lapQ[vi] += (cot_thetam + cot_thetap) * (qj - qi) / 2
+            lapQ[vi] /= Atot
+
+        return lapQ
+
+    def graph_laplacian(self, Q):
+        """
+        Computes the graph Laplacian of Q at each vertex
+        """
+        lapQ = np.zeros_like(Q)
+        for i in range(self.num_vertices):
+            deg = 0
+            for h in self.generate_H_out_v_clockwise(i):
+                lapQ[i] += Q[self.v_head_h(h)]
+                deg += 1
+
+            lapQ[i] /= deg
+            lapQ[i] -= Q[i]
+
+        return lapQ
+
     #######################################################
     # Mesh modification
     def update_vertex(self, v, xyz=None, h_out=None):
@@ -743,74 +899,6 @@ class HalfEdgeMeshBase:
                     self.flip_edge(h)
                     flip_count += 1
         return flip_count
-
-    def cotan_laplacian(self, Q):
-        """
-        Computes the cotan Laplacian of Q at each vertex
-        """
-        # Nv = self.num_vertices
-        lapQ = np.zeros_like(Q)
-        for vi in range(self.num_vertices):
-            Atot = 0.0
-            ri = self.xyz_coord_v(vi)
-            qi = Q[vi]
-            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-            for hij in self.generate_H_out_v_clockwise(vi):
-                hijm1 = self.h_next_h(self.h_twin_h(hij))
-                hijp1 = self.h_twin_h(self.h_prev_h(hij))
-                vjm1 = self.v_head_h(hijm1)
-                vj = self.v_head_h(hij)
-                vjp1 = self.v_head_h(hijp1)
-
-                qj = Q[vj]
-
-                rjm1 = self.xyz_coord_v(vjm1)
-                rj = self.xyz_coord_v(vj)
-                rjp1 = self.xyz_coord_v(vjp1)
-
-                rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
-                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
-                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
-                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
-                ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
-                rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
-                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
-                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
-
-                Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
-                Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
-                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
-                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
-                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
-
-                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
-
-                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
-
-                cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
-                cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
-
-                Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
-                lapQ[vi] += (cot_thetam + cot_thetap) * (qj - qi) / 2
-            lapQ[vi] /= Atot
-
-        return lapQ
-
-    def graph_laplacian(self, Q):
-        """
-        Computes the graph Laplacian of Q at each vertex
-        """
-        lapQ = np.zeros_like(Q)
-        for i in range(self.num_vertices):
-            deg = 0
-            for h in self.generate_H_out_v_clockwise(i):
-                lapQ[i] += Q[self.v_head_h(h)]
-                deg += 1
-
-            lapQ[i] /= deg
-            lapQ[i] -= Q[i]
-
-        return lapQ
 
     def smooth_graph_laplacian(self, weight=0.25, smooth_boundary=False):
         """ """
@@ -1079,76 +1167,6 @@ class HalfEdgeMeshBase:
             vol_f = np.dot(x0, np.cross(x1, x2)) / 6
             vol += vol_f
         return abs(vol)
-
-    ######################################################
-    # Simplical operations
-    def star_of_vertex(self, v):
-        """Star of a vertex is the set of all simplices that contain the vertex."""
-        V = {v}
-        H = set()
-        F = set()
-        for h in self.generate_H_out_v_clockwise(v):
-            ht = self.h_twin_h(h)
-            H.update([h, ht])
-            if not self.negative_boundary_contains_h(h):
-                F.add(self.f_left_h(h))
-
-        return V, H, F
-
-    def star_of_edge(self, h):
-        """Star of an edge is the set of all simplices that contain the edge."""
-        V = set()
-        H = {h, self.h_twin_h(h)}
-        F = set()
-        for hi in H:
-            if not self.negative_boundary_contains_h(hi):
-                F.add(self.f_left_h(hi))
-
-        return V, H, F
-
-    def star(self, V_in, H_in, F_in):
-        """The star of a single simplex is the set of all simplices that have the simplex as a face. The star St(s) of a k-simplex s consists of: s and all (n>k)-simplices that contain s."""
-        F = F_in.copy()
-        H = H_in.copy()
-        V = V_in.copy()
-
-        for h in H_in:
-            ht = self.h_twin_h(h)
-            H.add(ht)
-            if not self.negative_boundary_contains_h(h):
-                F.add(self.f_left_h(h))
-            if not self.negative_boundary_contains_h(ht):
-                F.add(self.f_left_h(ht))
-        for v in V_in:
-            for h in self.generate_H_out_v_clockwise(v):
-                H.add(h)
-                H.add(self.h_twin_h(h))
-                if not self.negative_boundary_contains_h(h):
-                    F.add(self.f_left_h(h))
-        return V, H, F
-
-    def closure(self, V_in, H_in, F_in):
-        """The closure of a single simplex is the set of all simplices that contain the simplex as a subset of their vertices. The closure Cl(s) of a k-simplex s consists of: s and all (n<k)-simplices that are proper faces of s."""
-        F = F_in.copy()
-        H = H_in.copy()
-        V = V_in.copy()
-
-        for f in F_in:
-            for h in self.generate_H_bound_f(f):
-                H.add(h)
-                H.add(self.h_twin_h(h))
-                V.add(self.v_origin_h(h))
-                V.add(self.v_origin_h(self.h_twin_h(h)))
-        for h in H_in:
-            V.add(self.v_origin_h(h))
-            V.add(self.v_origin_h(self.h_twin_h(h)))
-        return V, H, F
-
-    def link(self, V, H, F):
-        """Lk(s)=Cl(St(s))-St(Cl(s))."""
-        StCl_V, StCl_H, StCl_F = self.star(*self.closure(V, H, F))
-        ClSt_V, ClSt_H, ClSt_F = self.closure(*self.star(V, H, F))
-        return ClSt_V - StCl_V, ClSt_H - StCl_H, ClSt_F - StCl_F
 
     ######################################################
     # to be deprecated
