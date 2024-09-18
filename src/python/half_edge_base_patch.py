@@ -14,16 +14,18 @@ class HalfEdgePatch:
         H,
         F,
         h_right_B=None,
-        # V_bdry=None,
+        find_h_right_B=True,
+        seed_vertex=None,
     ):
         self.supermesh = supermesh
         self.V = V
         self.H = H
         self.F = F
-        if h_right_B is None:
+        if h_right_B is None and find_h_right_B:
             self.h_right_B = self.find_h_right_B()
-        # if V_bdry is None:
-        #     self.V_bdry = set(self.generate_V_negative_bdry())
+        else:
+            self.h_right_B = h_right_B
+        self.seed_vertex = seed_vertex
 
     @property
     def V(self):
@@ -79,25 +81,38 @@ class HalfEdgePatch:
 
     ##############################################
     @classmethod
-    def from_seed_vertex(cls, v_seed, supermesh):
+    def from_seed_vertex(cls, seed_vertex, supermesh):
         """
-        Initialize a patch from a seed vertex by including taking the closure of all simplices in supermesh that contain the seed vertex. If v_seed is not in a boundary of supermesh, the patch will be a disk centered at v_seed.
+        Initialize a patch from a seed vertex by including taking the closure of all simplices in supermesh that contain the seed vertex. If seed_vertex is not in a boundary of supermesh, the patch will be a disk centered at seed_vertex.
 
         Parameters:
-            v_seed (int): vertex index
+            seed_vertex (int): vertex index
             supermesh (HalfEdgeMesh): mesh from which the patch is extracted
         """
-        V, H, F = supermesh.closure(*supermesh.star_of_vertex(v_seed))
-        self = cls(supermesh, V, H, F)
+        V, H, F = supermesh.closure(*supermesh.star_of_vertex(seed_vertex))
+        self = cls(supermesh, V, H, F, seed_vertex=seed_vertex)
 
         return self
 
     @classmethod
-    def from_seed_to_radius(cls, v_seed, supermesh, radius):
-        self = cls.from_seed_vertex(v_seed, supermesh)
-        self.expand_to_radius(supermesh.xyz_coord_v(v_seed), radius)
+    def from_seed_to_radius(cls, seed_vertex, supermesh, radius):
+        self = cls.from_seed_vertex(seed_vertex, supermesh)
+        self.expand_to_radius(supermesh.xyz_coord_v(seed_vertex), radius)
         return self
 
+    @classmethod
+    def from_vertex_set(cls, V, supermesh):
+        self = cls(
+            supermesh,
+            V,
+            set(),
+            set(),
+            find_h_right_B=False,
+        )
+        self.update_from_V()
+        return self
+
+    ##############################################
     def negative_boundary_contains_h(self, h):
         """check if half-edge h is in the boundary of the mesh"""
         return h in self.H and self.supermesh.f_left_h(h) not in self.F
@@ -369,9 +384,9 @@ class HalfEdgePatch:
             yield self.v_origin_h(h)
 
     ##############################################
-    def update_H_and_F_from_V(self):
+    def update_from_V(self):
         """
-        ...
+        Recompute everything from the current vertex set
         """
         F = set()
         for i in self.V:

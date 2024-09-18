@@ -58,14 +58,16 @@ class ParamManager:
         time_unit = 1e5
         sim_params = {
             "output_dir": output_dir,
-            "run_name": "run_0000",
+            "run_name": "default_sphere",
             "T": 10.0,
             "dt": 0.01,
-            "dt_record_data": 0.1,
-            "dt_write_data": 0.5,
+            "dt_record_data": 0.05,
+            "dt_write_data": 1.0,
             "dt_checkpoint": 2.0,
-            "dx_max": 0.1,
+            "dx_max": 0.05,
             "make_figs": True,
+            "show_contact_patches": True,
+            "show_contact_forces": True,
         }
 
         envelope_params = {
@@ -95,19 +97,20 @@ class ParamManager:
             "view_scale": 1.0,
             "force_profile": "bump",
             "contact_rgba": [0.5804, 0.0, 0.8275, 0.5],
-            "force_rgba": [0.0, 0.0, 0.0, 0.9],
-            "show_contact": True,
-            "show_force": True,
+            "force_rgba": [0.5804, 0.0, 0.8275, 1.0],
         }
 
         mesh_viewer_params = {
             "figsize": [720, 720],
             "image_dir": f"{output_dir}/temp_images",
+            "show_face_colored_surface": False,
+            "show_vertex_colored_surface": True,
+            "rgba_vertex": [0.0, 0.63335, 0.05295, 0.65],
             "view": {
                 "azimuth": 90.0,
                 "elevation": 55.0,
-                "distance": 6.75,
-                "focalpoint": [0.0, 0.0, 0.0],
+                # "distance": 6.75,
+                # "focalpoint": [0.0, 0.0, 0.0],
             },
         }
         sim_params["envelope_parameters"] = envelope_params
@@ -123,30 +126,180 @@ class ParamManager:
 
 
 class SpbForce:
+    """
+    Spindle pole body force
+
+    Parameters
+    ----------
+    envelope : Brane
+        Envelope object
+    contact_radius : float
+        Radius of contact patches
+    force_total : float
+        Total force on each spindle pole body
+    force_profile : str
+        Profile of force distribution
+    view_scale : float
+        Scale for viewer force vectors
+    contact_rgba : tuple
+        RGBA color for contact patches
+    force_rgba : tuple
+        RGBA color for force vectors
+    find_contact_data : bool
+        Whether to find contact patches and forces during initialization
+
+    Attributes
+    ----------
+    V_plus : np.ndarray
+        Vertices in contact patch plus
+    V_minus : np.ndarray
+        Vertices in contact patch minus
+    force_plus : np.ndarray
+        Force vector for each vertex in contact patch plus
+    force_minus : np.ndarray
+        Force vector for each vertex in contact patch minus
+
+    Methods
+    -------
+    viewer_add_vector_field_kwargs
+        Return kwargs for adding contact force vector field to mesh viewer with MeshViewer.add_vector_field
+    viewer_update_rgba_V_kwargs
+        Return kwargs for updating contact patch colors in mesh viewer with MeshViewer.update_rgba_V
+
+    Other Attributes
+    ----------------
+    V_contact : np.ndarray
+        Vertices in contact patches
+    force_contact : np.ndarray
+        Force vectors for contact patches
+    scaled_force : np.ndarray
+        Scaled force vectors for viewer
+    envelope : Brane
+        Nuclear envelope
+    patch_plus : HalfEdgePatch
+        Contact patch for spindle pole body plus
+    patch_minus : HalfEdgePatch
+        Contact patch for spindle pole body minus
+    """
+
     def __init__(
         self,
         envelope,
+        contact_radius,
         force_total,
         force_profile,
-        contact_radius,
-        show_contact=True,
-        show_force=True,
         view_scale=0.3,
         contact_rgba=(0.5804, 0.0, 0.8275, 0.5),
         force_rgba=(0.0, 0.0, 0.0, 0.9),
+        find_contact_data=True,
     ):
         self.envelope = envelope
+        self.contact_radius = contact_radius
         self.force_total = force_total
         self.force_profile = force_profile
-        self.contact_radius = contact_radius
-        self.show_contact = show_contact
-        self.show_force = show_force
         self.view_scale = view_scale
         self.contact_rgba = contact_rgba
         self.force_rgba = force_rgba
 
-        self.find_contact_patches()
-        self.find_contact_forces()
+        if find_contact_data:
+            self.patch_plus, self.patch_minus = self.find_contact_patches()
+            self.V_plus = np.array(sorted(self.patch_plus.V), dtype="int32")  # ***
+            self.V_minus = np.array(sorted(self.patch_minus.V), dtype="int32")  # ***
+            self.force_plus, self.force_minus = self.find_forces()  # ***
+            self.V_contact = np.concatenate([self.V_plus, self.V_minus], dtype="int32")
+            self.force_contact = np.vstack([self.force_plus, self.force_minus])
+            max_magnitude = np.max(
+                [
+                    np.linalg.norm(self.force_plus, axis=-1),
+                    np.linalg.norm(self.force_minus, axis=-1),
+                ]
+            )
+            self.scaled_force = self.view_scale * self.force_contact / max_magnitude
+        else:
+            self.patch_plus = None
+            self.patch_minus = None
+            self.V_plus = np.zeros(0, dtype="int32")
+            self.V_minus = np.zeros(0, dtype="int32")
+            self.V_contact = np.zeros(0, dtype="int32")
+            self.force_plus = np.zeros((0, 3))
+            self.force_minus = np.zeros((0, 3))
+            self.scaled_force = np.zeros((0, 3))
+
+    def dataset_info(self):
+        num_vertices_plus = len(self.V_plus)
+        num_vertices_minus = len(self.V_minus)
+        info = [
+            ["spb_force/V_plus", (num_vertices_plus,), "int32"],
+            ["spb_force/V_minus", (num_vertices_minus,), "int32"],
+            ["spb_force/force_plus", (num_vertices_plus, 3), "float64"],
+            ["spb_force/force_minus", (num_vertices_minus, 3), "float64"],
+            ["spb_force/contact_radius", (), "float64"],
+            ["spb_force/force_total", (), "float64"],
+            ["spb_force/force_profile", (), "str"],
+            ["spb_force/view_scale", (), "float64"],
+            ["spb_force/contact_rgba", (4,), "float64"],
+            ["spb_force/force_rgba", (4,), "float64"],
+        ]
+        return info
+
+    def get_dataset(self):
+
+        dataset = {
+            "spb_force/V_plus": self.V_plus,
+            "spb_force/V_minus": self.V_minus,
+            "spb_force/force_plus": self.force_plus,
+            "spb_force/force_minus": self.force_minus,
+            "spb_force/contact_radius": self.contact_radius,
+            "spb_force/force_total": self.force_total,
+            "spb_force/force_profile": self.force_profile,
+            "spb_force/view_scale": self.view_scale,
+            "spb_force/contact_rgba": self.contact_rgba,
+            "spb_force/force_rgba": self.force_rgba,
+        }
+        return dataset
+
+    @classmethod
+    def from_dataset(cls, envelope, datasets):
+        contact_radius = datasets["spb_force/contact_radius"]
+        force_total = datasets["spb_force/force_total"]
+        force_profile = datasets["spb_force/force_profile"]
+        view_scale = datasets["spb_force/view_scale"]
+        contact_rgba = datasets["spb_force/contact_rgba"]
+        force_rgba = datasets["spb_force/force_rgba"]
+        V_plus = datasets["spb_force/V_plus"]
+        V_minus = datasets["spb_force/V_minus"]
+        force_plus = datasets["spb_force/force_plus"]
+        force_minus = datasets["spb_force/force_minus"]
+
+        self = cls(
+            envelope,
+            contact_radius,
+            force_total,
+            force_profile,
+            view_scale,
+            contact_rgba,
+            force_rgba,
+            find_contact_data=False,
+        )
+        self.patch_plus = HalfEdgePatch.from_vertex_set(set(self.V_plus), self.envelope)
+        self.patch_minus = HalfEdgePatch.from_vertex_set(
+            set(self.V_minus), self.envelope
+        )
+        self.V_plus = V_plus
+        self.V_minus = V_minus
+        self.force_plus = force_plus
+        self.force_minus = force_minus
+
+        self.V_contact = np.concatenate([self.V_plus, self.V_minus], dtype="int32")
+        self.force_contact = np.vstack([self.force_plus, self.force_minus])
+        max_magnitude = np.max(
+            [
+                np.linalg.norm(self.force_plus, axis=-1),
+                np.linalg.norm(self.force_minus, axis=-1),
+            ]
+        )
+        self.scaled_force = self.view_scale * self.force_contact / max_magnitude
+        return self
 
     def _bump3(self, xyz, center, contact_radius, force_total):
         s = np.linalg.norm(xyz - center, axis=-1) / contact_radius
@@ -177,30 +330,10 @@ class SpbForce:
         patch_minus = HalfEdgePatch.from_seed_to_radius(
             seed_minus, envelope, contact_radius
         )
-        V_plus = np.array(sorted(patch_plus.V))
-        V_minus = np.array(sorted(patch_minus.V))
-        V_contact = np.concatenate([V_plus, V_minus])
-        F_plus = np.array(sorted(patch_plus.F))
-        F_minus = np.array(sorted(patch_minus.F))
-        F_contact = np.concatenate([F_plus, F_minus])
 
-        self.seed_plus = seed_plus
-        self.seed_minus = seed_minus
-        self.patch_plus = patch_plus
-        self.patch_minus = patch_minus
-        self.V_plus = V_plus
-        self.V_minus = V_minus
-        self.V_contact = V_contact
-        self.F_contact = F_contact
+        return patch_plus, patch_minus
 
-    def update_contact_patches(self):
-        self.patch_plus.update_H_and_F_from_V()
-        self.patch_minus.update_H_and_F_from_V()
-        self.F_plus = np.array(sorted(self.patch_plus.F))
-        self.F_minus = np.array(sorted(self.patch_minus.F))
-        self.F_contact = np.concatenate([self.F_plus, self.F_minus])
-
-    def find_contact_forces(self):
+    def find_forces(self):
 
         force_profile = self.force_profile
         envelope = self.envelope
@@ -208,8 +341,8 @@ class SpbForce:
         force_total = self.force_total
         view_scale = self.view_scale
 
-        seed_plus = self.seed_plus
-        seed_minus = self.seed_minus
+        seed_plus = self.patch_plus.seed_vertex
+        seed_minus = self.patch_minus.seed_vertex
         V_plus = self.V_plus
         V_minus = self.V_minus
 
@@ -233,93 +366,244 @@ class SpbForce:
             magnitude_minus = self._uniform3(
                 xyz_coord_V_minus, center_minus, contact_radius, force_total
             )
+        return force_plus, force_minus
 
-        max_magnitude = np.max([magnitude_plus, magnitude_minus])
-
-        force_plus = np.einsum("i,j->ij", magnitude_plus, [1, 0, 0])
-        force_minus = np.einsum("i,j->ij", magnitude_minus, [-1, 0, 0])
-        force_contact = np.vstack([force_plus, force_minus])
-
-        viewer_force_vectors = view_scale * force_contact / max_magnitude
-
-        self.magnitude_plus = magnitude_plus
-        self.magnitude_minus = magnitude_minus
-        self.max_magnitude = max_magnitude
-
-        self.force_plus = force_plus
-        self.force_minus = force_minus
-        self.force_contact = force_contact
-
-        self.viewer_force_vectors = viewer_force_vectors
-
-    def viewer_vector_field_kwargs(self):
+    def viewer_add_vector_field_kwargs(self):
         points = self.envelope.xyz_coord_V[self.V_contact]
-        vectors = self.viewer_force_vectors
+        vectors = self.scaled_force
         rgba = self.force_rgba
         return {"points": points, "vectors": vectors, "rgba": rgba, "name": "spb_force"}
 
-    def viewer_update_rgba_V_contact_kwargs(self):
+    def viewer_update_rgba_V_kwargs(self):
         value = self.contact_rgba
         indices = self.V_contact
         return {"value": value, "indices": indices}
 
-    def viewer_update_rgba_F_contact_kwargs(self):
-        value = self.contact_rgba
-        indices = self.F_contact
-        return {"value": value, "indices": indices}
+
+class Envelope(Brane):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def parameters_dataset_info(self):
+        info = [
+            ["envelope/spontaneous_curvature", (), "float64"],
+            ["envelope/bending_modulus", (), "float64"],
+            ["envelope/splay_modulus", (), "float64"],
+            ["envelope/volume_reg_stiffness", (), "float64"],
+            ["envelope/area_reg_stiffness", (), "float64"],
+            ["envelope/tether_stiffness", (), "float64"],
+            ["envelope/tether_repulsive_onset", (), "float64"],
+            ["envelope/tether_repulsive_singularity", (), "float64"],
+            ["envelope/tether_attractive_onset", (), "float64"],
+            ["envelope/tether_attractive_singularity", (), "float64"],
+            ["envelope/drag_coefficient", (), "float64"],
+            ["envelope/flipping_frequency", (), "float64"],
+            ["envelope/flipping_probability", (), "float64"],
+        ]
+        return info
+
+    def mesh_dataset_info(self):
+        num_vertices = self.num_vertices
+        num_half_edges = self.num_half_edges
+        num_faces = self.num_faces
+        info = [
+            ["envelope/xyz_coord_V", (num_vertices, 3), "float64"],
+            ["envelope/h_out_V", (num_vertices,), "int32"],
+            ["envelope/v_origin_H", (num_half_edges,), "int32"],
+            ["envelope/h_next_H", (num_half_edges,), "int32"],
+            ["envelope/h_twin_H", (num_half_edges,), "int32"],
+            ["envelope/f_left_H", (num_half_edges,), "int32"],
+            ["envelope/h_bound_F", (num_faces,), "int32"],
+            ["envelope/h_right_B", (num_boundaries,), "int32"],
+        ]
+        return info
+
+    def dynamics_dataset_info(self):
+        num_vertices = self.num_vertices
+        num_half_edges = self.num_half_edges
+        num_faces = self.num_faces
+        info = [
+            ["envelope/bending_force", (num_vertices, 3), "float64"],
+            ["envelope/area_force", (num_vertices, 3), "float64"],
+            ["envelope/volume_force", (num_vertices, 3), "float64"],
+            ["envelope/tether_force", (num_vertices, 3), "float64"],
+            ["envelope/num_flips", (), "int32"],
+        ]
+        return info
+
+    def get_mesh_dataset(self):
+        dataset = {
+            "envelope/xyz_coord_V": self.xyz_coord_V,
+            "envelope/h_out_V": self.h_out_V,
+            "envelope/v_origin_H": self.v_origin_H,
+            "envelope/h_next_H": self.h_next_H,
+            "envelope/h_twin_H": self.h_twin_H,
+            "envelope/f_left_H": self.f_left_H,
+            "envelope/h_bound_F": self.h_bound_F,
+            "envelope/h_right_B": self.h_right_B,
+        }
+
+    def get_parameters_dataset(self):
+        dataset = {
+            "envelope/spontaneous_curvature": self.spontaneous_curvature,
+            "envelope/bending_modulus": self.bending_modulus,
+            "envelope/splay_modulus": self.splay_modulus,
+            "envelope/volume_reg_stiffness": self.volume_reg_stiffness,
+            "envelope/area_reg_stiffness": self.area_reg_stiffness,
+            "envelope/tether_stiffness": self.tether_stiffness,
+            "envelope/tether_repulsive_onset": self.tether_repulsive_onset,
+            "envelope/tether_repulsive_singularity": self.tether_repulsive_singularity,
+            "envelope/tether_attractive_onset": self.tether_attractive_onset,
+            "envelope/tether_attractive_singularity": self.tether_attractive_singularity,
+            "envelope/drag_coefficient": self.drag_coefficient,
+            "envelope/flipping_frequency": self.flipping_frequency,
+            "envelope/flipping_probability": self.flipping_probability,
+        }
+        return dataset
 
 
-class SimData:
+class StretchSimData:
     def __init__(
         self,
         data_path,
-        num_vertices,
-        num_half_edges,
-        num_faces,
-        num_boundaries,
-        samples_per_chunk,
+        envelope,
+        spb_force,
+        samples_per_chunk=100,
     ):
         self.data_path = data_path
-        self.num_vertices = num_vertices
-        self.num_half_edges = num_half_edges
-        self.num_faces = num_faces
         self.samples_per_chunk = samples_per_chunk
         self.sample_num = 0
-        self.he_datasets = [
-            ["vertex/xyz_coord_V", (num_vertices, 3), "int32"],
-            ["vertex/h_out_V", (num_vertices,), "int32"],
-            ["half_edge/v_origin_H", (num_half_edges,), "int32"],
-            ["half_edge/h_next_H", (num_half_edges,), "int32"],
-            ["half_edge/h_twin_H", (num_half_edges,), "int32"],
-            ["half_edge/f_left_H", (num_half_edges,), "int32"],
-            ["face/h_bound_F", (num_faces,), "int32"],
-            ["boundary/h_right_B", (num_boundaries,), "int32"],
-        ]
-        self.force_datasets = [
-            ["vertex/bending_force", (num_vertices, 3), "float64"],
-            ["vertex/area_force", (num_vertices, 3), "float64"],
-            ["vertex/volume_force", (num_vertices, 3), "float64"],
-            ["vertex/tether_force", (num_vertices, 3), "float64"],
-            ["vertex/spb_force", (num_vertices, 3), "float64"],
-        ]
 
-        with h5py.File(self.data_path, "w") as data_file:
-            scalar_group = data_file.require_group("scalar")
-            vertex_group = data_file.require_group("vertex")
-            half_edge_group = data_file.require_group("half_edge")
-            face_group = data_file.require_group("face")
-            boundary_group = data_file.require_group("boundary")
-            #
-        self.scalar_chunk = dict()
-        self.vertex_chunk = dict()
-        self.half_edge_chunk = dict()
-        self.face_chunk = dict()
-        self.boundary_chunk = dict()
-
-        self.key_dict = {
-            group_key: dict()
-            for group_key in ["scalar", "vertex", "half_edge", "face", "boundary"]
+        envelope_parameters = {
+            "envelope/spontaneous_curvature": envelope.spontaneous_curvature,
+            "envelope/bending_modulus": envelope.bending_modulus,
+            "envelope/splay_modulus": envelope.splay_modulus,
+            "envelope/volume_reg_stiffness": envelope.volume_reg_stiffness,
+            "envelope/area_reg_stiffness": envelope.area_reg_stiffness,
+            "envelope/tether_stiffness": envelope.tether_stiffness,
+            "envelope/tether_repulsive_onset": envelope.tether_repulsive_onset,
+            "envelope/tether_repulsive_singularity": envelope.tether_repulsive_singularity,
+            "envelope/tether_attractive_onset": envelope.tether_attractive_onset,
+            "envelope/tether_attractive_singularity": envelope.tether_attractive_singularity,
+            "envelope/drag_coefficient": envelope.drag_coefficient,
+            "envelope/flipping_frequency": envelope.flipping_frequency,
+            "envelope/flipping_probability": envelope.flipping_probability,
         }
+
+        spb_force_parameters = {
+            "spb_force/V_plus": spb_force.V_plus,
+            "spb_force/V_minus": spb_force.V_minus,
+            "spb_force/force_plus": spb_force.force_plus,
+            "spb_force/force_minus": spb_force.force_minus,
+            "spb_force/contact_radius": spb_force.contact_radius,
+            "spb_force/force_total": spb_force.force_total,
+            "spb_force/force_profile": spb_force.force_profile,
+            "spb_force/view_scale": spb_force.view_scale,
+            "spb_force/contact_rgba": spb_force.contact_rgba,
+            "spb_force/force_rgba": spb_force.force_rgba,
+        }
+
+        num_vertices = envelope.num_vertices
+        num_half_edges = envelope.num_half_edges
+        num_faces = envelope.num_faces
+
+        self.mesh_time_series_info = [
+            ["mesh/xyz_coord_V", (num_vertices, 3), "float64"],
+            ["mesh/h_out_V", (num_vertices,), "int32"],
+            ["mesh/v_origin_H", (num_half_edges,), "int32"],
+            ["mesh/h_next_H", (num_half_edges,), "int32"],
+            ["mesh/h_twin_H", (num_half_edges,), "int32"],
+            ["mesh/f_left_H", (num_half_edges,), "int32"],
+            ["mesh/h_bound_F", (num_faces,), "int32"],
+            ["mesh/h_right_B", (num_boundaries,), "int32"],
+        ]
+        self.mesh_time_series_data = {
+            key: np.zeros((self.samples_per_chunk,) + shape, dtype=dtype)
+            for key, shape, dtype in self.mesh_time_series_info
+        }
+        num_vertices_plus = spb_force.V_plus.shape[0]
+        num_vertices_minus = spb_force.V_minus.shape[0]
+        self.spb_force_info = [
+            ["spb_force/V_plus", (num_vertices_plus,), "int32"],
+            ["spb_force/V_minus", (num_vertices_minus,), "int32"],
+            ["spb_force/force_plus", (num_vertices_plus, 3), "float64"],
+            ["spb_force/force_minus", (num_vertices_minus, 3), "float64"],
+            ["spb_force/contact_radius", (), "float64"],
+            ["spb_force/force_total", (), "float64"],
+            ["spb_force/force_profile", (), "str"],
+            ["spb_force/view_scale", (), "float64"],
+            ["spb_force/contact_rgba", (4,), "float64"],
+            ["spb_force/force_rgba", (4,), "float64"],
+        ]
+        self.spb_force_data = {
+            "spb_force/V_plus": spb_force.V_plus,
+            "spb_force/V_minus": spb_force.V_minus,
+            "spb_force/force_plus": spb_force.force_plus,
+            "spb_force/force_minus": spb_force.force_minus,
+            "spb_force/contact_radius": spb_force.contact_radius,
+            "spb_force/force_total": spb_force.force_total,
+            "spb_force/force_profile": spb_force.force_profile,
+            "spb_force/view_scale": spb_force.view_scale,
+            "spb_force/contact_rgba": spb_force.contact_rgba,
+            "spb_force/force_rgba": spb_force.force_rgba,
+        }
+
+        with h5py.File(self.data_path, "w") as f:
+            envelope_group = f.require_group("envelope")
+            spb_force_group = f.require_group("spb_force")
+            half_edge_group = f.require_group("half_edge")
+            face_group = f.require_group("face")
+            boundary_group = f.require_group("boundary")
+        # mesh_data_sets = [
+        #     ["mesh/xyz_coord_V", (num_vertices, 3), "float64"],
+        #     ["mesh/h_out_V", (num_vertices,), "int32"],
+        #     ["mesh/v_origin_H", (num_half_edges,), "int32"],
+        #     ["mesh/h_next_H", (num_half_edges,), "int32"],
+        #     ["mesh/h_twin_H", (num_half_edges,), "int32"],
+        #     ["mesh/f_left_H", (num_half_edges,), "int32"],
+        #     ["mesh/h_bound_F", (num_faces,), "int32"],
+        #     ["mesh/h_right_B", (num_boundaries,), "int32"],
+        # ]
+
+        # self.he_datasets = [
+        #     ["vertex/xyz_coord_V", (num_vertices, 3), "float64"],
+        #     ["vertex/h_out_V", (num_vertices,), "int32"],
+        #     ["half_edge/v_origin_H", (num_half_edges,), "int32"],
+        #     ["half_edge/h_next_H", (num_half_edges,), "int32"],
+        #     ["half_edge/h_twin_H", (num_half_edges,), "int32"],
+        #     ["half_edge/f_left_H", (num_half_edges,), "int32"],
+        #     ["face/h_bound_F", (num_faces,), "int32"],
+        #     ["boundary/h_right_B", (num_boundaries,), "int32"],
+        # ]
+        # self.force_datasets = [
+        #     ["vertex/bending_force", (num_vertices, 3), "float64"],
+        #     ["vertex/area_force", (num_vertices, 3), "float64"],
+        #     ["vertex/volume_force", (num_vertices, 3), "float64"],
+        #     ["vertex/tether_force", (num_vertices, 3), "float64"],
+        #     ["vertex/spb_force", (num_vertices, 3), "float64"],
+        # ]
+
+        # with h5py.File(self.data_path, "w") as data_file:
+        #     scalar_group = data_file.require_group("scalar")
+        #     vertex_group = data_file.require_group("vertex")
+        #     half_edge_group = data_file.require_group("half_edge")
+        #     face_group = data_file.require_group("face")
+        #     boundary_group = data_file.require_group("boundary")
+        #     #
+        # self.scalar_chunk = dict()
+        # self.vertex_chunk = dict()
+        # self.half_edge_chunk = dict()
+        # self.face_chunk = dict()
+        # self.boundary_chunk = dict()
+
+        # self.key_dict = {
+        #     group_key: dict()
+        #     for group_key in ["scalar", "vertex", "half_edge", "face", "boundary"]
+        # }
+
+    ########################################################
+    ########################################################
+    ########################################################
 
     def define_he_datasets(self):
 
@@ -527,23 +811,6 @@ class SimData:
         # Append the new data
         dataset[num_samples_current:] = datachunk
 
-    # def record_data(self):
-    #     with h5py.File(self.data_path, "a") as f:
-    #         t = self.t
-    #         xyz_coord_V = self.envelope.xyz_coord_V
-    #         F = self.envelope.F
-    #         Fa = self.envelope.Farea_harmonic()
-    #         Fv = self.envelope.Fvolume_harmonic()
-    #         Ft, tether_success = self.envelope.Ftether()
-    #         Fb = self.envelope.Fbend_analytic()
-    #         F_contact = self.spb_force.force_contact
-    #         force_plus = self.spb_force.force_plus
-    #         force_minus = self.spb_force.force_minus
-    #         viewer_force_vectors = self.spb_force.viewer_force_vectors
-    #         magnitude_plus = self.spb_force.magnitude_plus
-    #         magnitude_minus = self.spb_force.magnitude_minus
-    #         max_magnitude = self.spb_force.max_magnitude
-
 
 class StretchSim:
     """
@@ -635,13 +902,15 @@ class StretchSim:
             mesh_viewer_parameters["image_dir"] = self.temp_images_dir
         self.mesh_viewer = MeshViewer(self.envelope, **mesh_viewer_parameters)
         ############################
-        self.mesh_viewer.add_vector_field(**self.spb_force.viewer_vector_field_kwargs())
+        self.mesh_viewer.add_vector_field(
+            **self.spb_force.viewer_add_vector_field_kwargs()
+        )
         self.mesh_viewer.update_rgba_V(
             **self.spb_force.viewer_update_rgba_V_contact_kwargs()
         )
-        self.mesh_viewer.update_rgba_F(
-            **self.spb_force.viewer_update_rgba_F_contact_kwargs()
-        )
+        # self.mesh_viewer.update_rgba_F(
+        #     **self.spb_force.viewer_update_rgba_F_contact_kwargs()
+        # )
         ############################
         sim_data_params = dict()
         sim_data_params["data_path"] = self.data_path
@@ -682,7 +951,9 @@ class StretchSim:
 
     def update_viewer_vector_field(self):
         self.mesh_viewer.clear_vector_field_data()
-        self.mesh_viewer.add_vector_field(**self.spb_force.viewer_vector_field_kwargs())
+        self.mesh_viewer.add_vector_field(
+            **self.spb_force.viewer_add_vector_field_kwargs()
+        )
 
     @classmethod
     def from_parameters_file(cls, file_path, overwrite_output_dir=False):
@@ -847,4 +1118,18 @@ class StretchSim:
             pickle.dump(self, f)
 
     def save_data(self):
+        pass
+
+
+class SimAnalyzer:
+    def __init__(self, data_path):
+        self.data_path = data_path
+
+    def load_data(self):
+        pass
+
+    def analyze_data(self):
+        pass
+
+    def save_results(self):
         pass
