@@ -6,8 +6,8 @@ dt_record_data: 0.05
 dt_write_data: 0.5
 dt_checkpoint: 2.0
 dx_max: 0.05
-make_figs: true
-envelope_parameters:
+make_movie_frames: true
+envelope:
   ply_path: ./data/half_edge_base/ply/vutukuri_vesicle_005120_he.ply
   spontaneous_curvature: 0.0
   bending_modulus: 4.0
@@ -22,7 +22,7 @@ envelope_parameters:
   drag_coefficient: 10.0
   flipping_frequency: 10.0
   flipping_probability: 0.3
-spb_force_parameters:
+spb_force:
   force_total: 3200.0
   contact_radius: 10.0
   view_scale: 32.0
@@ -39,7 +39,7 @@ spb_force_parameters:
   - 1.0
   show_contact: true
   show_force: true
-mesh_viewer_parameters:
+mesh_viewer:
   show_face_colored_surface: false
   show_vertex_colored_surface: true
   rgba_vertex:

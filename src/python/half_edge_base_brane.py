@@ -1,6 +1,9 @@
 from src.python.half_edge_base_mesh import HalfEdgeMeshBase
 import numpy as np
 from src.python.global_vars import _INT_TYPE_, _FLOAT_TYPE_
+from src.python.combinatorics import argsort
+
+from scipy.sparse import lil_matrix
 
 
 # Forces
@@ -196,6 +199,12 @@ class Brane(HalfEdgeMeshBase):
         }
         brane_kwargs = {key: float(val) for key, val in brane_kwargs.items()}
         return brane_kwargs
+
+    @classmethod
+    def default_sphere(cls):
+        ply_path = "./data/half_edge_base/ply/unit_sphere_005120_he.ply"
+        self = cls.from_he_ply(ply_path, **cls.default_params())
+        return self
 
     @staticmethod
     def vutukuri_params(num_faces=5120, radius=1.0):
@@ -487,6 +496,231 @@ class Brane(HalfEdgeMeshBase):
     def average_face_area(self):
         return self.total_area_of_faces() / self.num_faces
 
+    def _get_cotan_laplacian_lil(self):
+        area_V = np.zeros(self.num_vertices)
+        rows = np.empty(self.num_vertices, dtype=object)
+        data = np.empty(self.num_vertices, dtype=object)
+
+        for i in range(self.num_vertices):
+            x_i = self.xyz_coord_v(i)
+            rows[i] = [i]
+            data[i] = [0.0]
+            for h in self.generate_H_out_v_clockwise(i):
+                j = self.v_head_h(h)
+                j_plus = self.v_head_h(self.h_next_h(h))
+
+                x_j = self.xyz_coord_v(j)
+                x_j_plus = self.xyz_coord_v(j_plus)
+
+                rows[i].append(j)
+                area_V[i] += np.linalg.norm(np.cross(x_j - x_i, x_j_plus - x_i)) / 6
+
+                cot_plus = np.dot(x_i - x_j_plus, x_j - x_j_plus) / np.linalg.norm(
+                    np.cross(x_i - x_j_plus, x_j - x_j_plus)
+                )
+                w = cot_plus / 2
+                if not self.positive_boundary_contains_h(h):
+                    j_minus = self.v_head_h(self.h_next_h(self.h_twin_h(h)))  #
+                    x_j_minus = self.xyz_coord_v(j_minus)  #
+                    cot_minus = np.dot(
+                        x_j - x_j_minus, x_i - x_j_minus
+                    ) / np.linalg.norm(np.cross(x_j - x_j_minus, x_i - x_j_minus))
+                    w += cot_minus / 2
+
+                data[i].append(w)
+                data[i][0] -= w
+            # sort nonzero column indices for row i
+            argsort_row = argsort(rows[i])
+            rows[i] = [rows[i][_] for _ in argsort_row]
+            data[i] = [data[i][_] for _ in argsort_row]
+        mat = lil_matrix((self.num_vertices, self.num_vertices), dtype=_FLOAT_TYPE_)
+        mat.rows = rows
+        mat.data = data
+
+        return mat, area_V
+
+    def get_cotan_laplacian_lil(self):
+        """
+        Computes the cotan Laplacian of Q at each vertex
+        """
+        area_V = np.zeros(self.num_vertices)
+        rows = np.empty(self.num_vertices, dtype=object)
+        data = np.empty(self.num_vertices, dtype=object)
+        for vi in range(self.num_vertices):
+            rows[vi] = [vi]
+            data[vi] = [0.0]
+            Atot = 0.0
+            ri = self.xyz_coord_v(vi)
+
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+            for hij in self.generate_H_out_v_clockwise(vi):
+                hijm1 = self.h_next_h(self.h_twin_h(hij))
+                hijp1 = self.h_twin_h(self.h_prev_h(hij))
+                vjm1 = self.v_head_h(hijm1)
+                vj = self.v_head_h(hij)
+                vjp1 = self.v_head_h(hijp1)
+
+                rjm1 = self.xyz_coord_v(vjm1)
+                rj = self.xyz_coord_v(vj)
+                rjp1 = self.xyz_coord_v(vjp1)
+
+                rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
+                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+                ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
+                rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
+                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
+                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+
+                Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
+                Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
+                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
+                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+
+                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
+                sin_thetam = np.sqrt(1 - cos_thetam**2)
+                sin_thetap = np.sqrt(1 - cos_thetap**2)
+
+                cot_thetam = cos_thetam / sin_thetam
+                cot_thetap = cos_thetap / sin_thetap
+
+                # Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
+                area_V[vi] += Lijp1 * Ljjp1 * sin_thetap / 6
+                w = (cot_thetam + cot_thetap) / 2
+                data[vi].append(w)
+                data[vi][0] -= w
+                rows[vi].append(vj)
+            # sort nonzero column indices for row i
+            argsort_row = argsort(rows[vi])
+            rows[vi] = [rows[vi][_] for _ in argsort_row]
+            data[vi] = [data[vi][_] for _ in argsort_row]
+
+        mat = lil_matrix((self.num_vertices, self.num_vertices), dtype=_FLOAT_TYPE_)
+        mat.rows = rows
+        mat.data = data
+
+        return mat, area_V
+
+    def get_cotan_laplacian_lilsafe(self):
+        """
+        Computes the cotan Laplacian of Q at each vertex
+        """
+        area_V = np.zeros(self.num_vertices)
+        rows = np.empty(self.num_vertices, dtype=object)
+        data = np.empty(self.num_vertices, dtype=object)
+        for vi in range(self.num_vertices):
+            rows[vi] = [vi]
+            data[vi] = [0.0]
+            Atot = 0.0
+            ri = self.xyz_coord_v(vi)
+
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+            for hij in self.generate_H_out_v_clockwise(vi):
+
+                hijp1 = self.h_twin_h(self.h_prev_h(hij))
+
+                vj = self.v_head_h(hij)
+                vjp1 = self.v_head_h(hijp1)
+                rj = self.xyz_coord_v(vj)
+                rjp1 = self.xyz_coord_v(vjp1)
+
+                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+
+                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
+                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+
+                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
+                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
+
+                sin_thetap = np.sqrt(1 - cos_thetap**2)
+
+                cot_thetap = cos_thetap / sin_thetap
+                w = cot_thetap / 2
+                if not self.positive_boundary_contains_h(hij):
+                    hijm1 = self.h_next_h(self.h_twin_h(hij))
+                    vjm1 = self.v_head_h(hijm1)  #
+
+                    rjm1 = self.xyz_coord_v(vjm1)  #
+                    rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2  #
+                    ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]  #
+                    rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]  #
+                    Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)  #
+                    Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)  #
+                    cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (
+                        Lijm1 * Ljjm1
+                    )  #
+                    sin_thetam = np.sqrt(1 - cos_thetam**2)  #
+                    cot_thetam = cos_thetam / sin_thetam  #
+                    w += cot_thetam / 2  #
+
+                # Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
+                area_V[vi] += Lijp1 * Ljjp1 * sin_thetap / 6
+
+                data[vi].append(w)
+                data[vi][0] -= w
+                rows[vi].append(vj)
+            # sort nonzero column indices for row i
+            argsort_row = argsort(rows[vi])
+            rows[vi] = [rows[vi][_] for _ in argsort_row]
+            data[vi] = [data[vi][_] for _ in argsort_row]
+
+        mat = lil_matrix((self.num_vertices, self.num_vertices), dtype=_FLOAT_TYPE_)
+        mat.rows = rows
+        mat.data = data
+
+        return mat, area_V
+
+    def get_cotan_laplacian_csr(self):
+        area_V = np.zeros(self.num_vertices)
+        rows = self.num_vertices * [[]]
+        data = self.num_vertices * [[]]
+
+        for i in range(self.num_vertices):
+            x_i = self.xyz_coord_v(i)
+            rows[i].append(i)
+            data[i].append(0.0)
+            for h in self.generate_H_out_v_clockwise(i):
+                j = self.v_head_h(h)
+                j_plus = self.v_head_h(self.h_next_h(h))
+
+                x_j = self.xyz_coord_v(j)
+                x_j_plus = self.xyz_coord_v(j_plus)
+
+                rows[i].append(j)
+                area_V[i] += np.linalg.norm(np.cross(x_j - x_i, x_j_plus - x_i)) / 6
+
+                cot_plus = np.dot(x_i - x_j_plus, x_j - x_j_plus) / np.linalg.norm(
+                    np.cross(x_i - x_j_plus, x_j - x_j_plus)
+                )
+                w = cot_plus / 2
+                if not self.positive_boundary_contains_h(h):
+                    j_minus = self.v_head_h(self.h_next_h(self.h_twin_h(h)))  #
+                    x_j_minus = self.xyz_coord_v(j_minus)  #
+                    cot_minus = np.dot(
+                        x_j - x_j_minus, x_i - x_j_minus
+                    ) / np.linalg.norm(np.cross(x_j - x_j_minus, x_i - x_j_minus))
+                    w += cot_minus / 2
+
+                data[i].append(w)
+                data[i][0] -= w
+            # sort nonzero column indices for row i
+            # argsort_row = argsort(rows[i])
+            # rows[i] = [rows[i][_] for _ in argsort_row]
+            # data[i] = [data[i][_] for _ in argsort_row]
+            # mat = lil_matrix((self.num_vertices, self.num_vertices), dtype=_FLOAT_TYPE_)
+            # mat.rows = rows
+            # mat.data = data
+        # return mat, area_V
+        return rows, data, area_V
+
     ######################
     def pressure_soft_penalty(self):
         """
@@ -524,52 +758,6 @@ class Brane(HalfEdgeMeshBase):
         Computes the cotan Laplacian of Q at each vertex
         """
 
-        # lapQ = np.zeros_like(Q)
-        # for vi in range(self.num_vertices):
-        #     Atot = 0.0
-        #     ri = self.xyz_coord_v(vi)
-        #     qi = Q[vi]
-        #     ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-        #     for hij in self.generate_H_out_v_clockwise(vi):
-        #         hijm1 = self.h_next_h(self.h_twin_h(hij))
-        #         hijp1 = self.h_twin_h(self.h_prev_h(hij))
-        #         vjm1 = self.v_head_h(hijm1)
-        #         vj = self.v_head_h(hij)
-        #         vjp1 = self.v_head_h(hijp1)
-
-        #         qj = Q[vj]
-
-        #         rjm1 = self.xyz_coord_v(vjm1)
-        #         rj = self.xyz_coord_v(vj)
-        #         rjp1 = self.xyz_coord_v(vjp1)
-
-        #         rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
-        #         rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
-        #         rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
-        #         ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
-        #         ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
-        #         rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
-        #         ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
-        #         rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
-
-        #         Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
-        #         Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
-        #         Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
-        #         Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
-        #         Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
-
-        #         cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
-
-        #         cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
-
-        #         cot_thetam = cos_thetam / np.sqrt(1 - cos_thetam**2)
-        #         cot_thetap = cos_thetap / np.sqrt(1 - cos_thetap**2)
-
-        #         Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
-        #         lapQ[vi] += (cot_thetam + cot_thetap) * (qj - qi) / 2
-        #     lapQ[vi] /= Atot
-
-        # return lapQ
         return self.cotan_laplacian(Q)
 
     #####################

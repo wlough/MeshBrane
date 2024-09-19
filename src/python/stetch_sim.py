@@ -7,11 +7,157 @@ import yaml
 from src.python.half_edge_base_brane import Brane
 from src.python.half_edge_base_patch import HalfEdgePatch
 from src.python.half_edge_base_viewer import MeshViewer
+from copy import deepcopy
+
+
+class RawData:
+    def __init__(
+        self,
+        dt_sim,
+        dt_record,
+        dt_write,
+        envelope,
+        spb_force,
+        *args,
+        **kwargs,
+    ):
+        self.dt_sim = dt_sim
+        self.dt_record = dt_record
+        self.dt_write = dt_write
+        self.envelope = envelope
+        self.spb_force = spb_force
+
+        num_sim_samples = 5
+        num_vertices = envelope.num_vertices
+        num_half_edges = envelope.num_half_edges
+        num_faces = envelope.num_faces
+
+        self.t = np.zeros(num_sim_samples)
+        self.envelope_data = {
+            "xyz_coord_V": np.zeros((num_sim_samples, num_vertices, 3)),
+            "h_out_V": np.zeros((num_sim_samples, num_vertices), dtype="int32"),
+            "v_origin_H": np.zeros((num_sim_samples, num_half_edges), dtype="int32"),
+            "h_next_H": np.zeros((num_sim_samples, num_half_edges), dtype="int32"),
+            "h_twin_H": np.zeros((num_sim_samples, num_half_edges), dtype="int32"),
+            "f_left_H": np.zeros((num_sim_samples, num_half_edges), dtype="int32"),
+            "h_bound_F": np.zeros((num_sim_samples, num_faces), dtype="int32"),
+            "h_right_B": np.zeros((num_sim_samples, num_boundaries), dtype="int32"),
+            #
+            "pressure": np.zeros(num_time_samples),
+            "surface_tension_V": np.zeros((num_time_samples, num_faces)),
+            "area_V": np.zeros((num_time_samples, num_vertices)),
+            "laplacian_weights_VV_csr_data": np.zeros((num_time_samples, num_vertices)),
+            "unit_normal_V": np.zeros((num_time_samples, num_vertices, 3)),
+            "force_bend_V": np.zeros((num_time_samples, num_vertices, 3)),
+            "force_area_V": np.zeros((num_time_samples, num_vertices, 3)),
+            "force_volume_V": np.zeros((num_time_samples, num_vertices, 3)),
+        }
+
+        num_record_samples = int(dt_write // dt_record) + 1
+        self.t_record = np.zeros(dt_write_dt_record_ratio)
+
+        self.envelope_data = {
+            "xyz_coord_V": envelope.xyz_coord_V,
+        }
+
+        self.t = t
+        self.xyz_coord_V = xyz_coord_V
+        self.h_out_V = h_out_V
+        self.v_origin_H = v_origin_H
+        self.h_next_H = h_next_H
+        self.h_twin_H = h_twin_H
+        self.f_left_H = f_left_H
+        self.h_bound_F = h_bound_F
+        self.h_right_B = h_right_B
+        self.force_bending_V = kwargs.get("bending_force", np.zeros_like(xyz_coord_V))
+        for key, val in kwargs.items():
+            setattr(self, key, val)
+        self.args = args
+
+    def extrapolate(self, t):
+        dt = t - self.t
+        xyz_coord_V = self.xyz_coord_V + dt * self.dN_dt
+        return RawData(t, xyz_coord_V, *self.args, **self.__dict__)
+
+
+class TimeStepper:
+    """ """
+
+    def __init__(self, envelope, spb_force, sim_parameters, t=0.0, dt=0.01, **data):
+        self.t = t
+        self.dt = dt
+        self.data = data
+
+    def __str__(self):
+        return f"TimeStepper(t={self.t}, dt={self.dt})"
+
+    def __repr__(self):
+        return f"TimeStepper(t={self.t}, dt={self.dt})"
+
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def __setitem__(self, key, value):
+        self.data[key] = value
+
+    def __delitem__(self, key):
+        del self.data[key]
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __len__(self):
+        return len(self.data)
+
+    def save_yaml(self, file_path):
+        with open(file_path, "w") as f:
+            yaml.dump(self.data, f, sort_keys=False)
+
+    @classmethod
+    def from_yaml(cls, file_path):
+        with open(file_path, "r") as f:
+            data = yaml.safe_load(f)
+        return cls(**data)
+
+
+class DataManager:
+    def __init__(self, **data):
+        self.data = deepcopy(data)
+
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def __setitem__(self, key, value):
+        self.data[key] = value
+
+    def __delitem__(self, key):
+        del self.data[key]
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __str__(self):
+        return str(self.data)
+
+    def __repr__(self):
+        return repr(self.data)
+
+    def save_yaml(self, file_path):
+        with open(file_path, "w") as f:
+            yaml.dump(self.data, f, sort_keys=False)
+
+    @classmethod
+    def from_yaml(cls, file_path):
+        with open(file_path, "r") as f:
+            data = yaml.safe_load(f)
+        return cls(**data)
 
 
 class ParamManager:
     def __init__(self, **parameters):
-        from copy import deepcopy
 
         self.parameters = deepcopy(parameters)
 
@@ -65,7 +211,7 @@ class ParamManager:
             "dt_write_data": 1.0,
             "dt_checkpoint": 2.0,
             "dx_max": 0.05,
-            "make_figs": True,
+            "make_movie_frames": True,
             "show_contact_patches": True,
             "show_contact_forces": True,
         }
@@ -384,7 +530,38 @@ class Envelope(Brane):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def parameters_dataset_info(self):
+    def parameters(self):
+        return {
+            "preferred_area": self.preferred_area,
+            "preferred_volume": self.preferred_volume,
+            "spontaneous_curvature": self.spontaneous_curvature,
+            "bending_modulus": self.bending_modulus,
+            "splay_modulus": self.splay_modulus,
+            "volume_reg_stiffness": self.volume_reg_stiffness,
+            "area_reg_stiffness": self.area_reg_stiffness,
+            "tether_stiffness": self.tether_stiffness,
+            "tether_repulsive_onset": self.tether_repulsive_onset,
+            "tether_repulsive_singularity": self.tether_repulsive_singularity,
+            "tether_attractive_onset": self.tether_attractive_onset,
+            "tether_attractive_singularity": self.tether_attractive_singularity,
+            "drag_coefficient": self.drag_coefficient,
+            "flipping_frequency": self.flipping_frequency,
+            "flipping_probability": self.flipping_probability,
+        }
+
+    def mesh_state(self):
+        data = {
+            "xyz_coord_V": self.xyz_coord_V,
+            "h_out_V": self.h_out_V,
+            "v_origin_H": self.v_origin_H,
+            "h_next_H": self.h_next_H,
+            "h_twin_H": self.h_twin_H,
+            "f_left_H": self.f_left_H,
+            "h_bound_F": self.h_bound_F,
+            "h_right_B": self.h_right_B,
+        }
+
+    def _parameters_dataset_info(self):
         info = [
             ["envelope/spontaneous_curvature", (), "float64"],
             ["envelope/bending_modulus", (), "float64"],
@@ -402,7 +579,7 @@ class Envelope(Brane):
         ]
         return info
 
-    def mesh_dataset_info(self):
+    def _mesh_dataset_info(self):
         num_vertices = self.num_vertices
         num_half_edges = self.num_half_edges
         num_faces = self.num_faces
@@ -418,7 +595,7 @@ class Envelope(Brane):
         ]
         return info
 
-    def dynamics_dataset_info(self):
+    def _dynamics_dataset_info(self):
         num_vertices = self.num_vertices
         num_half_edges = self.num_half_edges
         num_faces = self.num_faces
@@ -430,18 +607,6 @@ class Envelope(Brane):
             ["envelope/num_flips", (), "int32"],
         ]
         return info
-
-    def get_mesh_dataset(self):
-        dataset = {
-            "envelope/xyz_coord_V": self.xyz_coord_V,
-            "envelope/h_out_V": self.h_out_V,
-            "envelope/v_origin_H": self.v_origin_H,
-            "envelope/h_next_H": self.h_next_H,
-            "envelope/h_twin_H": self.h_twin_H,
-            "envelope/f_left_H": self.f_left_H,
-            "envelope/h_bound_F": self.h_bound_F,
-            "envelope/h_right_B": self.h_right_B,
-        }
 
     def get_parameters_dataset(self):
         dataset = {
@@ -834,7 +999,7 @@ class StretchSim:
         Time step for saving checkpoint
     dx_max : float
         Maximum vertex displacement for a single time step as a fraction of the preferred edge length
-    make_figs : bool
+    make_movie_frames : bool
         Whether to make figures during simulation
     envelope_parameters : dict
         Parameters for envelope
@@ -858,7 +1023,7 @@ class StretchSim:
         dt_write_data,
         dt_checkpoint,
         dx_max,
-        make_figs,
+        make_movie_frames,
         envelope_parameters,
         spb_force_parameters,
         mesh_viewer_parameters,
@@ -867,7 +1032,7 @@ class StretchSim:
     ):
         if make_output_dir:
             self.make_output_dir(output_dir, overwrite_output_dir)
-        self.output_dir = output_dir  # "./output/stretch_sim"
+        self.output_dir = output_dir
         self.run_name = run_name
         self.T = T
         self.dt = dt
@@ -875,7 +1040,7 @@ class StretchSim:
         self.dt_write_data = dt_write_data
         self.dt_checkpoint = dt_checkpoint
         self.dx_max = dx_max
-        self.make_figs = make_figs
+        self.make_movie_frames = make_movie_frames
 
         self.envelope_parameters = envelope_parameters
         self.spb_force_parameters = spb_force_parameters
@@ -948,6 +1113,13 @@ class StretchSim:
         self.logger = logging.getLogger(__name__)
 
         self.logger.info(f"Initialized simulation with parameters: {self.__dict__}")
+
+    @classmethod
+    def resume_from_checkpoint(cls, checkpoint_path):
+        with open(checkpoint_path, "rb") as f:
+            checkpoint = pickle.load(f)
+        self = cls(**checkpoint)
+        return self
 
     def update_viewer_vector_field(self):
         self.mesh_viewer.clear_vector_field_data()
