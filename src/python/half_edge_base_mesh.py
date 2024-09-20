@@ -4,6 +4,7 @@ from src.python.half_edge_base_ply_tools import (
 from src.python.half_edge_base_utils import V_of_F
 import numpy as np
 from src.python.global_vars import _INT_TYPE_, _FLOAT_TYPE_
+from src.python.linear_algebra import rigid_transform
 
 
 class HalfEdgeMeshBase:
@@ -420,6 +421,8 @@ class HalfEdgeMeshBase:
         Returns:
             int: half-edge index
         """
+        if b < 0:
+            return self._h_right_B[-(b + 1)]
         return self._h_right_B[b]
 
     # Derived combinatorial maps
@@ -586,6 +589,22 @@ class HalfEdgeMeshBase:
             h = self.h_next_h(h)
             if h == h_start:
                 break
+
+    def generate_H_right_b(self, b):
+        h_start = self.h_right_b(b)
+        h = h_start
+        while True:
+            yield h
+            h = self.h_next_h(h)
+            if h == h_start:
+                break
+
+    def generate_F_incident_v_clockwise(self, v, h_start=None):
+        """Generate faces incident on vertex v in clockwise order"""
+        for h in self.generate_H_out_v_clockwise(v, h_start=h_start):
+            if self.negative_boundary_contains_h(h):
+                continue
+            yield self.f_left_h(h)
 
     ######################################################
     # Simplical operations
@@ -940,6 +959,19 @@ class HalfEdgeMeshBase:
         for h in self.generate_H_out_v_clockwise(v):
             valence += 1
         return valence
+
+    def F_incident_b(self, b):
+        """get the faces incident on boundary b"""
+        F = set()
+        for h in self.generate_H_right_b(b):
+            v = self.v_origin_h(h)
+            F.update(set(self.generate_F_incident_v_clockwise(v, h_start=h)))
+        return np.array(list(F), dtype=_INT_TYPE_)
+
+    def rigid_transform(self, translation, angle_vec, origin=None):
+        self.xyz_coord_V = rigid_transform(
+            translation, angle_vec, self.xyz_coord_V, origin=origin
+        )
 
     ######################################################
     # Geometry

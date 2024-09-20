@@ -92,7 +92,7 @@ class MeshViewer:
         movie_format="mp4",
         # Vertex/Edge/Face visual parameters
         radius_vertex=0.0125,
-        rgba_vertex=(0.7057, 0.0156, 0.1502, 1.0),
+        rgba_vertex=(0.7057, 0.0156, 0.1502, 0.75),
         rgba_half_edge=(1.0, 0.498, 0.0, 1.0),
         rgba_face=(0.0, 0.63335, 0.05295, 0.65),
         rgba_boundary_half_edge=(0.0, 0.4471, 0.6980, 1.0),
@@ -300,35 +300,67 @@ class MeshViewer:
         self._rgba_F = np.array(value, dtype=_FLOAT_TYPE_)
 
     def update_radius_V(self, value, indices=None):
-        if indices is None:
-            self._radius_V[:] = value
-        else:
-            self._radius_V[indices] = value
+        if value is not None:
+            if indices is None:
+                self._radius_V[:] = value
+            else:
+                self._radius_V[indices] = value
 
     def update_rgba_V(self, value, indices=None):
-        if indices is None:
-            self._rgba_V[:] = value
-        else:
-            self._rgba_V[indices] = value
+        if value is not None:
+            if indices is None:
+                self._rgba_V[:] = value
+            else:
+                self._rgba_V[indices] = value
 
     def update_rgba_H(self, value, indices=None):
-        if indices is None:
-            self._rgba_H[:] = value
-        else:
-            self._rgba_H[indices] = value
+        if value is not None:
+            if indices is None:
+                self._rgba_H[:] = value
+            else:
+                self._rgba_H[indices] = value
 
     def update_rgba_F(self, value, indices=None):
-        if indices is None:
-            self._rgba_F[:] = value
-        else:
-            self._rgba_F[indices] = value
+        if value is not None:
+            if indices is None:
+                self._rgba_F[:] = value
+            else:
+                self._rgba_F[indices] = value
 
-    def color_boundary_H(self, b, rgba=None):
-        if rgba is None:
-            rgba = self.colors["boundary_half_edge_default"]
-        h = self.M.h_right_b(b)
-        Hindices = list(self.M.generate_H_next_h(h))
-        self._rgba_H[indices] = rgba
+    def update_rgba_H_right_b(self, value, b):
+        H_right_b = np.array(list(self.M.generate_H_right_b(b)))
+        self.update_rgba_H(value, indices=H_right_b)
+
+    def update_rgba_H_right_B(self, value):
+        """."""
+        for b in range(self.M.num_boundaries):
+            self.update_rgba_H_right_b(value, b)
+
+    def update_rgba_F_incident_b(self, value, b):
+        F_incident_b = self.M.F_incident_b(b)
+        self.update_rgba_F(value, indices=F_incident_b)
+
+    def update_rgba_F_incident_B(self, value):
+        for b in range(self.M.num_boundaries):
+            self.update_rgba_F_incident_b(value, b)
+
+    def update(self, **kwargs):
+        for key, value in kwargs.items():
+            if key in self.__dict__:
+                setattr(self, key, value)
+
+        if "radius_vertex" in kwargs:
+            self.update_radius_V(kwargs["radius_vertex"])
+        if "rgba_vertex" in kwargs:
+            self.update_rgba_V(kwargs["rgba_vertex"])
+        if "rgba_half_edge" in kwargs:
+            self.update_rgba_H(kwargs["rgba_half_edge"])
+        if "rgba_face" in kwargs:
+            self.update_rgba_F(kwargs["rgba_face"])
+        if "rgba_boundary_half_edge" in kwargs:
+            self.update_rgba_H_right_B(kwargs["rgba_boundary_half_edge"])
+        if "rgba_boundary_face" in kwargs:
+            self.update_rgba_F_incident_B(kwargs["rgba_boundary_face"])
 
     def set_visual_defaults(self):
         self.show_surface = True
@@ -716,3 +748,213 @@ class MeshViewer:
             self.view["focalpoint"] = com
             self.plot(save=True, show=False, title=f"iter_{i+1}")
         self.movie()
+
+    ###############################################################
+    # to be deprecated
+    def _color_boundary_H(self, b, rgba=None):
+        if rgba is None:
+            rgba = self.colors["boundary_half_edge_default"]
+        h = self.M.h_right_b(b)
+        Hindices = list(self.M.generate_H_next_h(h))
+        self._rgba_H[indices] = rgba
+
+
+class MultiMeshViewer:
+    def __init__(
+        self,
+        meshes,
+        image_dir="./output/temp_images",
+        image_count=0,
+        image_format="png",
+        image_prefix="frame",
+        image_index_length=5,
+        movie_name="movie",
+        movie_format="mp4",
+        show_plot_axes=False,
+        view=None,
+        figsize=(720, 720),
+        mesh_params=None,
+    ):
+        self.meshes = meshes
+        self.params = {
+            "image_dir": image_dir,
+            "image_count": image_count,
+            "image_format": image_format,
+            "image_prefix": image_prefix,
+            "image_index_length": image_index_length,
+            "movie_name": movie_name,
+            "movie_format": movie_format,
+            "show_plot_axes": show_plot_axes,
+            "view": view,
+            "figsize": figsize,
+        }
+        if mesh_params is None:
+            self.mesh_params = [self.params.copy() for _ in range(len(meshes))]
+
+        self.mesh_viewers = [
+            MeshViewer(mesh, **params) for mesh, params in zip(meshes, self.mesh_params)
+        ]
+        ###############################################################
+        # image/movie output options
+        ###############################################################
+        self.image_dir = image_dir
+        self.image_count = image_count
+        self.image_format = image_format
+        self.image_prefix = image_prefix
+        self.image_index_length = image_index_length
+        self.movie_name = movie_name
+        self.movie_format = movie_format
+        ###############################################################
+        # Size-independent params and defaults
+        ###############################################################
+        self.colors = {
+            "black": [0.0, 0.0, 0.0, 1.0],
+            "white": [1.0, 1.0, 1.0, 1.0],
+            "transparent": [0.0, 0.0, 0.0, 0.0],
+            "red": [0.8392, 0.1529, 0.1569, 1.0],
+            "red10": [0.8392, 0.1529, 0.1569, 0.1],
+            "red20": [0.8392, 0.1529, 0.1569, 0.2],
+            "red50": [0.8392, 0.1529, 0.1569, 0.5],
+            "red80": [0.8392, 0.1529, 0.1569, 0.8],
+            "green": [0.0, 0.6745, 0.2784, 1.0],
+            "green10": [0.0, 0.6745, 0.2784, 0.1],
+            "green20": [0.0, 0.6745, 0.2784, 0.2],
+            "green50": [0.0, 0.6745, 0.2784, 0.5],
+            "green80": [0.0, 0.6745, 0.2784, 0.8],
+            "blue": [0.0, 0.4471, 0.6980, 1.0],
+            "blue10": [0.0, 0.4471, 0.6980, 0.1],
+            "blue20": [0.0, 0.4471, 0.6980, 0.2],
+            "blue50": [0.0, 0.4471, 0.6980, 0.5],
+            "blue80": [0.0, 0.4471, 0.6980, 0.8],
+            "yellow": [1.0, 0.8431, 0.0, 1.0],
+            "yellow10": [1.0, 0.8431, 0.0, 0.1],
+            "yellow20": [1.0, 0.8431, 0.0, 0.2],
+            "yellow50": [1.0, 0.8431, 0.0, 0.5],
+            "yellow80": [1.0, 0.8431, 0.0, 0.8],
+            "cyan": [0.0, 0.8431, 0.8431, 1.0],
+            "cyan10": [0.0, 0.8431, 0.8431, 0.1],
+            "cyan20": [0.0, 0.8431, 0.8431, 0.2],
+            "cyan50": [0.0, 0.8431, 0.8431, 0.5],
+            "cyan80": [0.0, 0.8431, 0.8431, 0.8],
+            "magenta": [0.8784, 0.0, 0.8784, 1.0],
+            "magenta10": [0.8784, 0.0, 0.8784, 0.1],
+            "magenta20": [0.8784, 0.0, 0.8784, 0.2],
+            "magenta50": [0.8784, 0.0, 0.8784, 0.5],
+            "magenta80": [0.8784, 0.0, 0.8784, 0.8],
+            "orange": [1.0, 0.5490, 0.0, 1.0],
+            "orange10": [1.0, 0.5490, 0.0, 0.1],
+            "orange20": [1.0, 0.5490, 0.0, 0.2],
+            "orange50": [1.0, 0.5490, 0.0, 0.5],
+            "orange80": [1.0, 0.5490, 0.0, 0.8],
+            "purple": [0.5804, 0.0, 0.8275, 1.0],
+            "purple10": [0.5804, 0.0, 0.8275, 0.1],
+            "purple20": [0.5804, 0.0, 0.8275, 0.2],
+            "purple50": [0.5804, 0.0, 0.8275, 0.5],
+            "purple80": [0.5804, 0.0, 0.8275, 0.8],
+            "vertex_default": [0.7057, 0.0156, 0.1502, 1.0],
+            "half_edge_default": [1.0, 0.498, 0.0, 1.0],
+            "face_default": [0.0, 0.63335, 0.05295, 0.65],
+            "boundary_half_edge_default": [0.0, 0.4471, 0.6980, 1.0],
+        }
+        ################
+        self.show_plot_axes = show_plot_axes
+        self.view = view
+        self.figsize = figsize
+
+    @property
+    def num_meshes(self):
+        return len(self.meshes)
+
+    def get_fig_path(self):
+        image_name = f"{self.image_prefix}_{self.image_count:0{self.image_index_length}d}.{self.image_format}"
+        image_path = os.path.join(self.image_dir, image_name)
+        return image_path
+
+    def update_mesh_params(self, mesh_index, **kwargs):
+        self.mesh_params[mesh_index].update(**kwargs)
+        self.mesh_viewers[mesh_index].update(**kwargs)
+
+    def options_plot(
+        self,
+        show=True,
+        save=False,
+        title="",
+        show_plot_axes=False,
+        view=None,
+        figsize=(720, 720),
+        fig_path=None,
+    ):
+        mlab.options.offscreen = not show
+        fig = mlab.figure(title, size=figsize)
+        for viewer in self.mesh_viewers:
+            if viewer.show_wireframe_surface:
+                viewer.add_wireframe_surface_to_fig()
+            if viewer.show_face_colored_surface:
+                viewer.add_face_colored_surface_to_fig()
+            if viewer.show_vertex_colored_surface:
+                viewer.add_vertex_colored_surface_to_fig()
+            if viewer.show_vertices:
+                viewer.add_vertices_to_fig()
+            if viewer.show_half_edges:
+                viewer.add_half_edges_fig()
+            if viewer.show_vector_fields:
+                for data in viewer.vector_field_data:
+                    viewer.add_vector_field_to_fig(**data)
+        if show_plot_axes:
+            mlab.axes()
+            mlab.orientation_axes()
+        if view is not None:
+            mlab.view(**view)
+        # mview = mlab.view()
+        # print(mview)
+        if save:
+            if fig_path is None:
+                print("fig_path is None")
+            else:
+                mlab.savefig(fig_path, figure=fig, size=figsize)
+        if show:
+            mlab.show()
+
+        mlab.close(all=True)
+
+    def plot(self, show=True, save=False, title=""):
+        """
+        Default plot with options set in __init__
+        """
+        if save:
+            fig_path = self.get_fig_path()
+            self.image_count += 1
+        else:
+            fig_path = None
+        self.options_plot(
+            show=show,
+            save=save,
+            title=title,
+            show_plot_axes=self.show_plot_axes,
+            view=self.view,
+            figsize=self.figsize,
+            fig_path=fig_path,
+        )
+
+    def movie(self):
+        movie(
+            self.image_dir,
+            image_format=self.image_format,
+            image_prefix=self.image_prefix,
+            index_length=self.image_index_length,
+            movie_name=self.movie_name,
+            movie_dir=self.image_dir,
+            movie_format=self.movie_format,
+        )
+
+    def spread_meshes(self, pad=0.05, axis=0):
+        diameters = np.zeros(self.num_meshes)
+        for _, m in enumerate(self.meshes):
+            m.xyz_coord_V -= np.sum(m.xyz_coord_V, axis=0) / m.num_vertices
+            diameters[_] = (1 + pad) * np.ptp(m.xyz_coord_V[:, axis])
+        translations = np.cumsum(diameters)
+        translations[1:] = translations[:-1]
+        translations[0] = 0.0
+        translations -= translations[-1] / 2
+        for _, m in enumerate(self.meshes):
+            m.xyz_coord_V[:, axis] += translations[_]
