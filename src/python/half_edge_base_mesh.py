@@ -608,6 +608,104 @@ class HalfEdgeMeshBase:
 
     ######################################################
     # Simplical operations
+    def _simplical_closure_VHF(self, VHF, in_place=False):
+        """
+        Find simplical closure of (V,H,F) in M by searching F and H
+        """
+        V, H, F = VHF
+        if in_place:
+            closedV, closedH, closedF = V, H, F
+        else:
+            closedV, closedH, closedF = [_.copy() for _ in VHF]
+        Fneed2visit = F.copy()
+        Hneed2visit = H.copy()
+        # add edges and verts for faces in F
+        while Fneed2visit:
+            f = Fneed2visit.pop()
+            for h in self.generate_H_bound_f(f):
+                ht = self.h_twin_h(h)
+                v = self.v_origin_h(h)
+                closedV.add(v)
+                closedH.add(h)
+                closedH.add(ht)
+                Hneed2visit.discard(h)
+                Hneed2visit.discard(ht)
+        # add twins and verts for remaining half-edges
+        while Hneed2visit:
+            h = Hneed2visit.pop()
+            ht = self.h_twin_h(h)
+            v = self.v_origin_h(h)
+            vt = self.v_origin_h(ht)
+            closedV.add(v)
+            closedV.add(vt)
+            closedH.add(ht)
+            Hneed2visit.discard(ht)
+        return closedV, closedH, closedF
+
+    def simplical_closure_VHF(
+        self, VHF, Hneed2visit=None, Fneed2visit=None, in_place=False
+    ):
+        """
+        Find simplical closure of (V,H,F) in M by searching F and H
+        """
+        V, H, F = VHF
+        if Hneed2visit is None:
+            Hneed2visit = H.copy()
+        if Fneed2visit is None:
+            Fneed2visit = F.copy()
+        if in_place:
+            closedV, closedH, closedF = V, H, F
+        else:
+            closedV, closedH, closedF = [_.copy() for _ in VHF]
+        # add edges and verts for faces in F
+        while Fneed2visit:
+            f = Fneed2visit.pop()
+            for h in self.generate_H_bound_f(f):
+                ht = self.h_twin_h(h)
+                v = self.v_origin_h(h)
+                closedV.add(v)
+                closedH.add(h)
+                closedH.add(ht)
+                Hneed2visit.discard(h)
+                Hneed2visit.discard(ht)
+        # add twins and verts for remaining half-edges
+        while Hneed2visit:
+            h = Hneed2visit.pop()
+            ht = self.h_twin_h(h)
+            v = self.v_origin_h(h)
+            vt = self.v_origin_h(ht)
+            closedV.add(v)
+            closedV.add(vt)
+            closedH.add(ht)
+            Hneed2visit.discard(ht)
+        return closedV, closedH, closedF
+
+    def boundary_VHF(self, VHF, Hneed2visit=None, Fneed2visit=None):
+        """ """
+        V, H, F = VHF
+
+        closedV, closedH, closedF = self.simplical_closure_VHF(
+            (V.copy(), H.copy(), F),
+            Hneed2visit=Hneed2visit,
+            Fneed2visit=Fneed2visit,
+            in_place=True,
+        )
+
+        closed_complementV, closed_complementH, closed_complementF = (
+            self.simplical_closure_VHF(
+                (set(), Hneed2visit - closedH, Fneed2visit - closedF),
+                Hneed2visit=Hneed2visit,
+                Fneed2visit=Fneed2visit,
+                in_place=True,
+            )
+        )
+
+        boundary_H = closedH.intersect(closed_complementH)
+        boundary_V = closedV.intersect(closed_complementV)
+        boundary_F = set()
+
+        return boundary_V, boundary_H, boundary_F
+
     def star_of_vertex(self, v):
         """Star of a vertex is the set of all simplices that contain the vertex."""
         V = {v}
@@ -664,10 +762,26 @@ class HalfEdgeMeshBase:
                 H.add(h)
                 H.add(self.h_twin_h(h))
                 V.add(self.v_origin_h(h))
-                V.add(self.v_origin_h(self.h_twin_h(h)))
+                # V.add(self.v_origin_h(self.h_twin_h(h)))
         for h in H_in:
             V.add(self.v_origin_h(h))
             V.add(self.v_origin_h(self.h_twin_h(h)))
+        return V, H, F
+
+    def close_compex(self, V, H, F):
+        """The closure of a single simplex is the set of all simplices that contain the simplex as a subset of their vertices. The closure Cl(s) of a k-simplex s consists of: s and all (n<k)-simplices that are proper faces of s."""
+        H_frontier = set()
+        for h in H:
+            ht = self.h_twin_h(h)
+            v = self.v_origin_h(h)
+            vt = self.v_origin_h(ht)
+            V.update([v, vt])
+            H_frontier.add(ht)
+        H.update(H_frontier)
+        for f in F:
+            for h in self.generate_H_bound_f(f):
+                H.update([h, self.h_twin_h(h)])
+                V.add(self.v_origin_h(h))
         return V, H, F
 
     def link(self, V, H, F):

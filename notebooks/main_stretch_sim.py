@@ -48,16 +48,16 @@ from scipy.sparse import lil_matrix
 # ply = "./data/half_edge_base/ply/unit_sphere_001280_he.ply"
 # ply = "./data/half_edge_base/ply/unit_sphere_005120_he.ply"
 # ply = "./data/half_edge_base/ply/unit_sphere_020480_he.ply"
-ply = "./data/half_edge_base/ply/neovius_he.ply"
+ply = "./data/half_edge_base/ply/dumbbell_he.ply"
 # ply = "./data/half_edge_base/ply/unit_torus_3_1_raw_001536_he.ply"
 # plys = [
 #     "./data/half_edge_base/ply/unit_sphere_001280_he.ply",
 #     "./data/half_edge_base/ply/unit_sphere_005120_he.ply",
 #     "./data/half_edge_base/ply/unit_sphere_020480_he.ply",
 # ]
-m0 = Brane.from_he_ply(ply, **Brane.default_params())
-m1 = Brane.from_he_ply(ply, **Brane.default_params())
-meshes = [m0, m1]
+# m0 = Brane.from_he_ply(ply, **Brane.default_params())
+# m1 = Brane.from_he_ply(ply, **Brane.default_params())
+meshes = [Brane.from_he_ply(ply, **Brane.default_params()) for _ in range(4)]
 _params = {
     "radius_vertex": 0.0125,
     "rgba_vertex": (0.7057, 0.0156, 0.1502, 0.75),
@@ -92,31 +92,26 @@ mmv = MultiMeshViewer(
     show_plot_axes=True,
     view={"azimuth": 0, "elevation": 0.0, "distance": 2.75, "focalpoint": [0, 0, 0]},
 )
-x = np.linspace(0, 1, 7)
-np.sum(x)
-np.cumsum(x)
-translation = 1 * np.array([[1, 0, 0]])
-angle_vec = np.pi / 4 * np.array([0, 1, 0])
-# meshes[0].xyz_coord_V = rigid_transform(translation, angle_vec, m1.xyz_coord_V)
-m0.rigid_transform(translation, angle_vec)
-np.ptp([1, 4, 0.2, -67])
-np.cumsum([1, 4, 0.2, -67])
-b = 0
-np.ptp(m0.xyz_coord_V, axis=0)
-np.ptp(m0.xyz_coord_V[:, 0])
-m0.F_incident_b(b)
+
+# translation = 0 * np.array([[1, 0, 0]])
+# angle_vec = 0*np.pi / 4 * np.array([0, 1, 0])
+# m0.rigid_transform(translation, angle_vec)
+# b = 0
+s = set()
+s.update(range(3))
+# np.random.rand(33, 4)@rgba0
 rgba0 = mmv.colors["purple"]
 rgba1 = mmv.colors["red"]
 # mmv.mesh_viewers[0].update_rgba_F_incident_b(rgba0, b)
 # mmv.mesh_viewers[1].update_rgba_F_incident_b(rgba1, b)
 # mmv.mesh_viewers[0].update_rgba_F_incident_B(rgba0)
 # mmv.mesh_viewers[1].update_rgba_F_incident_B(rgba1)
-mmv.update_mesh_params(
-    0, rgba_boundary_face=rgba0, show_half_edges=True, show_wireframe_surface=False
-)
-mmv.update_mesh_params(
-    1, rgba_boundary_face=rgba1, show_half_edges=True, show_wireframe_surface=False
-)
+# mmv.update_mesh_params(
+#     0, rgba_boundary_face=rgba0, show_half_edges=True, show_wireframe_surface=False
+# )
+# mmv.update_mesh_params(
+#     1, rgba_boundary_face=rgba1, show_half_edges=True, show_wireframe_surface=False
+# )
 # mmv.update_mesh_params(1, rgba_boundary_half_edge=rgba1, show_half_edges=True, show_wireframe_surface=False)
 pad = 0.1
 axis = 0

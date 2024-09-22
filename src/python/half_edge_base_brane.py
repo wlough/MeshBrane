@@ -752,6 +752,8 @@ class Brane(HalfEdgeMeshBase):
     ######################################################
     # experimental stuff
     ######################
+    def V_uniform_sample(self, size):
+        return np.random.randint(0, self.num_vertices, size=size)
 
     def laplacian(self, Q):
         """

@@ -333,26 +333,32 @@ class SpbForce:
         envelope,
         contact_radius,
         force_total,
-        force_profile,
+        max_search_vertices=10**3,
+        force_profile="bump",
         view_scale=0.3,
         contact_rgba=(0.5804, 0.0, 0.8275, 0.5),
         force_rgba=(0.0, 0.0, 0.0, 0.9),
         find_contact_data=True,
+        axis=0,
     ):
         self.envelope = envelope
         self.contact_radius = contact_radius
         self.force_total = force_total
         self.force_profile = force_profile
+        self.max_search_vertices = max_search_vertices
         self.view_scale = view_scale
         self.contact_rgba = contact_rgba
         self.force_rgba = force_rgba
+        self.axis = axis
 
         if find_contact_data:
             self.patch_plus, self.patch_minus = self.find_contact_patches()
             self.V_plus = np.array(sorted(self.patch_plus.V), dtype="int32")  # ***
             self.V_minus = np.array(sorted(self.patch_minus.V), dtype="int32")  # ***
-            self.force_plus, self.force_minus = self.find_forces()  # ***
-            self.V_contact = np.concatenate([self.V_plus, self.V_minus], dtype="int32")
+            self.magnitude_plus, self.magnitude_minus = self.find_force_magnitudes()  # ***
+            #############################################################################
+            
+            # self.V_contact = np.concatenate([self.V_plus, self.V_minus], dtype="int32")
             self.force_contact = np.vstack([self.force_plus, self.force_minus])
             max_magnitude = np.max(
                 [
@@ -371,6 +377,110 @@ class SpbForce:
             self.force_minus = np.zeros((0, 3))
             self.scaled_force = np.zeros((0, 3))
 
+    @property
+    def V_contact(self):
+        return np.concatenate([self.V_plus, self.V_minus], dtype="int32")
+    @property
+    def max_magnitude(self):
+        v_plus = self.patch_plus.seed_vertex
+        v_minus = self.patch_minus.seed_vertex
+        # return max([self.magnitude_plus[self.]])
+    
+    def _bump3(self, xyz, center, contact_radius, force_total):
+        s = np.linalg.norm(xyz - center, axis=-1) / contact_radius
+        val = np.zeros_like(s)
+        I = np.abs(s) < 1.0
+        val[I] = np.exp(1 + -1 / (1 - s[I] ** 2))
+        val *= force_total / np.sum(val)
+        return val
+
+    def _uniform3(self, xyz, center, contact_radius, force_total):
+        s = np.linalg.norm(xyz - center, axis=-1) / contact_radius
+        val = np.zeros_like(s)
+        I = np.abs(s) < 1.0
+        val[I] = 1.0
+        val *= force_total / np.sum(val)
+        return val
+    
+    def find_seeds(self, restrict_to_V=None):
+        """
+        Find vertices in self.envelope with maximum and minimum (self.axis)-coordinates.
+        """
+        x_coord_V = self.envelope.xyz_coord_V[:, self.axis]
+        seed_plus = np.argmax(x_coord_V)
+        seed_minus = np.argmax(x_coord_V)
+        return seed_plus, seed_minus
+
+    def find_contact_patches(self):
+        patch_plus = HalfEdgePatch.from_seed_to_radius(
+            self.seed_plus, self.envelope, self.contact_radius
+        )
+        patch_minus = HalfEdgePatch.from_seed_to_radius(
+            self.seed_minus, self.envelope, self.contact_radius
+        )
+
+        return patch_plus, patch_minus
+
+    def find_force_magnitudes(self):
+
+        force_profile = self.force_profile
+        envelope = self.envelope
+        contact_radius = self.contact_radius
+        force_total = self.force_total
+        view_scale = self.view_scale
+
+        seed_plus = self.patch_plus.seed_vertex
+        seed_minus = self.patch_minus.seed_vertex
+        V_plus = self.V_plus
+        V_minus = self.V_minus
+
+        center_plus = envelope.xyz_coord_v(seed_plus)
+        xyz_coord_V_plus = envelope.xyz_coord_V[V_plus]
+
+        center_minus = envelope.xyz_coord_v(seed_minus)
+        xyz_coord_V_minus = envelope.xyz_coord_V[V_minus]
+
+        if force_profile == "bump":
+            magnitude_plus = self._bump3(
+                xyz_coord_V_plus, center_plus, contact_radius, force_total
+            )
+            magnitude_minus = self._bump3(
+                xyz_coord_V_minus, center_minus, contact_radius, force_total
+            )
+        if force_profile == "uniform":
+            magnitude_plus = self._uniform3(
+                xyz_coord_V_plus, center_plus, contact_radius, force_total
+            )
+            magnitude_minus = self._uniform3(
+                xyz_coord_V_minus, center_minus, contact_radius, force_total
+            )
+        return force_plus, force_minus
+
+    def viewer_add_vector_field_kwargs(self):
+        points = self.envelope.xyz_coord_V[self.V_contact]
+        vectors = self.scaled_force
+        rgba = self.force_rgba
+        return {"points": points, "vectors": vectors, "rgba": rgba, "name": "spb_force"}
+
+    def viewer_update_rgba_V_kwargs(self):
+        value = self.contact_rgba
+        indices = self.V_contact
+        return {"value": value, "indices": indices}
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     def dataset_info(self):
         num_vertices_plus = len(self.V_plus)
         num_vertices_minus = len(self.V_minus)
@@ -388,6 +498,21 @@ class SpbForce:
         ]
         return info
 
+    def export_timeseries_data(self):
+        data = {"spb_force/V_plus":self.V_plus,
+            "spb_force/V_minus":,
+            "spb_force/force_plus":,
+            "spb_force/force_minus":,
+            "spb_force/contact_radius":,
+            "spb_force/force_total":,
+            "spb_force/force_profile":,
+            "spb_force/view_scale":,
+            "spb_force/contact_rgba":,
+            "spb_force/force_rgba":,}
+        
+        
+        
+        return data
     def get_dataset(self):
 
         dataset = {
@@ -447,84 +572,7 @@ class SpbForce:
         self.scaled_force = self.view_scale * self.force_contact / max_magnitude
         return self
 
-    def _bump3(self, xyz, center, contact_radius, force_total):
-        s = np.linalg.norm(xyz - center, axis=-1) / contact_radius
-        val = np.zeros_like(s)
-        I = np.abs(s) < 1.0
-        val[I] = np.exp(1 + -1 / (1 - s[I] ** 2))
-        val *= force_total / np.sum(val)
-        return val
-
-    def _uniform3(self, xyz, center, contact_radius, force_total):
-        s = np.linalg.norm(xyz - center, axis=-1) / contact_radius
-        val = np.zeros_like(s)
-        I = np.abs(s) < 1.0
-        val[I] = 1.0
-        val *= force_total / np.sum(val)
-        return val
-
-    def find_contact_patches(self):
-        envelope = self.envelope
-        contact_radius = self.contact_radius
-        x_coord_V = envelope.xyz_coord_V[:, 0]
-        xmin, xmax = np.min(x_coord_V), np.max(x_coord_V)
-        seed_plus = np.where(x_coord_V == xmax)[0][0]
-        seed_minus = np.where(x_coord_V == xmin)[0][0]
-        patch_plus = HalfEdgePatch.from_seed_to_radius(
-            seed_plus, envelope, contact_radius
-        )
-        patch_minus = HalfEdgePatch.from_seed_to_radius(
-            seed_minus, envelope, contact_radius
-        )
-
-        return patch_plus, patch_minus
-
-    def find_forces(self):
-
-        force_profile = self.force_profile
-        envelope = self.envelope
-        contact_radius = self.contact_radius
-        force_total = self.force_total
-        view_scale = self.view_scale
-
-        seed_plus = self.patch_plus.seed_vertex
-        seed_minus = self.patch_minus.seed_vertex
-        V_plus = self.V_plus
-        V_minus = self.V_minus
-
-        center_plus = envelope.xyz_coord_v(seed_plus)
-        xyz_coord_V_plus = envelope.xyz_coord_V[V_plus]
-
-        center_minus = envelope.xyz_coord_v(seed_minus)
-        xyz_coord_V_minus = envelope.xyz_coord_V[V_minus]
-
-        if force_profile == "bump":
-            magnitude_plus = self._bump3(
-                xyz_coord_V_plus, center_plus, contact_radius, force_total
-            )
-            magnitude_minus = self._bump3(
-                xyz_coord_V_minus, center_minus, contact_radius, force_total
-            )
-        if force_profile == "uniform":
-            magnitude_plus = self._uniform3(
-                xyz_coord_V_plus, center_plus, contact_radius, force_total
-            )
-            magnitude_minus = self._uniform3(
-                xyz_coord_V_minus, center_minus, contact_radius, force_total
-            )
-        return force_plus, force_minus
-
-    def viewer_add_vector_field_kwargs(self):
-        points = self.envelope.xyz_coord_V[self.V_contact]
-        vectors = self.scaled_force
-        rgba = self.force_rgba
-        return {"points": points, "vectors": vectors, "rgba": rgba, "name": "spb_force"}
-
-    def viewer_update_rgba_V_kwargs(self):
-        value = self.contact_rgba
-        indices = self.V_contact
-        return {"value": value, "indices": indices}
-
+    
 
 class Envelope(Brane):
     def __init__(self, *args, **kwargs):

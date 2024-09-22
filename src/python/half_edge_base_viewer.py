@@ -905,8 +905,8 @@ class MultiMeshViewer:
             mlab.orientation_axes()
         if view is not None:
             mlab.view(**view)
-        # mview = mlab.view()
-        # print(mview)
+        mview = mlab.view()
+        print(mview)
         if save:
             if fig_path is None:
                 print("fig_path is None")
@@ -947,14 +947,16 @@ class MultiMeshViewer:
             movie_format=self.movie_format,
         )
 
-    def spread_meshes(self, pad=0.05, axis=0):
+    def spread_meshes(self, pad=0.05, axis=-1):
         diameters = np.zeros(self.num_meshes)
         for _, m in enumerate(self.meshes):
-            m.xyz_coord_V -= np.sum(m.xyz_coord_V, axis=0) / m.num_vertices
-            diameters[_] = (1 + pad) * np.ptp(m.xyz_coord_V[:, axis])
+            m.xyz_coord_V -= np.mean(m.xyz_coord_V, axis=0)
+            diameters[_] = np.ptp(m.xyz_coord_V[:, axis])
+        diameters += pad * np.mean(diameters)
         translations = np.cumsum(diameters)
+        total_diameter = translations[-1]
         translations[1:] = translations[:-1]
         translations[0] = 0.0
-        translations -= translations[-1] / 2
+        translations -= total_diameter / 2
         for _, m in enumerate(self.meshes):
             m.xyz_coord_V[:, axis] += translations[_]
