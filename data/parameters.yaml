@@ -1,0 +1,98 @@
+output_dir: ./output/stretch_sim
+run_name: run_0000
+T: 30.0
+dt: 0.01
+dt_record_data: 0.1
+dt_write_data: 0.5
+dt_checkpoint: 2.0
+dx_max: 0.05
+make_movie_frames: true
+envelope:
+  ply_path: ./data/half_edge_base/ply/unit_sphere_001280_he.ply
+  spontaneous_curvature: 0.0
+  bending_modulus: 0.125
+  splay_modulus: 0.0
+  # volume_reg_stiffness: 10000.0
+  # area_reg_stiffness: 4000.0
+  volume_reg_stiffness: 1000.0
+  area_reg_stiffness: 400.0
+  tether_stiffness: 0.5
+  tether_repulsive_onset: 0.8
+  tether_repulsive_singularity: 0.6
+  tether_attractive_onset: 1.2
+  tether_attractive_singularity: 1.4
+  drag_coefficient: 250.0
+  flipping_frequency: 10.0
+  flipping_probability: 0.3
+  rgba_surface:
+    - 0.0
+    - 0.6745
+    - 0.2784
+    - 0.5
+  rgba_edge:
+    - 0.0
+    - 0.4471
+    - 0.698
+    - 0.8
+spindle:
+  axis_origin:
+    - 0.0
+    - 0.0
+    - 0.0
+  axis_vec:
+    - 1.0
+    - 0.0
+    - 0.0
+  force_total: 320.0
+  force_profile: bump
+  visual_spb_length: 0.1
+  visual_force_scale: 10.0
+  spb1:
+    contact_radius: 0.4
+    contact_rgba:
+    - 0.5804
+    - 0.0
+    - 0.8275
+    - 0.5
+    force_rgba:
+    # - 0.0
+    # - 0.0
+    # - 0.0
+    - 0.5804
+    - 0.0
+    - 0.8275
+    - 1.0
+    show_contact: true
+    show_force: true
+  spb2:
+    contact_radius: 0.4
+    contact_rgba:
+    # - 1.0
+    # - 0.549
+    # - 0.0
+    - 0.5804
+    - 0.0
+    - 0.8275
+    - 0.5
+    force_rgba:
+    # - 1.0
+    # - 1.0
+    # - 1.0
+    - 0.5804
+    - 0.0
+    - 0.8275
+    - 1.0
+    show_contact: true
+    show_force: true
+mesh_viewer:
+  figsize:
+  - 720
+  - 720
+  view:
+    azimuth: 90.0
+    elevation: 55.0
+    # distance: 6.75
+    # focalpoint:
+    # - 0.0
+    # - 0.0
+    # - 0.0

@@ -621,6 +621,10 @@ class MeshViewer:
         mlab.options.offscreen = not show
         fig = mlab.figure(title, size=figsize)
         ################################
+        if show_vector_fields:
+            for data in self.vector_field_data:
+                self.add_vector_field_to_fig(**data)
+
         if show_wireframe_surface:
             wireframe_surface = self.add_wireframe_surface_to_fig(
                 downsampled=downsampled
@@ -637,9 +641,7 @@ class MeshViewer:
             vert_cloud = self.add_vertices_to_fig(downsampled=downsampled)
         if show_half_edges:
             half_edge_vector_field = self.add_half_edges_fig(downsampled=downsampled)
-        if show_vector_fields:
-            for data in self.vector_field_data:
-                self.add_vector_field_to_fig(**data)
+
         if show_plot_axes:
             mlab.axes()
             mlab.orientation_axes()

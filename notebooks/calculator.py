@@ -7,18 +7,24 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from src.python.pretty_pictures import get_plt_combos, scalars_to_rgba, movie
-from src.python.special_functions import unit_bump, bump3
+from src.python.special_functions import (
+    unit_bump,
+    bump3,
+    tethering_potential_vutukuri,
+    tethering_potential_vutukuri0,
+)
 from src.python.half_edge_base_brane import Brane
 from src.python.half_edge_base_viewer import MeshViewer
-
 
 # ply = "./data/half_edge_base/ply/oblate_005120_he.ply"
 # params = Brane.vutukuri_params(num_faces=5120, radius=1.0)
 ply = "./data/half_edge_base/ply/unit_torus_3_1_raw_006144_he.ply"
 m = Brane.from_he_ply(ply)
-
+m.default_params()
 # %%
-
+m.default_spontaneous_edge_length()
+np.mean(m.length_H())
+# %%
 mv = MeshViewer(m)
 points = m.xyz_coord_V
 # vectors = .01*F_harmonic

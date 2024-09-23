@@ -1,4 +1,4 @@
-import h5py
+# import h5py
 import logging
 import os
 import numpy as np
@@ -10,6 +10,642 @@ from src.python.half_edge_base_viewer import MeshViewer
 from copy import deepcopy
 
 
+class SPB:
+    """
+    Spindle pole body in contact with envelope.
+
+    Parameters
+    ----------
+    envelope : Brane
+        Envelope object
+    contact_radius : float
+        SPB radius
+    axis_origin : np.ndarray
+        3d coordinates of point on spindle axis
+    axis_vec : np.ndarray
+        3d vector directed along the spindle axis toward the SPB
+    force_total : float
+        Total force SPB exerts on the envelope
+    force_profile : str
+        Profile of force distribution. Options are "bump" and "uniform"
+    visual_length : float
+        Length of visual representation of SPB
+    visual_max_force_magnitude : float
+        Length of visual representation of max force vector
+    contact_rgba : tuple
+        RGBA color for contact patch
+    force_rgba : tuple
+        RGBA color for force vectors
+    find_contact_data : bool
+        Whether to find contact patches and forces during initialization
+
+    Attributes
+    ----------
+    contact_patch : HalfEdgePatch
+        Envelope patch in contact with SPB
+    V_contact : np.ndarray
+        Vertices in contact patch sorted by index
+    contact_force_magnitude : np.ndarray
+        Magnitude of force applied to each vertex in contact patch
+    contact_force_vector : np.ndarray
+        Force vector applied to each vertex in contact patch
+
+    Methods
+    -------
+    find_contact_patch : HalfEdgePatch
+        Find vertices in restrict_to_V with max and min distances along the spindle axis.
+    sort_contact_vertices : np.ndarray
+        Sort contact vertices by index.
+    find_contact_force_magnitude : np.ndarray
+        Find force magnitude for each vertex in contact patch.
+
+
+    get_time_series_data:
+        Return position and force data at current time.
+    get_pretty_time_series_data:
+        Return position and force data and MeshViewer params for patch and .
+    viewer_add_vector_field_kwargs
+        Return kwargs for adding contact force vector field to mesh viewer with MeshViewer.add_vector_field
+    viewer_update_rgba_V_kwargs
+        Return kwargs for updating contact patch colors in mesh viewer with MeshViewer.
+    """
+
+    def __init__(
+        self,
+        envelope,
+        contact_radius,
+        axis_origin,
+        axis_vec,
+        force_total,
+        force_profile="bump",
+        visual_length=0.1,
+        # visual_max_force_magnitude=0.3,
+        visual_force_scale=0.3,
+        contact_rgba=(0.5804, 0.0, 0.8275, 0.5),
+        force_rgba=(0.0, 0.0, 0.0, 0.9),
+        name="spb",
+        find_contact_data=True,
+        show_contact=True,
+        show_force=True,
+    ):
+        self.envelope = envelope
+        self.contact_radius = contact_radius
+        self.axis_origin = np.array(axis_origin)
+        self.axis_vec = np.array(axis_vec) / np.linalg.norm(axis_vec)
+        self.force_total = force_total
+        self.force_profile = force_profile
+        # self.max_search_vertices = max_search_vertices
+        self.visual_length = visual_length
+        # self.visual_max_force_magnitude = visual_max_force_magnitude
+        self.visual_force_scale = visual_force_scale
+        self.contact_rgba = np.array(contact_rgba)
+        self.force_rgba = np.array(force_rgba)
+        self.name = name
+        self.show_contact = show_contact
+        self.show_force = show_force
+
+        if find_contact_data:
+            self.contact_patch = self.find_contact_patch()
+            self.V_contact = self.sort_contact_vertices()
+            self.update(patch=False, pretty=True)
+        else:
+            self.contact_patch = None
+            self.V_contact = None
+            self.xyz_coord_V_contact = None
+            self.contact_force_magnitude = None
+            self.contact_force_vector = None
+            self.contact_force_vector_pretty = None
+
+    def get_contact_force_vector(self):
+        return self.axis_vec * self.contact_force_magnitude[:, np.newaxis]
+
+    def get_contact_force_vector_pretty(self):
+        # force_density = self.contact_force_magnitude / self.contact_radius**2
+        scaled_axis_vec = (
+            self.visual_force_scale
+            * self.axis_vec
+            # / (np.pi * self.contact_radius**2 * self.force_total)
+            / self.force_total
+        )
+        return scaled_axis_vec * self.contact_force_magnitude[:, np.newaxis]
+
+    def distance_from_axis(self, p):
+        """
+        Test if point p is contained in a cylinder or radius r_max with axis through p0 and direction ez.
+        """
+        dp = p - self.axis_origin
+        dp_z = dp @ self.axis_vec
+        r = np.sqrt(np.sum(dp**2, axis=-1) - dp_z**2)
+        return r
+
+    def find_contact_patch(self, restrict_to_V=None):
+        """
+        Find vertices in restrict_to_V with max and min distances along the spindle axis.
+        If restrict_to_V is None, use all vertices in self.envelope.
+        """
+        if restrict_to_V is None:
+            xyz_coord_V = self.envelope.xyz_coord_V - self.axis_origin
+            z_coord_V = xyz_coord_V @ self.axis_vec
+            seed_vertex = np.argmax(z_coord_V)
+        else:
+            xyz_coord_V = self.envelope.xyz_coord_V[restrict_to_V] - self.axis_origin
+            z_coord_V = xyz_coord_V @ self.axis_vec
+            seed_vertex = restrict_to_V[np.argmax(z_coord_V)]
+        contact_patch = HalfEdgePatch.from_seed_to_cylinder(
+            seed_vertex,
+            self.envelope,
+            self.axis_origin,
+            self.contact_radius,
+            self.axis_vec,
+        )
+        return contact_patch
+
+    def sort_contact_vertices(self):
+        return np.array(sorted(self.contact_patch.V), dtype="int32")
+
+    def bump_contact_force_magnitude(self):
+        V_contact = self.V_contact
+        xyz_coord_V = self.envelope.xyz_coord_V[V_contact]
+        s = self.distance_from_axis(xyz_coord_V) / self.contact_radius
+        contact_force_magnitude = np.zeros_like(s)
+        I = np.abs(s) < 1.0
+        contact_force_magnitude[I] = np.exp(1 + -1 / (1 - s[I] ** 2))
+        contact_force_magnitude *= self.force_total / np.sum(contact_force_magnitude)
+        return contact_force_magnitude
+
+    def uniform_contact_force_magnitude(self):
+        # V_contact = self.V_contact
+        num_vertices = len(self.contact_patch.V)
+        contact_force_magnitude = np.zeros(num_vertices)
+        contact_force_magnitude += self.force_total / num_vertices
+        return contact_force_magnitude
+
+    def find_contact_force_magnitude(self):
+        if self.force_profile == "bump":
+            return self.bump_contact_force_magnitude()
+        if self.force_profile == "uniform":
+            return self.uniform_contact_force_magnitude()
+
+    def update_patch(self):
+        dNf, dNh, dNv = 1, 1, 1
+        while dNf != 0:
+            dNf, dNh, dNv = self.contact_patch.move_towards_cylinder(
+                self.axis_origin, self.contact_radius, self.axis_vec
+            )
+        self.V_contact = self.sort_contact_vertices()
+
+    def update_force(self):
+        self.contact_force_magnitude = self.find_contact_force_magnitude()
+        self.contact_force_vector = self.get_contact_force_vector()
+
+    def update_force_pretty(self):
+        self.xyz_coord_V_contact = self.envelope.xyz_coord_V[self.V_contact]
+        self.contact_force_vector_pretty = self.get_contact_force_vector_pretty()
+
+    def update(self, patch=True, force=True, pretty=False):
+        if patch:
+            self.update_patch()
+        if force:
+            self.update_force()
+        if pretty:
+            self.update_force_pretty()
+
+    def viewer_kwargs_add_vector_field(self):
+        return {
+            "points": self.xyz_coord_V_contact,
+            "vectors": self.contact_force_vector_pretty,
+            "rgba": self.force_rgba,
+            "name": f"force_{self.name}",
+        }
+
+    def viewer_kwargs_update_rgba_V(self):
+        return {"value": self.contact_rgba, "indices": self.V_contact}
+
+    def export_time_series_data(self, pretty=False):
+        data = {
+            "V_contact": self.V_contact,
+            "contact_force_magnitude": self.contact_force_magnitude,
+            "contact_force_vector": self.contact_force_vector,
+        }
+        if pretty:
+            data["contact_force_vector_pretty"] = self.contact_force_vector_pretty
+            data["xyz_coord_V_contact"] = self.xyz_coord_V_contact
+        return data
+
+
+class Spindle:
+    """ """
+
+    def __init__(
+        self,
+        envelope,
+        axis_origin,
+        axis_vec,
+        force_total,
+        force_profile="bump",
+        visual_spb_length=0.1,
+        visual_force_scale=0.3,
+        spb1=None,
+        spb2=None,
+        name="spindle",
+        find_contact_data=True,
+    ):
+        if spb1 is None:
+            spb1 = {}
+        if spb2 is None:
+            spb2 = {}
+        spb1.update(
+            {
+                "axis_origin": axis_origin,
+                "axis_vec": axis_vec,
+                "force_total": force_total,
+                "force_profile": force_profile,
+                "visual_length": visual_spb_length,
+                "visual_force_scale": visual_force_scale,
+                "find_contact_data": find_contact_data,
+                "name": f"{name}_spb1",
+            }
+        )
+        spb2.update(
+            {
+                "axis_origin": axis_origin,
+                "axis_vec": -np.array(axis_vec),
+                "force_total": force_total,
+                "force_profile": force_profile,
+                "visual_length": visual_spb_length,
+                "visual_force_scale": visual_force_scale,
+                "find_contact_data": find_contact_data,
+                "name": f"{name}_spb1",
+            }
+        )
+        self.spb1 = SPB(envelope, **spb1)
+        self.spb2 = SPB(envelope, **spb2)
+
+    def update(self, patch=True, force=True, pretty=False):
+        self.spb1.update(patch, force, pretty)
+        self.spb2.update(patch, force, pretty)
+
+
+class Envelope(Brane):
+    def __init__(
+        self,
+        *args,
+        rgba_surface=(0.0, 0.6745, 0.2784, 0.5),
+        rgba_edge=(0.0, 0.4471, 0.698, 0.8),
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.rgba_surface = np.array(rgba_surface)
+        self.rgba_edge = np.array(rgba_edge)
+
+    def physical_parameters(self):
+        return {
+            "preferred_area": self.preferred_area,
+            "preferred_volume": self.preferred_volume,
+            "spontaneous_curvature": self.spontaneous_curvature,
+            "bending_modulus": self.bending_modulus,
+            "splay_modulus": self.splay_modulus,
+            "volume_reg_stiffness": self.volume_reg_stiffness,
+            "area_reg_stiffness": self.area_reg_stiffness,
+            "tether_stiffness": self.tether_stiffness,
+            "tether_repulsive_onset": self.tether_repulsive_onset,
+            "tether_repulsive_singularity": self.tether_repulsive_singularity,
+            "tether_attractive_onset": self.tether_attractive_onset,
+            "tether_attractive_singularity": self.tether_attractive_singularity,
+            "drag_coefficient": self.drag_coefficient,
+            "flipping_frequency": self.flipping_frequency,
+            "flipping_probability": self.flipping_probability,
+        }
+
+    def mesh_state(self):
+        data = {
+            "xyz_coord_V": self.xyz_coord_V,
+            "h_out_V": self.h_out_V,
+            "v_origin_H": self.v_origin_H,
+            "h_next_H": self.h_next_H,
+            "h_twin_H": self.h_twin_H,
+            "f_left_H": self.f_left_H,
+            "h_bound_F": self.h_bound_F,
+            "h_right_B": self.h_right_B,
+        }
+
+    def viewer_kwargs(self):
+        return {
+            "rgba_surface": self.rgba_surface,
+            "rgba_edge": self.rgba_edge,
+        }
+
+    def update_force(self):
+        self.force_surface_tension = self.Farea_harmonic()
+        self.force_pressure = self.Fvolume_harmonic()
+        self.force_tether, self.tether_success = self.Ftether()
+        self.force_bending = self.Fbend_analytic()
+
+
+class StretchSim:
+    def __init__(
+        self,
+        output_dir,
+        run_name,
+        T,
+        envelope_parameters,
+        spindle_parameters,
+        mesh_viewer_parameters,
+        dt=1e-3,
+        dt_record_data=1e-2,
+        dt_write_data=1.0,
+        dt_checkpoint=5.0,
+        dx_max=0.05,
+        make_movie_frames=True,
+        make_output_dir=True,
+        overwrite_output_dir=False,
+    ):
+        if make_output_dir:
+            self.make_output_dir(output_dir, overwrite_output_dir)
+        self.output_dir = output_dir
+        self.run_name = run_name
+        self.T = T
+        self.dt = dt
+        self.dt_record_data = dt_record_data
+        self.dt_write_data = dt_write_data
+        self.dt_checkpoint = dt_checkpoint
+        self.dx_max = dx_max
+        self.make_movie_frames = make_movie_frames
+
+        self.data_path = os.path.join(self.output_dir, "raw", f"{self.run_name}.hdf5")
+        self.checkpoint_path = os.path.join(
+            self.output_dir, "checkpoints", f"{self.run_name}.pkl"
+        )
+        self.log_path = os.path.join(self.output_dir, "logs", f"{self.run_name}.log")
+        self.parameters_path = os.path.join(
+            self.output_dir, "input", f"{self.run_name}.yaml"
+        )
+
+        self.input_dir = os.path.join(self.output_dir, "input")
+        self.raw_dir = os.path.join(self.output_dir, "raw")
+        self.processed_dir = os.path.join(self.output_dir, "processed")
+        self.visualizations_dir = os.path.join(self.output_dir, "visualizations")
+        self.temp_images_dir = os.path.join(self.output_dir, "temp_images")
+
+        self.envelope_parameters = envelope_parameters
+        self.spindle_parameters = spindle_parameters
+        mesh_viewer_parameters = mesh_viewer_parameters
+        mesh_viewer_parameters.update(
+            {
+                "image_dir": self.temp_images_dir,
+                "show_face_colored_surface": False,
+                "show_vertex_colored_surface": True,
+                "show_wireframe_surface": True,
+            }
+        )
+        mesh_viewer_parameters["rgba_vertex"] = envelope_parameters.get("rgba_surface")
+        mesh_viewer_parameters["rgba_edge"] = envelope_parameters.get("rgba_edge")
+        self.mesh_viewer_parameters = mesh_viewer_parameters
+        self.envelope = Envelope.load(**envelope_parameters)
+        self.spindle = Spindle(self.envelope, **spindle_parameters)
+        self.mesh_viewer = MeshViewer(self.envelope, **mesh_viewer_parameters)
+        self.t = 0.0
+
+    @staticmethod
+    def make_output_dir(output_dir="./output/stretch_sim", overwrite_output_dir=False):
+        """
+        Create sim directories
+        """
+
+        sub_dirs = [
+            "input",
+            "raw",
+            "processed",
+            "logs",
+            "checkpoints",
+            "temp_images",
+            "visualizations",
+        ]
+        if os.path.exists(output_dir) and overwrite_output_dir:
+            os.system(f"rm -r {output_dir}")
+        elif not os.path.exists(output_dir):
+            pass
+        else:
+            # raise ValueError(
+            #     f"{output_dir} already exists. Choose a different output_dir, or set overwrite_output_dir=True"
+            # )
+            print(f"{output_dir} already exists.")
+            return
+        os.system(f"mkdir -p {output_dir}")
+        for sub_dir in sub_dirs:
+            sub_dir_path = os.path.join(output_dir, sub_dir)
+            os.system(f"mkdir -p {sub_dir_path}")
+
+    @classmethod
+    def from_parameters_file(cls, file_path, overwrite_output_dir=False):
+        with open(file_path, "r") as f:
+            parameters = yaml.safe_load(f)
+        parameters["envelope_parameters"] = parameters.pop("envelope")
+        parameters["spindle_parameters"] = parameters.pop("spindle")
+        parameters["mesh_viewer_parameters"] = parameters.pop("mesh_viewer")
+        self = cls(**parameters, overwrite_output_dir=overwrite_output_dir)
+        os.system(f"cp {file_path} {self.parameters_path}")
+
+        return self
+
+    def get_force_total(self):
+        m = self.envelope
+        spindle = self.spindle
+        spb1 = spindle.spb1
+        spb2 = spindle.spb2
+        force_spb1 = spb1.contact_force_vector
+        force_spb2 = spb2.contact_force_vector
+        force_surface_tension = m.force_surface_tension
+        force_pressure = m.force_pressure
+        force_tether = m.force_tether
+        force_bending = m.force_bending
+        force_total = (
+            force_bending + force_tether + force_pressure + force_surface_tension
+        )
+        force_total[spb1.V_contact] += force_spb1
+        force_total[spb2.V_contact] += force_spb2
+
+        # return {
+        #     "force_spb1": force_spb1,
+        #     "force_spb2": force_spb2,
+        #     "force_surface_tension": force_surface_tension,
+        #     "force_pressure": force_pressure,
+        #     "force_tether": force_tether,
+        #     "force_bending": force_bending,
+        #     "force_total": force_total,
+        # }
+        return force_total
+
+    def update_mesh_viewer(self):
+        self.mesh_viewer.update_rgba_V(self.envelope.rgba_surface)
+        self.mesh_viewer.clear_vector_field_data()
+        for spb in [self.spindle.spb1, self.spindle.spb2]:
+            self.mesh_viewer.add_vector_field(**spb.viewer_kwargs_add_vector_field())
+            self.mesh_viewer.update_rgba_V(**spb.viewer_kwargs_update_rgba_V())
+
+    def update(self, patch=True, force=True, pretty=False):
+        self.spindle.update(patch, force, pretty)
+        if force:
+            self.envelope.update_force()
+            self.force_total = self.get_force_total()
+            self.max_force_actual = np.max(np.linalg.norm(self.force_total, axis=-1))
+        if pretty:
+            self.update_mesh_viewer()
+
+    def plot(self, save=True, show=False, title=""):
+        self.mesh_viewer.plot(save=save, show=show, title=title)
+
+    def dt_max(self):
+        dx_max = self.dx_max * self.envelope.preferred_edge_length
+        dt_max = self.envelope.drag_coefficient * dx_max / self.max_force_actual
+        return dt_max
+
+    def euler_step(self, dt):
+        m = self.envelope
+        force_total = self.force_total
+        Dxyz = dt * force_total / m.drag_coefficient
+        return Dxyz
+
+    def step_was_good(self):
+        success = True
+        success = success and self.envelope.tether_success
+        return success
+
+    def try_smaller_timestep(self, dt0):
+        dt_max = self.dt_max()
+        dt = np.min([dt_max, 0.2 * dt0])
+        Dxyz = self.euler_step(dt)
+        return Dxyz, dt
+
+    def get_smaller_timestep(self, dt0):
+        dt_max = self.dt_max()
+        dt = np.min([dt_max, 0.2 * dt0])
+        return dt
+
+    def evolve_for_DT(self, DT, dt0, patch=True):
+        dt_min = 1e-6
+        iters_to_reset_dt = 10
+        dt = dt0
+        t_stop = self.t + DT
+        # bad_step = False
+        num_fails = 0
+        while self.t < t_stop:
+            if dt < dt_min:
+                print(f"dt={dt} is too small. Exiting...")
+                return False
+            if iters_to_reset_dt <= 0:
+                dt = dt0
+                iters_to_reset_dt = 10
+            if num_fails > 10:
+                print(f"Failed too many times. Exiting...")
+                return False
+            Dxyz = self.euler_step(dt)
+            if self.step_was_good():
+                self.envelope.xyz_coord_V += Dxyz
+                self.num_flips = self.envelope.flip_non_delaunay()
+                self.update(patch=patch, force=True, pretty=False)
+                self.t += dt
+                num_fails = 0
+            else:
+                print(f"trying smaller timestep...")
+                dt_max = self.dt_max()
+                dt = np.min([dt_max, 0.2 * dt0])
+                num_fails += 1
+                print(f"trying smaller timestep dt={dt}")
+            iters_to_reset_dt -= 1
+        return True
+
+    def run(self):
+        self.update(patch=True, force=True, pretty=True)
+        dt0 = self.dt
+        T = self.T
+        dt_record_data = self.dt_record_data
+        print(f"T={self.T}         ", end="\n")
+        while self.t < T:
+            success = self.evolve_for_DT(dt_record_data, dt0, patch=False)
+            if success:
+                self.update(patch=True, force=False, pretty=True)
+                self.plot(save=True, show=False, title=f"t={self.t}")
+                V = self.envelope.total_volume()
+                A = self.envelope.total_area_of_faces()
+                V0 = self.envelope.preferred_volume
+                A0 = self.envelope.preferred_area
+                t_print = np.round(self.t, 3)
+                A_percent_error = np.round(100 * (A - A0) / A0, 3)
+                V_percent_error = np.round(100 * (V - V0) / V0, 3)
+                # A_percent_error = 100 * (A - A0) / A0
+                # V_percent_error = 100 * (V - V0) / V0
+
+                print(
+                    f"t={t_print}, A_error={A_percent_error}, V_error={V_percent_error}         ",
+                    end="\r",
+                )
+
+            else:
+                print(f"Failed at t={self.t}")
+                break
+        self.mesh_viewer.movie()
+
+    def _run(self):
+        m = self.envelope
+        spb = self.spb_force
+        mv = self.mesh_viewer
+        max_normDxyz = self.dx_max * m.preferred_edge_length
+        self.t = 0
+        dt = self.dt
+        T = self.T
+        self.update_viewer_vector_field()
+        mv.plot(save=True, show=False, title=f"t={self.t}")
+        were_done_here = False
+        while self.t <= T:
+            if were_done_here:
+                print("Failed at t={self.t}")
+                print(f"{Dxyz_good=}")
+                print(f"{tether_success=}")
+                break
+            num_flips = m.flip_non_delaunay()
+            Dxyz, normDxyz, success, Dxyz_good, tether_success = self.euler_step(
+                dt, max_normDxyz
+            )
+            if success:
+                m.xyz_coord_V += Dxyz
+                self.t += dt
+                print(f"t={self.t}                ", end="\r")
+                self.update_viewer_vector_field()
+                mv.plot(save=True, show=False, title=f"t={self.t}")
+            else:
+                print("\ntrying smaller timestep...")
+
+                Dxyz, normDxyz, success, Dxyz_good, tether_success, dt_new = (
+                    self.bad_step(
+                        dt, max_normDxyz, Dxyz, normDxyz, Dxyz_good, tether_success
+                    )
+                )
+                print(f"dt={dt_new}")
+                if success:
+                    m.xyz_coord_V += Dxyz
+                    self.t += dt_new
+                    t_stop = self.t - dt_new + dt
+                    while self.t <= t_stop:
+                        Dxyz, normDxyz, success, Dxyz_good, tether_success = (
+                            self.euler_step(dt_new, max_normDxyz)
+                        )
+                        if success:
+                            m.xyz_coord_V += Dxyz
+                            self.t += dt_new
+                            print(f"t={self.t}                ", end="\r")
+                        else:
+                            were_done_here = True
+                    print(f"t={self.t}                ", end="\r")
+                    self.update_viewer_vector_field()
+                    mv.plot(save=True, show=False, title=f"t={self.t}")
+                else:
+                    print("well, that didn't work...")
+                    were_done_here = True
+        mv.movie()
+
+
+#####################################################
 class RawData:
     def __init__(
         self,
@@ -163,14 +799,14 @@ class ParamManager:
 
         # for key, val in parameters.items():
         #     setattr(self, key, val)
-        self.envelope_parameters = self.parameters.get("envelope_parameters", {})
-        self.spb_force_parameters = self.parameters.get("spb_force_parameters", {})
-        self.mesh_viewer_parameters = self.parameters.get("mesh_viewer_parameters", {})
-        self.sim_parameters = {
-            k: v
-            for k, v in self.parameters.items()
-            if k not in ["envelope", "spb_force", "mesh_viewer"]
-        }
+        # self.envelope_parameters = self.parameters.get("envelope_parameters", {})
+        # self.spb_force_parameters = self.parameters.get("spb_force_parameters", {})
+        # self.mesh_viewer_parameters = self.parameters.get("mesh_viewer_parameters", {})
+        # self.sim_parameters = {
+        #     k: v
+        #     for k, v in self.parameters.items()
+        #     if k not in ["envelope", "spb_force", "mesh_viewer"]
+        # }
 
     def __getitem__(self, key):
         return self.parameters[key]
@@ -355,9 +991,11 @@ class SpbForce:
             self.patch_plus, self.patch_minus = self.find_contact_patches()
             self.V_plus = np.array(sorted(self.patch_plus.V), dtype="int32")  # ***
             self.V_minus = np.array(sorted(self.patch_minus.V), dtype="int32")  # ***
-            self.magnitude_plus, self.magnitude_minus = self.find_force_magnitudes()  # ***
+            self.magnitude_plus, self.magnitude_minus = (
+                self.find_force_magnitudes()
+            )  # ***
             #############################################################################
-            
+
             # self.V_contact = np.concatenate([self.V_plus, self.V_minus], dtype="int32")
             self.force_contact = np.vstack([self.force_plus, self.force_minus])
             max_magnitude = np.max(
@@ -380,12 +1018,13 @@ class SpbForce:
     @property
     def V_contact(self):
         return np.concatenate([self.V_plus, self.V_minus], dtype="int32")
+
     @property
     def max_magnitude(self):
         v_plus = self.patch_plus.seed_vertex
         v_minus = self.patch_minus.seed_vertex
         # return max([self.magnitude_plus[self.]])
-    
+
     def _bump3(self, xyz, center, contact_radius, force_total):
         s = np.linalg.norm(xyz - center, axis=-1) / contact_radius
         val = np.zeros_like(s)
@@ -401,7 +1040,7 @@ class SpbForce:
         val[I] = 1.0
         val *= force_total / np.sum(val)
         return val
-    
+
     def find_seeds(self, restrict_to_V=None):
         """
         Find vertices in self.envelope with maximum and minimum (self.axis)-coordinates.
@@ -467,114 +1106,97 @@ class SpbForce:
         indices = self.V_contact
         return {"value": value, "indices": indices}
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    def dataset_info(self):
-        num_vertices_plus = len(self.V_plus)
-        num_vertices_minus = len(self.V_minus)
-        info = [
-            ["spb_force/V_plus", (num_vertices_plus,), "int32"],
-            ["spb_force/V_minus", (num_vertices_minus,), "int32"],
-            ["spb_force/force_plus", (num_vertices_plus, 3), "float64"],
-            ["spb_force/force_minus", (num_vertices_minus, 3), "float64"],
-            ["spb_force/contact_radius", (), "float64"],
-            ["spb_force/force_total", (), "float64"],
-            ["spb_force/force_profile", (), "str"],
-            ["spb_force/view_scale", (), "float64"],
-            ["spb_force/contact_rgba", (4,), "float64"],
-            ["spb_force/force_rgba", (4,), "float64"],
-        ]
-        return info
+    # def dataset_info(self):
+    #     num_vertices_plus = len(self.V_plus)
+    #     num_vertices_minus = len(self.V_minus)
+    #     info = [
+    #         ["spb_force/V_plus", (num_vertices_plus,), "int32"],
+    #         ["spb_force/V_minus", (num_vertices_minus,), "int32"],
+    #         ["spb_force/force_plus", (num_vertices_plus, 3), "float64"],
+    #         ["spb_force/force_minus", (num_vertices_minus, 3), "float64"],
+    #         ["spb_force/contact_radius", (), "float64"],
+    #         ["spb_force/force_total", (), "float64"],
+    #         ["spb_force/force_profile", (), "str"],
+    #         ["spb_force/view_scale", (), "float64"],
+    #         ["spb_force/contact_rgba", (4,), "float64"],
+    #         ["spb_force/force_rgba", (4,), "float64"],
+    #     ]
+    #     return info
 
-    def export_timeseries_data(self):
-        data = {"spb_force/V_plus":self.V_plus,
-            "spb_force/V_minus":,
-            "spb_force/force_plus":,
-            "spb_force/force_minus":,
-            "spb_force/contact_radius":,
-            "spb_force/force_total":,
-            "spb_force/force_profile":,
-            "spb_force/view_scale":,
-            "spb_force/contact_rgba":,
-            "spb_force/force_rgba":,}
-        
-        
-        
-        return data
-    def get_dataset(self):
+    # def export_timeseries_data(self):
+    #     data = {"spb_force/V_plus":self.V_plus,
+    #         "spb_force/V_minus":,
+    #         "spb_force/force_plus":,
+    #         "spb_force/force_minus":,
+    #         "spb_force/contact_radius":,
+    #         "spb_force/force_total":,
+    #         "spb_force/force_profile":,
+    #         "spb_force/view_scale":,
+    #         "spb_force/contact_rgba":,
+    #         "spb_force/force_rgba":,}
 
-        dataset = {
-            "spb_force/V_plus": self.V_plus,
-            "spb_force/V_minus": self.V_minus,
-            "spb_force/force_plus": self.force_plus,
-            "spb_force/force_minus": self.force_minus,
-            "spb_force/contact_radius": self.contact_radius,
-            "spb_force/force_total": self.force_total,
-            "spb_force/force_profile": self.force_profile,
-            "spb_force/view_scale": self.view_scale,
-            "spb_force/contact_rgba": self.contact_rgba,
-            "spb_force/force_rgba": self.force_rgba,
-        }
-        return dataset
+    #     return data
+    # def get_dataset(self):
 
-    @classmethod
-    def from_dataset(cls, envelope, datasets):
-        contact_radius = datasets["spb_force/contact_radius"]
-        force_total = datasets["spb_force/force_total"]
-        force_profile = datasets["spb_force/force_profile"]
-        view_scale = datasets["spb_force/view_scale"]
-        contact_rgba = datasets["spb_force/contact_rgba"]
-        force_rgba = datasets["spb_force/force_rgba"]
-        V_plus = datasets["spb_force/V_plus"]
-        V_minus = datasets["spb_force/V_minus"]
-        force_plus = datasets["spb_force/force_plus"]
-        force_minus = datasets["spb_force/force_minus"]
+    #     dataset = {
+    #         "spb_force/V_plus": self.V_plus,
+    #         "spb_force/V_minus": self.V_minus,
+    #         "spb_force/force_plus": self.force_plus,
+    #         "spb_force/force_minus": self.force_minus,
+    #         "spb_force/contact_radius": self.contact_radius,
+    #         "spb_force/force_total": self.force_total,
+    #         "spb_force/force_profile": self.force_profile,
+    #         "spb_force/view_scale": self.view_scale,
+    #         "spb_force/contact_rgba": self.contact_rgba,
+    #         "spb_force/force_rgba": self.force_rgba,
+    #     }
+    #     return dataset
 
-        self = cls(
-            envelope,
-            contact_radius,
-            force_total,
-            force_profile,
-            view_scale,
-            contact_rgba,
-            force_rgba,
-            find_contact_data=False,
-        )
-        self.patch_plus = HalfEdgePatch.from_vertex_set(set(self.V_plus), self.envelope)
-        self.patch_minus = HalfEdgePatch.from_vertex_set(
-            set(self.V_minus), self.envelope
-        )
-        self.V_plus = V_plus
-        self.V_minus = V_minus
-        self.force_plus = force_plus
-        self.force_minus = force_minus
+    # @classmethod
+    # def from_dataset(cls, envelope, datasets):
+    #     contact_radius = datasets["spb_force/contact_radius"]
+    #     force_total = datasets["spb_force/force_total"]
+    #     force_profile = datasets["spb_force/force_profile"]
+    #     view_scale = datasets["spb_force/view_scale"]
+    #     contact_rgba = datasets["spb_force/contact_rgba"]
+    #     force_rgba = datasets["spb_force/force_rgba"]
+    #     V_plus = datasets["spb_force/V_plus"]
+    #     V_minus = datasets["spb_force/V_minus"]
+    #     force_plus = datasets["spb_force/force_plus"]
+    #     force_minus = datasets["spb_force/force_minus"]
 
-        self.V_contact = np.concatenate([self.V_plus, self.V_minus], dtype="int32")
-        self.force_contact = np.vstack([self.force_plus, self.force_minus])
-        max_magnitude = np.max(
-            [
-                np.linalg.norm(self.force_plus, axis=-1),
-                np.linalg.norm(self.force_minus, axis=-1),
-            ]
-        )
-        self.scaled_force = self.view_scale * self.force_contact / max_magnitude
-        return self
+    #     self = cls(
+    #         envelope,
+    #         contact_radius,
+    #         force_total,
+    #         force_profile,
+    #         view_scale,
+    #         contact_rgba,
+    #         force_rgba,
+    #         find_contact_data=False,
+    #     )
+    #     self.patch_plus = HalfEdgePatch.from_vertex_set(set(self.V_plus), self.envelope)
+    #     self.patch_minus = HalfEdgePatch.from_vertex_set(
+    #         set(self.V_minus), self.envelope
+    #     )
+    #     self.V_plus = V_plus
+    #     self.V_minus = V_minus
+    #     self.force_plus = force_plus
+    #     self.force_minus = force_minus
 
-    
+    #     self.V_contact = np.concatenate([self.V_plus, self.V_minus], dtype="int32")
+    #     self.force_contact = np.vstack([self.force_plus, self.force_minus])
+    #     max_magnitude = np.max(
+    #         [
+    #             np.linalg.norm(self.force_plus, axis=-1),
+    #             np.linalg.norm(self.force_minus, axis=-1),
+    #         ]
+    #     )
+    #     self.scaled_force = self.view_scale * self.force_contact / max_magnitude
+    #     return self
 
-class Envelope(Brane):
+
+class __Envelope(Brane):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -1025,7 +1647,7 @@ class StretchSimData:
         dataset[num_samples_current:] = datachunk
 
 
-class StretchSim:
+class _StretchSim:
     """
     Simulation of membrane being stretched by equal and opposite forces
 

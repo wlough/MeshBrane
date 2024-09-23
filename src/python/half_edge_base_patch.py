@@ -104,6 +104,21 @@ class HalfEdgePatch:
         return self
 
     @classmethod
+    def from_seed_to_cylinder(cls, seed_vertex, supermesh, p0, r_max, ez):
+        """
+        x0 is point on the cylinder axis
+        r_max is the radius
+        ez is parallel with the axis
+        """
+        if not cls.is_p_in_cylinder(supermesh.xyz_coord_v(seed_vertex), p0, r_max, ez):
+            raise ValueError("Seed vertex not in cylinder.")
+        self = cls.from_seed_vertex(seed_vertex, supermesh)
+        dNf, dNh, dNv = 1, 1, 1
+        while dNf != 0:
+            dNf, dNh, dNv = self.move_towards_cylinder(p0, r_max, ez)
+        return self
+
+    @classmethod
     def from_vertex_set(cls, V, supermesh):
         self = cls(
             supermesh,
@@ -114,6 +129,14 @@ class HalfEdgePatch:
         )
         self.update_from_V()
         return self
+
+    @staticmethod
+    def is_p_in_cylinder(p, p0, r_max, ez):
+        """
+        Test if point p is contained in a cylinder or radius r_max with axis through p0 and direction ez.
+        """
+        r = np.linalg.norm(np.cross(ez, p - p0))
+        return r <= r_max
 
     ##############################################
     def negative_boundary_contains_h(self, h):
@@ -436,54 +459,11 @@ class HalfEdgePatch:
             if not V_new:
                 break
 
-    def _expand_towards_cylinder(self, x0, r_max, ez):
+    def move_towards_cylinder(self, p0, r_max, ez):
         """ """
-        # V_bdry = set(self.generate_V_negative_bdry())
-        V_bdry, H_bdry = self.get_VH_bdry()
-        V_frontier, H_frontier, F_frontier = self.get_VHF_frontier()
-        F_test = F_frontier - self.F
-        V_add = set()
-        H_add = set()
-        F_add = set()
-        for f in F_test:
-            h1 = self.supermesh.h_bound_f(f)
-            h2 = self.supermesh.h_next_h(h1)
-            h3 = self.supermesh.h_next_h(h2)
-            i1 = self.supermesh.v_origin_h(h1)
-            i2 = self.supermesh.v_origin_h(h2)
-            i3 = self.supermesh.v_origin_h(h3)
-            x1 = self.supermesh.xyz_coord_v(i1)
-            x2 = self.supermesh.xyz_coord_v(i2)
-            x3 = self.supermesh.xyz_coord_v(i3)
-            x = (x1 + x2 + x3) / 3
-            r = np.linalg.norm(np.cross(ez, x - x0))
-            if r <= r_max:
-                V_add.update([i1, i2, i3])
-                H_add.update(
-                    [
-                        h1,
-                        h2,
-                        h3,
-                        self.supermesh.h_twin_h(h1),
-                        self.supermesh.h_twin_h(h2),
-                        self.supermesh.h_twin_h(h3),
-                    ]
-                )
-                F_add.add(f)
-
-        V_new = V_add - self.V
-        H_new = H_add - self.H
-        F_new = F_add - self.F
-        self.V.update(V_new)
-        self.H.update(H_new)
-        self.F.update(F_new)
-        self.h_right_B = self.find_h_right_B_from_VHF(
-            V_check=set(), H_check=H_new + H_bdry, F_check=set()
-        )
-        return V_new, H_new, F_new
-
-    def move_towards_cylinder(self, x0, r_max, ez):
-        """ """
+        num_faces = len(self.F)
+        num_half_edges = len(self.H)
+        num_vertices = len(self.V)
         # V_bdry, H_bdry = self.get_VH_bdry()
         V_frontier, H_frontier, F_frontier = self.get_VHF_frontier()
         # F = self.F - F_frontier  # open boundary
@@ -501,8 +481,8 @@ class HalfEdgePatch:
             x2 = self.supermesh.xyz_coord_v(i2)
             x3 = self.supermesh.xyz_coord_v(i3)
             x = (x1 + x2 + x3) / 3
-            r = np.linalg.norm(np.cross(ez, x - x0))
-            if r <= r_max:
+
+            if self.is_p_in_cylinder(x, p0, r_max, ez):
                 self.V.update([i1, i2, i3])
                 self.H.update([h1, h2, h3])
                 self.H.update(
@@ -541,61 +521,10 @@ class HalfEdgePatch:
                 H_right_B.discard(h)
         self.h_right_B = np.array(h_right_B, dtype="int32")
 
-    def move_boundary_towards_cylinder(self, x0, r_max, ez):
-        """ """
-        V_bdry = set()
-        H_bdry = set()
-        F_frontier = set()
-
-        for h in self.generate_H_negative_bdry():
-            v = self.v_origin_h(h)
-            ht = self.h_twin_h(h)
-            V_bdry.add(v)
-            H_bdry.update([h, ht])
-            F_frontier.update(self.supermesh.generate_F_incident_v_clockwise(v))
-        V_frontier, H_frontier, F_frontier = self.supermesh.close_complex(
-            set(), set(), F_frontier
-        )
-        F_min = self.F - F_frontier
-        H_min = self.H - H_frontier
-        V_min = self.V - V_frontier
-        F_add_back = set()
-        H_add_back = set()
-        V_add_back = set()
-        for f in F_frontier:
-            h1 = self.supermesh.h_bound_f(f)
-            h2 = self.supermesh.h_next_h(h1)
-            h3 = self.supermesh.h_next_h(h2)
-            i1 = self.supermesh.v_origin_h(h1)
-            i2 = self.supermesh.v_origin_h(h2)
-            i3 = self.supermesh.v_origin_h(h3)
-            x1 = self.supermesh.xyz_coord_v(i1)
-            x2 = self.supermesh.xyz_coord_v(i2)
-            x3 = self.supermesh.xyz_coord_v(i3)
-            x = (x1 + x2 + x3) / 3
-            r = np.linalg.norm(np.cross(ez, x - x0))
-            if r <= r_max:
-                F_add_back.add(f)
-
-        V_add_back, H_add_back, F_add_back = self.supermesh.closure(
-            set(), set(), F_add_back
-        )
-        V_new = V - self.V
-        H_new = H - self.H
-        F_new = F - self.F
-        self.V.update(V_new)
-        self.H.update(H_new)
-        self.F.update(F_new)
-        self.h_right_B = self.find_h_right_B(F_need2check=F)
-        return V_new, H_new, F_new
-
-    def expand_to_radius_perp(self, xyz_center, radius, vec):
-        while True:
-            V_new, H_new, F_new = self.expand_within_radius_perp(
-                xyz_center, radius, vec
-            )
-            if not V_new:
-                break
+        delta_num_faces = len(self.F) - num_faces
+        delta_num_half_edges = len(self.H) - num_half_edges
+        delta_num_vertices = len(self.V) - num_vertices
+        return delta_num_faces, delta_num_half_edges, delta_num_vertices
 
     ##############################################
     def he_samples(self):
@@ -659,7 +588,7 @@ class HalfEdgePatch:
             V.add(v1)
             for h1 in self.supermesh.generate_H_out_v_clockwise(v1):
                 h1t = self.supermesh.h_twin_h(h1)
-                v2 = self.v_origin_h(h1t)
+                v2 = self.supermesh.v_origin_h(h1t)
                 H.add(h1)
                 H.add(h1t)
                 V.add(v2)
@@ -670,7 +599,7 @@ class HalfEdgePatch:
                 h3 = self.supermesh.h_next_h(h2)
                 h2t = self.supermesh.h_twin_h(h2)
                 h3t = self.supermesh.h_twin_h(h3)
-                v3 = self.v_origin_h(h2t)
+                v3 = self.supermesh.v_origin_h(h2t)
                 F.add(f)
                 H.update([h2, h2t, h3, h3t])
                 V.add(v3)
@@ -775,7 +704,7 @@ class HalfEdgePatch:
         self.h_right_B = self.find_h_right_B(F_need2check=F)
         return V_bdry_new
 
-    def expand_boundary_doesnt_work_yet(self):
+    def _expand_boundary_doesnt_work_yet(self):
         """
         Expand the boundary of the patch by one ring of vertices, edges, and faces.
 
@@ -826,6 +755,109 @@ class HalfEdgePatch:
         self.F.update(F)
         self.h_right_B = self.find_h_right_B(F_need2check=F)
         return V_bdry_new
+
+    def _expand_towards_cylinder(self, x0, r_max, ez):
+        """ """
+        # V_bdry = set(self.generate_V_negative_bdry())
+        V_bdry, H_bdry = self.get_VH_bdry()
+        V_frontier, H_frontier, F_frontier = self.get_VHF_frontier()
+        F_test = F_frontier - self.F
+        V_add = set()
+        H_add = set()
+        F_add = set()
+        for f in F_test:
+            h1 = self.supermesh.h_bound_f(f)
+            h2 = self.supermesh.h_next_h(h1)
+            h3 = self.supermesh.h_next_h(h2)
+            i1 = self.supermesh.v_origin_h(h1)
+            i2 = self.supermesh.v_origin_h(h2)
+            i3 = self.supermesh.v_origin_h(h3)
+            x1 = self.supermesh.xyz_coord_v(i1)
+            x2 = self.supermesh.xyz_coord_v(i2)
+            x3 = self.supermesh.xyz_coord_v(i3)
+            x = (x1 + x2 + x3) / 3
+            # r = np.linalg.norm(np.cross(ez, x - x0))
+            # if r <= r_max:
+            if self.is_p_in_cylinder(x, x0, r_max, ez):
+                V_add.update([i1, i2, i3])
+                H_add.update(
+                    [
+                        h1,
+                        h2,
+                        h3,
+                        self.supermesh.h_twin_h(h1),
+                        self.supermesh.h_twin_h(h2),
+                        self.supermesh.h_twin_h(h3),
+                    ]
+                )
+                F_add.add(f)
+
+        V_new = V_add - self.V
+        H_new = H_add - self.H
+        F_new = F_add - self.F
+        self.V.update(V_new)
+        self.H.update(H_new)
+        self.F.update(F_new)
+        self.h_right_B = self.find_h_right_B_from_VHF(
+            V_check=set(), H_check=H_new + H_bdry, F_check=set()
+        )
+        return V_new, H_new, F_new
+
+    def _move_boundary_towards_cylinder(self, x0, r_max, ez):
+        """ """
+        V_bdry = set()
+        H_bdry = set()
+        F_frontier = set()
+
+        for h in self.generate_H_negative_bdry():
+            v = self.v_origin_h(h)
+            ht = self.h_twin_h(h)
+            V_bdry.add(v)
+            H_bdry.update([h, ht])
+            F_frontier.update(self.supermesh.generate_F_incident_v_clockwise(v))
+        V_frontier, H_frontier, F_frontier = self.supermesh.close_complex(
+            set(), set(), F_frontier
+        )
+        F_min = self.F - F_frontier
+        H_min = self.H - H_frontier
+        V_min = self.V - V_frontier
+        F_add_back = set()
+        H_add_back = set()
+        V_add_back = set()
+        for f in F_frontier:
+            h1 = self.supermesh.h_bound_f(f)
+            h2 = self.supermesh.h_next_h(h1)
+            h3 = self.supermesh.h_next_h(h2)
+            i1 = self.supermesh.v_origin_h(h1)
+            i2 = self.supermesh.v_origin_h(h2)
+            i3 = self.supermesh.v_origin_h(h3)
+            x1 = self.supermesh.xyz_coord_v(i1)
+            x2 = self.supermesh.xyz_coord_v(i2)
+            x3 = self.supermesh.xyz_coord_v(i3)
+            x = (x1 + x2 + x3) / 3
+            r = np.linalg.norm(np.cross(ez, x - x0))
+            if r <= r_max:
+                F_add_back.add(f)
+
+        V_add_back, H_add_back, F_add_back = self.supermesh.closure(
+            set(), set(), F_add_back
+        )
+        V_new = V - self.V
+        H_new = H - self.H
+        F_new = F - self.F
+        self.V.update(V_new)
+        self.H.update(H_new)
+        self.F.update(F_new)
+        self.h_right_B = self.find_h_right_B(F_need2check=F)
+        return V_new, H_new, F_new
+
+    def _expand_to_radius_perp(self, xyz_center, radius, vec):
+        while True:
+            V_new, H_new, F_new = self.expand_within_radius_perp(
+                xyz_center, radius, vec
+            )
+            if not V_new:
+                break
 
 
 ######################################
