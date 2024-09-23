@@ -280,10 +280,21 @@ class Spindle:
         )
         self.spb1 = SPB(envelope, **spb1)
         self.spb2 = SPB(envelope, **spb2)
+        if find_contact_data:
+            self.length = self.get_spindle_length()
 
     def update(self, patch=True, force=True, pretty=False):
         self.spb1.update(patch, force, pretty)
         self.spb2.update(patch, force, pretty)
+        if pretty:
+            self.length = self.get_spindle_length()
+
+    def get_spindle_length(self):
+        v1 = self.spb1.contact_patch.seed_vertex
+        v2 = self.spb2.contact_patch.seed_vertex
+        x1 = self.envelope.xyz_coord_v(v1)
+        x2 = self.envelope.xyz_coord_v(v2)
+        return np.linalg.norm(x1 - x2)
 
 
 class Envelope(Brane):
@@ -542,14 +553,14 @@ class StretchSim:
             Dxyz = self.euler_step(dt)
             if self.step_was_good():
                 self.envelope.xyz_coord_V += Dxyz
-                self.num_flips = self.envelope.flip_non_delaunay()
+                # self.num_flips = self.envelope.flip_non_delaunay()
                 self.update(patch=patch, force=True, pretty=False)
                 self.t += dt
                 num_fails = 0
             else:
-                print(f"trying smaller timestep...")
+                print(" ")
                 dt_max = self.dt_max()
-                dt = np.min([dt_max, 0.2 * dt0])
+                dt = np.min([dt_max, 0.2 * dt])
                 num_fails += 1
                 print(f"trying smaller timestep dt={dt}")
             iters_to_reset_dt -= 1
@@ -564,20 +575,23 @@ class StretchSim:
         while self.t < T:
             success = self.evolve_for_DT(dt_record_data, dt0, patch=False)
             if success:
-                self.update(patch=True, force=False, pretty=True)
+                self.num_flips = self.envelope.flip_non_delaunay()
+                self.update(patch=True, force=True, pretty=True)
                 self.plot(save=True, show=False, title=f"t={self.t}")
                 V = self.envelope.total_volume()
                 A = self.envelope.total_area_of_faces()
                 V0 = self.envelope.preferred_volume
                 A0 = self.envelope.preferred_area
+
                 t_print = np.round(self.t, 3)
                 A_percent_error = np.round(100 * (A - A0) / A0, 3)
                 V_percent_error = np.round(100 * (V - V0) / V0, 3)
+                L_spindle = np.round(self.spindle.length, 3)
                 # A_percent_error = 100 * (A - A0) / A0
                 # V_percent_error = 100 * (V - V0) / V0
 
                 print(
-                    f"t={t_print}, A_error={A_percent_error}, V_error={V_percent_error}         ",
+                    f"t={t_print}, L_spindle={L_spindle}, A_error={A_percent_error}, V_error={V_percent_error}         ",
                     end="\r",
                 )
 
