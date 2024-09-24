@@ -1,4 +1,4 @@
-output_dir: ./output/stretch_sim
+output_dir: ./output/test_sim_ave_edge_len2
 run_name: run_0000
 T: 30.0
 dt: 0.01
@@ -21,7 +21,7 @@ envelope:
   tether_repulsive_singularity: 0.6
   tether_attractive_onset: 1.2
   tether_attractive_singularity: 1.4
-  drag_coefficient: 250.0
+  drag_coefficient: 25.0
   flipping_frequency: 10.0
   flipping_probability: 0.3
   rgba_surface:

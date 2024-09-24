@@ -16,8 +16,8 @@ except ImportError:
 # _NUMPY_INT_ = np.int64
 # _NUMPY_FLOAT_ = np.float64
 from src.python.global_vars import (
-    _INT_TYPE_,
-    _FLOAT_TYPE_,
+    INT_TYPE,
+    FLOAT_TYPE,
     _NUMBA_INT_,
     _NUMBA_FLOAT_,
 )
@@ -29,8 +29,8 @@ def make_half_edge_base_numba_utils(
     from numba import jit  # , typeof
     from numba.pycc import CC
 
-    # _NUMBA_INT_ = typeof(_INT_TYPE_(1))
-    # _NUMBA_FLOAT_ = typeof(_FLOAT_TYPE_(1))
+    # _NUMBA_INT_ = typeof(INT_TYPE(1))
+    # _NUMBA_FLOAT_ = typeof(FLOAT_TYPE(1))
     cc = CC(module_name)
     cc.output_dir = output_directory
 
@@ -80,7 +80,7 @@ def make_half_edge_base_numba_utils(
         h_right_B,
     ):
         Nf = len(h_bound_F)
-        V_of_F = np.zeros((Nf, 3), dtype=_INT_TYPE_)
+        V_of_F = np.zeros((Nf, 3), dtype=INT_TYPE)
         for f in range(Nf):
             h = h_bound_F[f]
             h_start = h
@@ -117,7 +117,7 @@ def make_half_edge_base_numba_utils(
         h_right_B,
     ):
         # Nf = len(h_bound_F)
-        # V_of_F = np.zeros((Nf, 3), dtype=_INT_TYPE_)
+        # V_of_F = np.zeros((Nf, 3), dtype=INT_TYPE)
         # for f in range(Nf):
         #     h = h_bound_F[f]
         #     h_start = h
@@ -178,7 +178,7 @@ def make_half_edge_base_numba_utils(
                 H_need2visit.remove(h)
                 f_left_H[h] = -(b + 1)
                 h = h_next_H[h]
-        h_right_B = np.array(_h_right_B, dtype=_INT_TYPE_)
+        h_right_B = np.array(_h_right_B, dtype=INT_TYPE)
         return h_right_B
 
     @cc.export(
@@ -192,12 +192,12 @@ def make_half_edge_base_numba_utils(
         Nfaces = len(vvv_of_F)
         Nvertices = len(xyz_coord_V)
         _Nhedges = 3 * Nfaces * 2
-        _H = np.zeros((_Nhedges, 2), dtype=_INT_TYPE_)
-        h_out_V = -np.ones(Nvertices, dtype=_INT_TYPE_)
-        _v_origin_H = np.zeros(_Nhedges, dtype=_INT_TYPE_)
-        _h_next_H = -np.ones(_Nhedges, dtype=_INT_TYPE_)
-        _f_left_H = np.zeros(_Nhedges, dtype=_INT_TYPE_)
-        h_bound_F = np.zeros(Nfaces, dtype=_INT_TYPE_)
+        _H = np.zeros((_Nhedges, 2), dtype=INT_TYPE)
+        h_out_V = -np.ones(Nvertices, dtype=INT_TYPE)
+        _v_origin_H = np.zeros(_Nhedges, dtype=INT_TYPE)
+        _h_next_H = -np.ones(_Nhedges, dtype=INT_TYPE)
+        _f_left_H = np.zeros(_Nhedges, dtype=INT_TYPE)
+        h_bound_F = np.zeros(Nfaces, dtype=INT_TYPE)
 
         # h_count = 0
         for f in range(Nfaces):
@@ -218,7 +218,7 @@ def make_half_edge_base_numba_utils(
         need_next = set([_NUMBA_INT_(0)])
         need_next.pop()
         _h_twin_H = _NUMBA_INT_(-2) * np.ones(
-            _Nhedges, dtype=_INT_TYPE_
+            _Nhedges, dtype=INT_TYPE
         )  # -2 means not set
         while need_twins:
             h = need_twins.pop()
@@ -269,7 +269,7 @@ def make_half_edge_base_numba_utils(
                 H_need2visit.remove(h)
                 f_left_H[h] = -(b + 1)
                 h = h_next_H[h]
-        h_right_B = np.array(_h_right_B, dtype=_INT_TYPE_)
+        h_right_B = np.array(_h_right_B, dtype=INT_TYPE)
         return (
             xyz_coord_V,
             h_out_V,
@@ -331,33 +331,33 @@ def vf_samples_to_he_samples(xyz_coord_V, vvv_of_F):
 
     Parameters
     ----------
-    xyz_coord_V : ndarray[:, :] of _FLOAT_TYPE_
+    xyz_coord_V : ndarray[:, :] of FLOAT_TYPE
         Nvx3 array of vertex Cartesian coordinates
-    vvv_of_F : numpy.ndarray[:, :] of _INT_TYPE_
+    vvv_of_F : numpy.ndarray[:, :] of INT_TYPE
         Nfx3 array of vertex indices of faces
 
     Returns
     -------
-    xyz_coord_V : ndarray[:, :] of _FLOAT_TYPE_
+    xyz_coord_V : ndarray[:, :] of FLOAT_TYPE
         xyz_coord_V[i] = xyz coordinates of vertex i
-    h_out_V : ndarray[:] of _INT_TYPE_
+    h_out_V : ndarray[:] of INT_TYPE
         h_out_V[i] = some outgoing half-edge incident on vertex i
-    v_origin_H : ndarray[:] of _INT_TYPE_
+    v_origin_H : ndarray[:] of INT_TYPE
         v_origin_H[j] = vertex at the origin of half-edge j
-    h_next_H : ndarray[:] of _INT_TYPE_
+    h_next_H : ndarray[:] of INT_TYPE
         h_next_H[j] next half-edge after half-edge j in the face cycle
-    h_twin_H : ndarray[:] of _INT_TYPE_
+    h_twin_H : ndarray[:] of INT_TYPE
         h_twin_H[j] = half-edge antiparallel to half-edge j
-    f_left_H : ndarray[:] of _INT_TYPE_
+    f_left_H : ndarray[:] of INT_TYPE
         f_left_H[j] = face to the left of half-edge j, if j in interior(M) or a positively oriented boundary of M
         f_left_H[j] = boundary to the left of half-edge j, if j in a negatively oriented boundary
-    h_bound_F : ndarray[:] of _INT_TYPE_
+    h_bound_F : ndarray[:] of INT_TYPE
         h_bound_F[k] = some half-edge on the boudary of face k.
-    h_right_B : ndarray[:] of _INT_TYPE_
+    h_right_B : ndarray[:] of INT_TYPE
         h_right_B[n] = half-edge to the right of boundary n.
     """
-    xyz_coord_V = np.array(xyz_coord_V, dtype=_FLOAT_TYPE_)
-    vvv_of_F = np.array(vvv_of_F, dtype=_INT_TYPE_)
+    xyz_coord_V = np.array(xyz_coord_V, dtype=FLOAT_TYPE)
+    vvv_of_F = np.array(vvv_of_F, dtype=INT_TYPE)
     return numba_vf_samples_to_he_samples(xyz_coord_V, vvv_of_F)
 
 
@@ -376,40 +376,40 @@ def he_samples_to_vf_samples(
 
     Parameters
     -------
-    xyz_coord_V : ndarray[:, :] of _FLOAT_TYPE_
+    xyz_coord_V : ndarray[:, :] of FLOAT_TYPE
         xyz_coord_V[i] = xyz coordinates of vertex i
-    h_out_V : ndarray[:] of _INT_TYPE_
+    h_out_V : ndarray[:] of INT_TYPE
         h_out_V[i] = some outgoing half-edge incident on vertex i
-    v_origin_H : ndarray[:] of _INT_TYPE_
+    v_origin_H : ndarray[:] of INT_TYPE
         v_origin_H[j] = vertex at the origin of half-edge j
-    h_next_H : ndarray[:] of _INT_TYPE_
+    h_next_H : ndarray[:] of INT_TYPE
         h_next_H[j] next half-edge after half-edge j in the face cycle
-    h_twin_H : ndarray[:] of _INT_TYPE_
+    h_twin_H : ndarray[:] of INT_TYPE
         h_twin_H[j] = half-edge antiparallel to half-edge j
-    f_left_H : ndarray[:] of _INT_TYPE_
+    f_left_H : ndarray[:] of INT_TYPE
         f_left_H[j] = face to the left of half-edge j, if j in interior(M) or a positively oriented boundary of M
         f_left_H[j] = boundary to the left of half-edge j, if j in a negatively oriented boundary
-    h_bound_F : ndarray[:] of _INT_TYPE_
+    h_bound_F : ndarray[:] of INT_TYPE
         h_bound_F[k] = some half-edge on the boudary of face k.
-    h_right_B : ndarray[:] of _INT_TYPE_
+    h_right_B : ndarray[:] of INT_TYPE
         h_right_B[n] = half-edge to the right of boundary n.
 
     Returns
     ----------
-    xyz_coord_V : ndarray[:, :] of _FLOAT_TYPE_
+    xyz_coord_V : ndarray[:, :] of FLOAT_TYPE
         Nvx3 array of vertex Cartesian coordinates
-    vvv_of_F : numpy.ndarray[:, :] of _INT_TYPE_
+    vvv_of_F : numpy.ndarray[:, :] of INT_TYPE
         Nfx3 array of vertex indices of faces
 
     """
-    xyz_coord_V = np.array(xyz_coord_V, dtype=_FLOAT_TYPE_)
-    h_out_V = np.array(h_out_V, dtype=_INT_TYPE_)
-    v_origin_H = np.array(v_origin_H, dtype=_INT_TYPE_)
-    h_next_H = np.array(h_next_H, dtype=_INT_TYPE_)
-    h_twin_H = np.array(h_twin_H, dtype=_INT_TYPE_)
-    f_left_H = np.array(f_left_H, dtype=_INT_TYPE_)
-    h_bound_F = np.array(h_bound_F, dtype=_INT_TYPE_)
-    h_right_B = np.array(h_right_B, dtype=_INT_TYPE_)
+    xyz_coord_V = np.array(xyz_coord_V, dtype=FLOAT_TYPE)
+    h_out_V = np.array(h_out_V, dtype=INT_TYPE)
+    v_origin_H = np.array(v_origin_H, dtype=INT_TYPE)
+    h_next_H = np.array(h_next_H, dtype=INT_TYPE)
+    h_twin_H = np.array(h_twin_H, dtype=INT_TYPE)
+    f_left_H = np.array(f_left_H, dtype=INT_TYPE)
+    h_bound_F = np.array(h_bound_F, dtype=INT_TYPE)
+    h_right_B = np.array(h_right_B, dtype=INT_TYPE)
     return numba_he_samples_to_vf_samples(
         xyz_coord_V,
         h_out_V,
@@ -437,38 +437,38 @@ def V_of_F(
 
     Parameters
     -------
-    xyz_coord_V : ndarray[:, :] of _FLOAT_TYPE_
+    xyz_coord_V : ndarray[:, :] of FLOAT_TYPE
         xyz_coord_V[i] = xyz coordinates of vertex i
-    h_out_V : ndarray[:] of _INT_TYPE_
+    h_out_V : ndarray[:] of INT_TYPE
         h_out_V[i] = some outgoing half-edge incident on vertex i
-    v_origin_H : ndarray[:] of _INT_TYPE_
+    v_origin_H : ndarray[:] of INT_TYPE
         v_origin_H[j] = vertex at the origin of half-edge j
-    h_next_H : ndarray[:] of _INT_TYPE_
+    h_next_H : ndarray[:] of INT_TYPE
         h_next_H[j] next half-edge after half-edge j in the face cycle
-    h_twin_H : ndarray[:] of _INT_TYPE_
+    h_twin_H : ndarray[:] of INT_TYPE
         h_twin_H[j] = half-edge antiparallel to half-edge j
-    f_left_H : ndarray[:] of _INT_TYPE_
+    f_left_H : ndarray[:] of INT_TYPE
         f_left_H[j] = face to the left of half-edge j, if j in interior(M) or a positively oriented boundary of M
         f_left_H[j] = boundary to the left of half-edge j, if j in a negatively oriented boundary
-    h_bound_F : ndarray[:] of _INT_TYPE_
+    h_bound_F : ndarray[:] of INT_TYPE
         h_bound_F[k] = some half-edge on the boudary of face k.
-    h_right_B : ndarray[:] of _INT_TYPE_
+    h_right_B : ndarray[:] of INT_TYPE
         h_right_B[n] = half-edge to the right of boundary n.
 
     Returns
     ----------
-    vvv_of_F : numpy.ndarray[:, :] of _INT_TYPE_
+    vvv_of_F : numpy.ndarray[:, :] of INT_TYPE
         Nfx3 array of vertex indices of faces
 
     """
-    xyz_coord_V = np.array(xyz_coord_V, dtype=_FLOAT_TYPE_)
-    h_out_V = np.array(h_out_V, dtype=_INT_TYPE_)
-    v_origin_H = np.array(v_origin_H, dtype=_INT_TYPE_)
-    h_next_H = np.array(h_next_H, dtype=_INT_TYPE_)
-    h_twin_H = np.array(h_twin_H, dtype=_INT_TYPE_)
-    f_left_H = np.array(f_left_H, dtype=_INT_TYPE_)
-    h_bound_F = np.array(h_bound_F, dtype=_INT_TYPE_)
-    h_right_B = np.array(h_right_B, dtype=_INT_TYPE_)
+    xyz_coord_V = np.array(xyz_coord_V, dtype=FLOAT_TYPE)
+    h_out_V = np.array(h_out_V, dtype=INT_TYPE)
+    v_origin_H = np.array(v_origin_H, dtype=INT_TYPE)
+    h_next_H = np.array(h_next_H, dtype=INT_TYPE)
+    h_twin_H = np.array(h_twin_H, dtype=INT_TYPE)
+    f_left_H = np.array(f_left_H, dtype=INT_TYPE)
+    h_bound_F = np.array(h_bound_F, dtype=INT_TYPE)
+    h_right_B = np.array(h_right_B, dtype=INT_TYPE)
     return numba_V_of_F(
         xyz_coord_V,
         h_out_V,
@@ -494,33 +494,33 @@ def find_h_right_B(
 
     Parameters
     ----------
-    xyz_coord_V : ndarray[:, :] of _FLOAT_TYPE_
+    xyz_coord_V : ndarray[:, :] of FLOAT_TYPE
         xyz_coord_V[i] = xyz coordinates of vertex i
-    h_out_V : ndarray[:] of _INT_TYPE_
+    h_out_V : ndarray[:] of INT_TYPE
         h_out_V[i] = some outgoing half-edge incident on vertex i
-    v_origin_H : ndarray[:] of _INT_TYPE_
+    v_origin_H : ndarray[:] of INT_TYPE
         v_origin_H[j] = vertex at the origin of half-edge j
-    h_next_H : ndarray[:] of _INT_TYPE_
+    h_next_H : ndarray[:] of INT_TYPE
         h_next_H[j] next half-edge after half-edge j in the face cycle
-    h_twin_H : ndarray[:] of _INT_TYPE_
+    h_twin_H : ndarray[:] of INT_TYPE
         h_twin_H[j] = half-edge antiparalel to half-edge j
-    f_left_H : ndarray[:] of _INT_TYPE_
+    f_left_H : ndarray[:] of INT_TYPE
         f_left_H[j] = face to the left of half-edge j
-    h_bound_F : ndarray[:] of _INT_TYPE_
+    h_bound_F : ndarray[:] of INT_TYPE
         h_bound_F[k] = some half-edge on the ccw boudary of face k
 
     Returns
     -------
-    h_right_B : ndarray[:] of _INT_TYPE_
+    h_right_B : ndarray[:] of INT_TYPE
         h_right_B[n] = half-edge in complement boundary n of the mesh
     """
-    xyz_coord_V = np.array(xyz_coord_V, dtype=_FLOAT_TYPE_)
-    h_out_V = np.array(h_out_V, dtype=_INT_TYPE_)
-    v_origin_H = np.array(v_origin_H, dtype=_INT_TYPE_)
-    h_next_H = np.array(h_next_H, dtype=_INT_TYPE_)
-    h_twin_H = np.array(h_twin_H, dtype=_INT_TYPE_)
-    f_left_H = np.array(f_left_H, dtype=_INT_TYPE_)
-    h_bound_F = np.array(h_bound_F, dtype=_INT_TYPE_)
+    xyz_coord_V = np.array(xyz_coord_V, dtype=FLOAT_TYPE)
+    h_out_V = np.array(h_out_V, dtype=INT_TYPE)
+    v_origin_H = np.array(v_origin_H, dtype=INT_TYPE)
+    h_next_H = np.array(h_next_H, dtype=INT_TYPE)
+    h_twin_H = np.array(h_twin_H, dtype=INT_TYPE)
+    f_left_H = np.array(f_left_H, dtype=INT_TYPE)
+    h_bound_F = np.array(h_bound_F, dtype=INT_TYPE)
     return numba_find_h_right_B(
         xyz_coord_V,
         h_out_V,

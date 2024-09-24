@@ -14,9 +14,9 @@ import numpy as np
 
 # _NUMPY_INT_ = np.int64
 # _NUMPY_FLOAT_ = np.float64
-# _INT_TYPE_ = "int32"  # str(np.dtype(_NUMPY_INT_))
-# _FLOAT_TYPE_ = str(np.dtype(_NUMPY_FLOAT_))
-from src.python.global_vars import _INT_TYPE_, _FLOAT_TYPE_, _NUMPY_INT_, _NUMPY_FLOAT_
+# INT_TYPE = "int32"  # str(np.dtype(_NUMPY_INT_))
+# FLOAT_TYPE = str(np.dtype(_NUMPY_FLOAT_))
+from src.python.global_vars import INT_TYPE, FLOAT_TYPE, _NUMPY_INT_, _NUMPY_FLOAT_
 
 
 class MeshSchema:
@@ -151,9 +151,9 @@ class MeshSchema:
         ) = samples
         V_data = np.array(
             [tuple(v) for v in V],
-            dtype=[("x", _FLOAT_TYPE_), ("y", _FLOAT_TYPE_), ("z", _FLOAT_TYPE_)],
+            dtype=[("x", FLOAT_TYPE), ("y", FLOAT_TYPE), ("z", FLOAT_TYPE)],
         )
-        F_data = np.empty(len(F), dtype=[("vertex_indices", _INT_TYPE_, (3,))])
+        F_data = np.empty(len(F), dtype=[("vertex_indices", INT_TYPE, (3,))])
         F_data["vertex_indices"] = F
         vertex_element = PlyElement.describe(V_data, "vertex")
         face_element = PlyElement.describe(F_data, "face")
@@ -175,9 +175,9 @@ class VertexTriMeshSchema(MeshSchema):
     elements : list of dicts
         List of dicts containing info about ply elemtents and their properties
     float_type : str
-        Data type for float properties (default=_FLOAT_TYPE_).
+        Data type for float properties (default=FLOAT_TYPE).
     int_type : str
-        Data type for int properties (default=_INT_TYPE_).
+        Data type for int properties (default=INT_TYPE).
     """
 
     def __init__(self):
@@ -196,15 +196,15 @@ class VertexTriMeshSchema(MeshSchema):
                 "name": "vertex",
                 "count": 7,
                 "properties": [
-                    ("x", _FLOAT_TYPE_),
-                    ("y", _FLOAT_TYPE_),
-                    ("z", _FLOAT_TYPE_),
+                    ("x", FLOAT_TYPE),
+                    ("y", FLOAT_TYPE),
+                    ("z", FLOAT_TYPE),
                 ],
             },
             {
                 "name": "face",
                 "count": 6,
-                "properties": [("vertex_indices", _INT_TYPE_, (3,))],
+                "properties": [("vertex_indices", INT_TYPE, (3,))],
             },
         ]
 
@@ -236,12 +236,12 @@ class VertexTriMeshSchema(MeshSchema):
         V_data = np.array(
             [tuple(v) for v in V],
             dtype=[
-                ("x", _FLOAT_TYPE_),
-                ("y", _FLOAT_TYPE_),
-                ("z", _FLOAT_TYPE_),
+                ("x", FLOAT_TYPE),
+                ("y", FLOAT_TYPE),
+                ("z", FLOAT_TYPE),
             ],
         )
-        F_data = np.empty(len(F), dtype=[("vertex_indices", _INT_TYPE_, (3,))])
+        F_data = np.empty(len(F), dtype=[("vertex_indices", INT_TYPE, (3,))])
         F_data["vertex_indices"] = F
         vertex_element = PlyElement.describe(V_data, "vertex")
         face_element = PlyElement.describe(F_data, "face")
@@ -280,34 +280,34 @@ class HalfEdgeMeshSchema(MeshSchema):
                 "name": "vertex",
                 "count": "Nvertex",
                 "properties": [
-                    ("x", _FLOAT_TYPE_),
-                    ("y", _FLOAT_TYPE_),
-                    ("z", _FLOAT_TYPE_),
-                    ("h", _INT_TYPE_),
+                    ("x", FLOAT_TYPE),
+                    ("y", FLOAT_TYPE),
+                    ("z", FLOAT_TYPE),
+                    ("h", INT_TYPE),
                 ],
             },
             {
                 "name": "half_edge",
                 "count": "Nhalf_edge",
                 "properties": [
-                    ("v", _INT_TYPE_),
-                    ("f", _INT_TYPE_),
-                    ("n", _INT_TYPE_),
-                    ("t", _INT_TYPE_),
+                    ("v", INT_TYPE),
+                    ("f", INT_TYPE),
+                    ("n", INT_TYPE),
+                    ("t", INT_TYPE),
                 ],
             },
             {
                 "name": "face",
                 "count": "Nface",
                 "properties": [
-                    ("h", _INT_TYPE_),
+                    ("h", INT_TYPE),
                 ],
             },
             {
                 "name": "boundary",
                 "count": "Nboundary",
                 "properties": [
-                    ("h", _INT_TYPE_),
+                    ("h", INT_TYPE),
                 ],
             },
         ]
@@ -384,10 +384,10 @@ class HalfEdgeMeshSchema(MeshSchema):
         V_data = np.array(
             [(x, y, z, h) for (x, y, z), h in zip(xyz_coord_V, h_out_V)],
             dtype=[
-                ("x", _FLOAT_TYPE_),
-                ("y", _FLOAT_TYPE_),
-                ("z", _FLOAT_TYPE_),
-                ("h", _INT_TYPE_),
+                ("x", FLOAT_TYPE),
+                ("y", FLOAT_TYPE),
+                ("z", FLOAT_TYPE),
+                ("h", INT_TYPE),
             ],
         )
         H_data = np.array(
@@ -396,13 +396,13 @@ class HalfEdgeMeshSchema(MeshSchema):
                 for v, n, t, f in zip(v_origin_H, h_next_H, h_twin_H, f_left_H)
             ],
             dtype=[
-                ("v", _INT_TYPE_),
-                ("n", _INT_TYPE_),
-                ("t", _INT_TYPE_),
-                ("f", _INT_TYPE_),
+                ("v", INT_TYPE),
+                ("n", INT_TYPE),
+                ("t", INT_TYPE),
+                ("f", INT_TYPE),
             ],
         )
-        F_data = np.array(h_bound_F, dtype=[("h", _INT_TYPE_)])
+        F_data = np.array(h_bound_F, dtype=[("h", INT_TYPE)])
         # # ***
         # print(V_data)
         # print(type(V_data))
@@ -414,7 +414,7 @@ class HalfEdgeMeshSchema(MeshSchema):
         face_element = PlyElement.describe(F_data, "face")
         if len(samples) == 8:
             h_right_B = samples[7]
-            B_data = np.array(h_right_B, dtype=[("h", _INT_TYPE_)])
+            B_data = np.array(h_right_B, dtype=[("h", INT_TYPE)])
             boundary_element = PlyElement.describe(B_data, "boundary")
             return PlyData(
                 [vertex_element, half_edge_element, face_element, boundary_element],
@@ -430,7 +430,7 @@ class HalfEdgeMeshSchema(MeshSchema):
             f_left_H,
             h_bound_F,
         )
-        B_data = np.array(h_right_B, dtype=[("h", _INT_TYPE_)])
+        B_data = np.array(h_right_B, dtype=[("h", INT_TYPE)])
         boundary_element = PlyElement.describe(B_data, "boundary")
         return PlyData(
             [vertex_element, half_edge_element, face_element, boundary_element],
@@ -968,14 +968,14 @@ class MeshConverterBase:
         plydata = self.vf_ply_data
         xyz_coord_V = np.array(
             [plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]],
-            dtype=_FLOAT_TYPE_,
+            dtype=FLOAT_TYPE,
         ).T
         V_of_F = np.array(
             [
                 vertex_indices.tolist()
                 for vertex_indices in plydata["face"]["vertex_indices"]
             ],
-            dtype=_INT_TYPE_,
+            dtype=INT_TYPE,
         )
         samples = (
             xyz_coord_V,
@@ -992,12 +992,12 @@ class MeshConverterBase:
         V_data = np.array(
             [tuple(v) for v in xyz_coord_V],
             dtype=[
-                ("x", _FLOAT_TYPE_),
-                ("y", _FLOAT_TYPE_),
-                ("z", _FLOAT_TYPE_),
+                ("x", FLOAT_TYPE),
+                ("y", FLOAT_TYPE),
+                ("z", FLOAT_TYPE),
             ],
         )
-        F_data = np.empty(len(V_of_F), dtype=[("vertex_indices", _INT_TYPE_, (3,))])
+        F_data = np.empty(len(V_of_F), dtype=[("vertex_indices", INT_TYPE, (3,))])
         F_data["vertex_indices"] = V_of_F
         vertex_element = PlyElement.describe(V_data, "vertex")
         face_element = PlyElement.describe(F_data, "face")
@@ -1051,15 +1051,15 @@ class MeshConverterBase:
         plydata = self.he_ply_data
         xyz_coord_V = np.array(
             [plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]],
-            dtype=_FLOAT_TYPE_,
+            dtype=FLOAT_TYPE,
         ).T
-        h_out_V = np.array(plydata["vertex"]["h"], dtype=_INT_TYPE_)
-        v_origin_H = np.array(plydata["half_edge"]["v"], dtype=_INT_TYPE_)
-        h_next_H = np.array(plydata["half_edge"]["n"], dtype=_INT_TYPE_)
-        h_twin_H = np.array(plydata["half_edge"]["t"], dtype=_INT_TYPE_)
-        f_left_H = np.array(plydata["half_edge"]["f"], dtype=_INT_TYPE_)
-        h_bound_F = np.array(plydata["face"]["h"], dtype=_INT_TYPE_)
-        h_right_B = np.array(plydata["boundary"]["h"], dtype=_INT_TYPE_)
+        h_out_V = np.array(plydata["vertex"]["h"], dtype=INT_TYPE)
+        v_origin_H = np.array(plydata["half_edge"]["v"], dtype=INT_TYPE)
+        h_next_H = np.array(plydata["half_edge"]["n"], dtype=INT_TYPE)
+        h_twin_H = np.array(plydata["half_edge"]["t"], dtype=INT_TYPE)
+        f_left_H = np.array(plydata["half_edge"]["f"], dtype=INT_TYPE)
+        h_bound_F = np.array(plydata["face"]["h"], dtype=INT_TYPE)
+        h_right_B = np.array(plydata["boundary"]["h"], dtype=INT_TYPE)
         samples = (
             xyz_coord_V,
             h_out_V,
@@ -1088,10 +1088,10 @@ class MeshConverterBase:
         V_data = np.array(
             [(x, y, z, h) for (x, y, z), h in zip(xyz_coord_V, h_out_V)],
             dtype=[
-                ("x", _FLOAT_TYPE_),
-                ("y", _FLOAT_TYPE_),
-                ("z", _FLOAT_TYPE_),
-                ("h", _INT_TYPE_),
+                ("x", FLOAT_TYPE),
+                ("y", FLOAT_TYPE),
+                ("z", FLOAT_TYPE),
+                ("h", INT_TYPE),
             ],
         )
         H_data = np.array(
@@ -1100,14 +1100,14 @@ class MeshConverterBase:
                 for v, n, t, f in zip(v_origin_H, h_next_H, h_twin_H, f_left_H)
             ],
             dtype=[
-                ("v", _INT_TYPE_),
-                ("n", _INT_TYPE_),
-                ("t", _INT_TYPE_),
-                ("f", _INT_TYPE_),
+                ("v", INT_TYPE),
+                ("n", INT_TYPE),
+                ("t", INT_TYPE),
+                ("f", INT_TYPE),
             ],
         )
-        F_data = np.array(h_bound_F, dtype=[("h", _INT_TYPE_)])
-        B_data = np.array(h_right_B, dtype=[("h", _INT_TYPE_)])
+        F_data = np.array(h_bound_F, dtype=[("h", INT_TYPE)])
+        B_data = np.array(h_right_B, dtype=[("h", INT_TYPE)])
 
         vertex_element = PlyElement.describe(V_data, "vertex")
         half_edge_element = PlyElement.describe(H_data, "half_edge")
@@ -1184,14 +1184,14 @@ class MeshConverterBase:
         plydata = self.he_ply_data
         xyz_coord_V = np.array(
             [plydata["vertex"]["x"], plydata["vertex"]["y"], plydata["vertex"]["z"]],
-            dtype=_FLOAT_TYPE_,
+            dtype=FLOAT_TYPE,
         ).T
-        h_out_V = np.array(plydata["vertex"]["h"], dtype=_INT_TYPE_)
-        v_origin_H = np.array(plydata["half_edge"]["v"], dtype=_INT_TYPE_)
-        h_next_H = np.array(plydata["half_edge"]["n"], dtype=_INT_TYPE_)
-        h_twin_H = np.array(plydata["half_edge"]["t"], dtype=_INT_TYPE_)
-        f_left_H = np.array(plydata["half_edge"]["f"], dtype=_INT_TYPE_)
-        h_bound_F = np.array(plydata["face"]["h"], dtype=_INT_TYPE_)
+        h_out_V = np.array(plydata["vertex"]["h"], dtype=INT_TYPE)
+        v_origin_H = np.array(plydata["half_edge"]["v"], dtype=INT_TYPE)
+        h_next_H = np.array(plydata["half_edge"]["n"], dtype=INT_TYPE)
+        h_twin_H = np.array(plydata["half_edge"]["t"], dtype=INT_TYPE)
+        f_left_H = np.array(plydata["half_edge"]["f"], dtype=INT_TYPE)
+        h_bound_F = np.array(plydata["face"]["h"], dtype=INT_TYPE)
         h_right_B = find_h_right_B(
             xyz_coord_V,
             h_out_V,

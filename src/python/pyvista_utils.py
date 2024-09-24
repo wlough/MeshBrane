@@ -1,5 +1,5 @@
 import numpy as np
-from src.python.global_vars import _INT_TYPE_, _FLOAT_TYPE_
+from src.python.global_vars import INT_TYPE, FLOAT_TYPE
 import pyvista as pv
 
 
@@ -16,7 +16,7 @@ def decimate_VF(V, F, target_faces=1000, boundary_vertex_deletion=True):
         return V, F, V_indices
     target_reduction = 1 - target_faces / num_faces
 
-    F_pv = np.zeros((num_faces, 4), dtype=_INT_TYPE_)
+    F_pv = np.zeros((num_faces, 4), dtype=INT_TYPE)
     F_pv[:, 0] = 3
     F_pv[:, 1:] = F
     F_pv = F_pv.ravel()

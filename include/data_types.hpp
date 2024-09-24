@@ -7,7 +7,7 @@
 
 #include <cstdint> // For fixed-width integer types
 
-using _INT_TYPE_ = std::int32_t;
-using _FLOAT_TYPE_ = double;
+using INT_TYPE = std::int32_t;
+using FLOAT_TYPE = double;
 
 #endif /* DATA_TYPES_HPP */

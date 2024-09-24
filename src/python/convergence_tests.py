@@ -42,7 +42,7 @@ def uncompress_sphere_half_edge_arrays(output_dir="./output/half_edge_arrays"):
     print("done")
 
 
-_COLORS_ = [
+MATPLOTLIB_COLORS = [
     "b",  # Blue
     "g",  # Green
     "r",  # Red
@@ -267,12 +267,12 @@ def get_plt_combos(n):
     """
     Returns a list of n combinations of matplotlib color, marker, and linestyle.
     """
-    len_colors = len(_COLORS_)
+    len_colors = len(MATPLOTLIB_COLORS)
     len_markers = len(_MARKERS_)
     len_linestyles = len(_LINESTYLES_)
     return [
         [
-            _COLORS_[k % len_colors],
+            MATPLOTLIB_COLORS[k % len_colors],
             _MARKERS_[k % len_markers],
             _LINESTYLES_[k % len_linestyles],
         ]

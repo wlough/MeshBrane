@@ -116,6 +116,13 @@ class SPB:
             self.contact_force_vector = None
             self.contact_force_vector_pretty = None
 
+    def get_xyz_seed_vertex(self):
+        v_seed = self.contact_patch.seed_vertex
+        return self.envelope.xyz_coord_v(v_seed)
+
+    def get_xyz_contact_center(self):
+        return self.envelope.xyz_coord_V[V_contact].mean(axis=0)
+
     def get_contact_force_vector(self):
         return self.axis_vec * self.contact_force_magnitude[:, np.newaxis]
 
@@ -232,6 +239,12 @@ class SPB:
             data["xyz_coord_V_contact"] = self.xyz_coord_V_contact
         return data
 
+    def minimal_state(self):
+        return {
+            "V_contact": self.V_contact,
+            "contact_force_magnitude": self.contact_force_magnitude,
+        }
+
 
 class Spindle:
     """ """
@@ -250,6 +263,13 @@ class Spindle:
         name="spindle",
         find_contact_data=True,
     ):
+        self.envelope = envelope
+        self.axis_origin = axis_origin
+        self.axis_vec = axis_vec
+        self.force_total = force_total
+        self.force_profile = force_profile
+        self.visual_spb_length = visual_spb_length
+        self.visual_force_scale = visual_force_scale
         if spb1 is None:
             spb1 = {}
         if spb2 is None:
@@ -354,6 +374,14 @@ class Envelope(Brane):
 
 
 class StretchSim:
+    """
+
+    time_samples T = [t0, t1, t2,...]=[t0, t0+dt, t0+2*dt,...,]
+    Trecord
+    state samples S = [S(), ]
+    Trecord = [t0, t1, t2, t3, ]
+    """
+
     def __init__(
         self,
         output_dir,
@@ -582,6 +610,7 @@ class StretchSim:
                 A = self.envelope.total_area_of_faces()
                 V0 = self.envelope.preferred_volume
                 A0 = self.envelope.preferred_area
+                self.envelope.preferred_edge_length = np.mean(self.envelope.length_H())
 
                 t_print = np.round(self.t, 3)
                 A_percent_error = np.round(100 * (A - A0) / A0, 3)

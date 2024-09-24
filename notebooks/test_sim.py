@@ -9,12 +9,10 @@ import numpy as np
 
 yaml_path = "./data/parameters.yaml"
 
-sim = StretchSim.from_parameters_file(yaml_path, overwrite_output_dir=True)
-sim.run()
-# sim.update(patch=True, force=True, pretty=True)
-# sim.plot(save=False, show=True, title="")
-# sim.evolve_for_DT(1e-2, 1e-3)
-# %%
+sim = StretchSim.from_parameters_file(yaml_path, overwrite_output_dir=False)
+# sim.run()
+
+
 
 m = sim.envelope
 mv = sim.mesh_viewer

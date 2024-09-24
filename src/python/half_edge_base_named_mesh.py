@@ -1,6 +1,6 @@
 from src.python.half_edge_base_mesh import HalfEdgeMeshBase
 import numpy as np
-from src.python.global_vars import _INT_TYPE_, _FLOAT_TYPE_
+from src.python.global_vars import INT_TYPE, FLOAT_TYPE
 import os
 from src.python.utilities import (
     make_output_dir,

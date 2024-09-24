@@ -11,10 +11,8 @@ yaml_path = "./data/parameters.yaml"
 
 sim = StretchSim.from_parameters_file(yaml_path, overwrite_output_dir=True)
 sim.run()
-# sim.update(patch=True, force=True, pretty=True)
-# sim.plot(save=False, show=True, title="")
-# sim.evolve_for_DT(1e-2, 1e-3)
-# %%
+
+#lower drag coeff
 
 m = sim.envelope
 mv = sim.mesh_viewer
@@ -29,10 +27,8 @@ barcell_area_V = m.barcell_area_V()
 %timeit m.area_F()
 L1, A1 = m._get_cotan_laplacian_lil()
 L2, A2 = m.get_cotan_laplacian_lil()
-L3, A3 = m.get_cotan_laplacian_lilsafe()
 %timeit m._get_cotan_laplacian_lil()
 %timeit m.get_cotan_laplacian_lil()
-%timeit m.get_cotan_laplacian_lilsafe()
 # get_cotan_laplacian_csr = m.get_cotan_laplacian_csr()
 np.linalg.norm((L1 - L2).toarray().ravel(), np.inf)
 np.linalg.norm((L2 - L3).toarray().ravel(), np.inf)

@@ -3,7 +3,7 @@ import numpy as np
 import os
 from src.python.pretty_pictures import movie
 from src.python.pyvista_utils import decimate_VF
-from src.python.global_vars import _INT_TYPE_, _FLOAT_TYPE_
+from src.python.global_vars import INT_TYPE, FLOAT_TYPE
 import pyvista as pv
 
 # from mayavi.modules.vectors import Vectors
@@ -241,7 +241,7 @@ class MeshViewer:
 
     @rgba_vertex.setter
     def rgba_vertex(self, value):
-        self._rgba_vertex = np.array(value, dtype=_FLOAT_TYPE_)
+        self._rgba_vertex = np.array(value, dtype=FLOAT_TYPE)
 
     @property
     def radius_vertex(self):
@@ -257,7 +257,7 @@ class MeshViewer:
 
     @rgba_half_edge.setter
     def rgba_half_edge(self, value):
-        self._rgba_half_edge = np.array(value, dtype=_FLOAT_TYPE_)
+        self._rgba_half_edge = np.array(value, dtype=FLOAT_TYPE)
 
     @property
     def rgba_face(self):
@@ -265,7 +265,7 @@ class MeshViewer:
 
     @rgba_face.setter
     def rgba_face(self, value):
-        self._rgba_face = np.array(value, dtype=_FLOAT_TYPE_)
+        self._rgba_face = np.array(value, dtype=FLOAT_TYPE)
 
     @property
     def radius_V(self):
@@ -273,7 +273,7 @@ class MeshViewer:
 
     @radius_V.setter
     def radius_V(self, value):
-        self._radius_V = np.array(value, dtype=_FLOAT_TYPE_)
+        self._radius_V = np.array(value, dtype=FLOAT_TYPE)
 
     @property
     def rgba_V(self):
@@ -281,7 +281,7 @@ class MeshViewer:
 
     @rgba_V.setter
     def rgba_V(self, value):
-        self._rgba_V = np.array(value, dtype=_FLOAT_TYPE_)
+        self._rgba_V = np.array(value, dtype=FLOAT_TYPE)
 
     @property
     def rgba_H(self):
@@ -289,7 +289,7 @@ class MeshViewer:
 
     @rgba_H.setter
     def rgba_H(self, value):
-        self._rgba_H = np.array(value, dtype=_FLOAT_TYPE_)
+        self._rgba_H = np.array(value, dtype=FLOAT_TYPE)
 
     @property
     def rgba_F(self):
@@ -297,7 +297,7 @@ class MeshViewer:
 
     @rgba_F.setter
     def rgba_F(self, value):
-        self._rgba_F = np.array(value, dtype=_FLOAT_TYPE_)
+        self._rgba_F = np.array(value, dtype=FLOAT_TYPE)
 
     def update_radius_V(self, value, indices=None):
         if value is not None:

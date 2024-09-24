@@ -3,8 +3,10 @@ from src.python.half_edge_base_ply_tools import (
 )  # VertTri2HalfEdgeMeshConverter
 from src.python.half_edge_base_utils import V_of_F
 import numpy as np
-from src.python.global_vars import _INT_TYPE_, _FLOAT_TYPE_
+from src.python.global_vars import INT_TYPE, FLOAT_TYPE
 from src.python.linear_algebra import rigid_transform
+from src.python.combinatorics import argsort
+from scipy.sparse import lil_matrix
 
 
 class HalfEdgeMeshBase:
@@ -15,22 +17,22 @@ class HalfEdgeMeshBase:
 
     Properties
     ----------
-    xyz_coord_V : ndarray[:, :] of _FLOAT_TYPE_
+    xyz_coord_V : ndarray[:, :] of FLOAT_TYPE
         xyz_coord_V[i] = xyz coordinates of vertex i
-    h_out_V : ndarray[:] of _INT_TYPE_
+    h_out_V : ndarray[:] of INT_TYPE
         h_out_V[i] = some outgoing half-edge incident on vertex i
-    v_origin_H : ndarray[:] of _INT_TYPE_
+    v_origin_H : ndarray[:] of INT_TYPE
         v_origin_H[j] = vertex at the origin of half-edge j
-    h_next_H : ndarray[:] of _INT_TYPE_
+    h_next_H : ndarray[:] of INT_TYPE
         h_next_H[j] next half-edge after half-edge j in the face cycle
-    h_twin_H : ndarray[:] of _INT_TYPE_
+    h_twin_H : ndarray[:] of INT_TYPE
         h_twin_H[j] = half-edge antiparallel to half-edge j
-    f_left_H : ndarray[:] of _INT_TYPE_
+    f_left_H : ndarray[:] of INT_TYPE
         f_left_H[j] = face to the left of half-edge j, if j in interior(M) or a positively oriented boundary of M
         f_left_H[j] = boundary to the left of half-edge j, if j in a negatively oriented boundary
-    h_bound_F : ndarray[:] of _INT_TYPE_
+    h_bound_F : ndarray[:] of INT_TYPE
         h_bound_F[k] = some half-edge on the boudary of face k.
-    h_right_B : ndarray[:] of _INT_TYPE_
+    h_right_B : ndarray[:] of INT_TYPE
         h_right_B[n] = half-edge to the right of boundary n.
 
     Initialization
@@ -78,12 +80,13 @@ class HalfEdgeMeshBase:
         self.v_origin_H = v_origin_H
         self.h_next_H = h_next_H
         self.h_twin_H = h_twin_H
-        self.h_bound_F = h_bound_F
         self.f_left_H = f_left_H
+        self.h_bound_F = h_bound_F
         self.h_right_B = h_right_B
 
     #######################################################
     # Initilization methods
+    ######################################################
     @classmethod
     def load_he_samples(cls, npz_path, *args, **kwargs):
         """Initialize a half-edge mesh from npz file containing data arrays."""
@@ -182,13 +185,14 @@ class HalfEdgeMeshBase:
 
     #######################################################
     # Fundamental accessors and properties
+    ######################################################
     @property
     def xyz_coord_V(self):
         return self._xyz_coord_V
 
     @xyz_coord_V.setter
     def xyz_coord_V(self, value):
-        self._xyz_coord_V = np.array(value, dtype=_FLOAT_TYPE_)
+        self._xyz_coord_V = np.array(value, dtype=FLOAT_TYPE)
 
     @property
     def h_out_V(self):
@@ -196,7 +200,7 @@ class HalfEdgeMeshBase:
 
     @h_out_V.setter
     def h_out_V(self, value):
-        self._h_out_V = np.array(value, dtype=_INT_TYPE_)
+        self._h_out_V = np.array(value, dtype=INT_TYPE)
 
     @property
     def v_origin_H(self):
@@ -204,7 +208,7 @@ class HalfEdgeMeshBase:
 
     @v_origin_H.setter
     def v_origin_H(self, value):
-        self._v_origin_H = np.array(value, dtype=_INT_TYPE_)
+        self._v_origin_H = np.array(value, dtype=INT_TYPE)
 
     @property
     def h_next_H(self):
@@ -212,7 +216,7 @@ class HalfEdgeMeshBase:
 
     @h_next_H.setter
     def h_next_H(self, value):
-        self._h_next_H = np.array(value, dtype=_INT_TYPE_)
+        self._h_next_H = np.array(value, dtype=INT_TYPE)
 
     @property
     def h_twin_H(self):
@@ -220,7 +224,7 @@ class HalfEdgeMeshBase:
 
     @h_twin_H.setter
     def h_twin_H(self, value):
-        self._h_twin_H = np.array(value, dtype=_INT_TYPE_)
+        self._h_twin_H = np.array(value, dtype=INT_TYPE)
 
     @property
     def f_left_H(self):
@@ -228,7 +232,7 @@ class HalfEdgeMeshBase:
 
     @f_left_H.setter
     def f_left_H(self, value):
-        self._f_left_H = np.array(value, dtype=_INT_TYPE_)
+        self._f_left_H = np.array(value, dtype=INT_TYPE)
 
     @property
     def h_bound_F(self):
@@ -236,7 +240,7 @@ class HalfEdgeMeshBase:
 
     @h_bound_F.setter
     def h_bound_F(self, value):
-        self._h_bound_F = np.array(value, dtype=_INT_TYPE_)
+        self._h_bound_F = np.array(value, dtype=INT_TYPE)
 
     @property
     def h_right_B(self):
@@ -244,7 +248,7 @@ class HalfEdgeMeshBase:
 
     @h_right_B.setter
     def h_right_B(self, value):
-        self._h_right_B = np.array(value, dtype=_INT_TYPE_)
+        self._h_right_B = np.array(value, dtype=INT_TYPE)
 
     @property
     def num_vertices(self):
@@ -331,7 +335,7 @@ class HalfEdgeMeshBase:
         )
 
     #######################################################
-    # Combinatorial maps #
+    # Combinatorial maps ##################################
     #######################################################
     def xyz_coord_v(self, v):
         """
@@ -467,7 +471,7 @@ class HalfEdgeMeshBase:
         return p_h
 
     ######################################################
-    # Predicates
+    # Predicates #########################################
     ######################################################
     def negative_boundary_contains_h(self, h):
         """check if half-edge h is in a negatively oriented boundary of the mesh"""
@@ -541,7 +545,8 @@ class HalfEdgeMeshBase:
         return True
 
     #######################################################
-    # Generators
+    # Generators ##########################################
+    ######################################################
     def generate_H_out_v_clockwise(self, v, h_start=None):
         """
         Generate outgoing half-edges from vertex v in clockwise order until the starting half-edge is reached again
@@ -607,7 +612,8 @@ class HalfEdgeMeshBase:
             yield self.f_left_h(h)
 
     ######################################################
-    # Simplical operations
+    # Simplical Computations #############################
+    ######################################################
     def _simplical_closure_VHF(self, VHF, in_place=False):
         """
         Find simplical closure of (V,H,F) in M by searching F and H
@@ -790,8 +796,322 @@ class HalfEdgeMeshBase:
         ClSt_V, ClSt_H, ClSt_F = self.closure(*self.star(V, H, F))
         return ClSt_V - StCl_V, ClSt_H - StCl_H, ClSt_F - StCl_F
 
+    def valence_v(self, v):
+        """get the valence of vertex v"""
+        valence = 0
+        for h in self.generate_H_out_v_clockwise(v):
+            valence += 1
+        return valence
+
+    def F_incident_b(self, b):
+        """get the faces incident on boundary b"""
+        F = set()
+        for h in self.generate_H_right_b(b):
+            v = self.v_origin_h(h)
+            F.update(set(self.generate_F_incident_v_clockwise(v, h_start=h)))
+        return np.array(list(F), dtype=INT_TYPE)
+
+    ######################################################
+    # Geometric computations #############################
+    ######################################################
+    def vec_area_f(self, f):
+        h0 = self.h_bound_f(f)
+        h1 = self.h_next_h(h0)
+        h2 = self.h_next_h(h1)
+        x0 = self.xyz_coord_v(self.v_origin_h(h0))
+        x1 = self.xyz_coord_v(self.v_origin_h(h1))
+        x2 = self.xyz_coord_v(self.v_origin_h(h2))
+        vec_area = 0.5 * (np.cross(x0, x1) + np.cross(x1, x2) + np.cross(x2, x0))
+        return vec_area
+
+    def area_f(self, f):
+        return np.linalg.norm(self.vec_area_f(f))
+
+    def area_F(self):
+        N = self.num_faces
+        A = np.zeros(N, dtype=FLOAT_TYPE)
+        for k in range(N):
+            A[k] = self.area_f(k)
+        return A
+
+    def length_h(self, h):
+        v0 = self.v_origin_h(h)
+        v1 = self.v_head_h(h)
+        return np.linalg.norm(self.xyz_coord_v(v1) - self.xyz_coord_v(v0))
+
+    def length_H(self):
+        L = np.zeros(self.num_half_edges, dtype=FLOAT_TYPE)
+        for h in range(self.num_half_edges):
+            L[h] = self.length_h(h)
+        return L
+
+    def total_area_of_faces(self):
+        Atot = 0.0
+        for f in range(self.num_faces):
+            Atot += self.area_f(f)
+
+        return Atot
+
+    def barcell_area(self, v):
+        """area of the barycentric cell dual to vertex v"""
+        r = self.xyz_coord_v(v)
+        A = 0.0
+        for h in self.generate_H_out_v_clockwise(v):
+            if self.negative_boundary_contains_h(h):
+                continue
+            # r1 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(h)))
+            # r2 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(self.h_next_h(h))))
+            # A_face_vec = (
+            #     np.cross(r, r1) / 2 + np.cross(r1, r2) / 2 + np.cross(r2, r) / 2
+            # )
+            # A_face = np.sqrt(
+            #     A_face_vec[0] ** 2 + A_face_vec[1] ** 2 + A_face_vec[2] ** 2
+            # )
+
+            A += self.area_f(self.f_left_h(h)) / 3
+
+        return A
+
+    def total_area_of_dual_barcells(self):
+        Atot = 0.0
+        for v in range(self.num_vertices):
+            Atot += self.barcell_area(v)
+
+        return Atot
+
+    def vorcell_area(self, v):
+        r"""area of voronoi cell dual to vertex v
+                  v=v0
+                //  \\
+               // |  \\
+              // /|   \\
+             //   ||   \\
+            //    || h20\\
+           //     ||     \\
+        ...       ||h01    v2
+           \\     ||     //
+            \\    || h12//
+             \\   ||   //
+              \\  ||/ //
+               \\ |  //
+                \\| //
+                  v1
+        """
+        Atot = 0.0
+        r0 = self.xyz_coord_v(v)
+        for h in self.generate_H_out_v_clockwise(v):
+            if self.negative_boundary_contains_h(h):
+                continue
+            r1 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(h)))
+            r2 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(self.h_next_h(h))))
+            r01 = r1 - r0
+            r12 = r2 - r1
+            r20 = r0 - r2
+
+            norm_r20 = np.linalg.norm(r20)
+            norm_r01 = np.linalg.norm(r01)
+            norm_r12 = np.linalg.norm(r12)
+            cos_210 = -np.dot(r12, r01) / (norm_r12 * norm_r01)
+            cos_021 = -np.dot(r20, r12) / (norm_r20 * norm_r12)
+
+            cot_210 = cos_210 / np.sqrt(1 - cos_210**2)
+            cot_021 = cos_021 / np.sqrt(1 - cos_021**2)
+            Atot += norm_r20**2 * cot_210 / 8 + norm_r01**2 * cot_021 / 8
+
+        return Atot
+
+    def vorcell_area_V(self):
+
+        N = self.num_vertices
+        A = np.zeros(N, dtype=FLOAT_TYPE)
+        for k in range(N):
+            A[k] = self.vorcell_area(k)
+        return A
+
+    def total_area_of_dual_vorcells(self):
+        Atot = 0.0
+        for v in range(self.num_vertices):
+            Atot += self.vorcell_area(v)
+
+        return Atot
+
+    def meyercell_area(self, v):
+        """Meyer's mixed area of cell dual to vertex v"""
+        Atot = 0.0
+        ri = self.xyz_coord_v(v)
+        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+        # h_start = self.V_hedge[v]
+        # hij = h_start
+        # while True:
+        for hij in self.generate_H_out_v_clockwise(v):
+            if self.negative_boundary_contains_h(hij):
+                continue
+            hjjp1 = self.h_next_h(hij)
+            hjp1i = self.h_next_h(hjjp1)
+            vj = self.v_origin_h(hjjp1)
+            rj = self.xyz_coord_v(vj)
+            vjp1 = self.v_origin_h(hjp1i)
+            rjp1 = self.xyz_coord_v(vjp1)
+
+            rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+            rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+            ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+            rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+            rjp1_ri = rjp1[0] * ri[0] + rjp1[1] * ri[1] + rjp1[2] * ri[2]
+
+            normDrij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+            # normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
+            normDrjjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+            # normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
+            normDrjp1i = np.sqrt(rjp1_rjp1 - 2 * rjp1_ri + ri_ri)
+            cos_thetajijp1 = (ri_ri + rj_rjp1 - ri_rj - rjp1_ri) / (
+                normDrij * normDrjp1i
+            )
+            cos_thetajp1ji = (rj_rj + rjp1_ri - rj_rjp1 - ri_rj) / (
+                normDrij * normDrjjp1
+            )
+            cos_thetaijp1j = (rjp1_rjp1 + ri_rj - rj_rjp1 - rjp1_ri) / (
+                normDrjp1i * normDrjjp1
+            )
+            if cos_thetajijp1 < 0:
+                semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
+                Atot += (
+                    np.sqrt(
+                        semiP
+                        * (semiP - normDrij)
+                        * (semiP - normDrjjp1)
+                        * (semiP - normDrjp1i)
+                    )
+                    / 2
+                )
+                # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 4
+            elif cos_thetajp1ji < 0 or cos_thetaijp1j < 0:
+                semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
+                Atot += (
+                    np.sqrt(
+                        semiP
+                        * (semiP - normDrij)
+                        * (semiP - normDrjjp1)
+                        * (semiP - normDrjp1i)
+                    )
+                    / 4
+                )
+                # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 8
+            else:
+                cot_thetaijp1j = cos_thetaijp1j / np.sqrt(1 - cos_thetaijp1j**2)
+                cot_thetajp1ji = cos_thetajp1ji / np.sqrt(1 - cos_thetajp1ji**2)
+                Atot += (
+                    normDrij**2 * cot_thetaijp1j / 8
+                    + normDrjp1i**2 * cot_thetajp1ji / 8
+                )
+
+        return Atot
+
+    def total_area_of_dual_meyercells(self):
+        Atot = 0.0
+        for v in range(self.num_vertices):
+            Atot += self.meyercell_area(v)
+
+        return Atot
+
+    def barcell_area_V(self):
+
+        N = self.num_vertices
+        A = np.zeros(N, dtype=FLOAT_TYPE)
+        for k in range(N):
+            A[k] = self.barcell_area(k)
+        return A
+
+    def total_volume(self):
+        Nf = self.num_faces
+        vol = 0.0
+        for f in range(Nf):
+            h0 = self.h_bound_f(f)
+            h1 = self.h_next_h(h0)
+            h2 = self.h_next_h(h1)
+            v0 = self.v_origin_h(h0)
+            v1 = self.v_origin_h(h1)
+            v2 = self.v_origin_h(h2)
+            x0 = self.xyz_coord_v(v0)
+            x1 = self.xyz_coord_v(v1)
+            x2 = self.xyz_coord_v(v2)
+            vol_f = np.dot(x0, np.cross(x1, x2)) / 6
+            vol += vol_f
+        return abs(vol)
+
+    def average_edge_length(self):
+        return np.mean(self.length_H())
+
+    def average_face_area(self):
+        return self.total_area_of_faces() / self.num_faces
+
+    ##############
+    # unit normals
+    def normal_some_face_of_v(self, i):
+        h = self.h_out_v(i)
+        f = self.f_left_h(h)
+        if f < 0:
+            h = self.h_rotcw_h(h)
+            f = self.f_left_h(h)
+        avec = self.vec_area_f(f)
+        n = avec / np.linalg.norm(avec)
+        return n
+
+    def normal_some_face_of_V(self):
+        n = np.zeros((self.num_vertices, 3), dtype=FLOAT_TYPE)
+        for i in range(self.num_vertices):
+            n[i] = self.normal_some_face_of_v(i)
+        return n
+
+    def normal_other_weighted_v(self, i):
+        """Weights for Computing Vertex Normals from Facet Normals Max99"""
+        n = np.zeros(3)
+        x = self.xyz_coord_v(i)
+        h = self.h_out_v(i)
+        rrot = self.xyz_coord_v(self.v_head_h(h)) - x
+        h = self.h_rotcw_h(h)
+        for hrot in self.generate_H_out_v_clockwise(i, h_start=h):
+            r = rrot
+            jrot = self.v_head_h(hrot)
+            rrot = self.xyz_coord_v(jrot) - x
+            if self.negative_boundary_contains_h(hrot):
+                continue
+            n += np.cross(rrot, r) / (np.dot(r, r) * np.dot(rrot, rrot))
+        n /= np.linalg.norm(n)
+        return n
+
+    def normal_other_weighted_V(self):
+        n = np.zeros((self.num_vertices, 3), dtype=FLOAT_TYPE)
+        for i in range(self.num_vertices):
+            n[i] = self.normal_other_weighted_v(i)
+        return n
+
+    def normal_laplacian_V(self):
+        """
+        Compute unit normals from mean curvature vector at all vertices
+        """
+        X = self.xyz_coord_V
+        lapX = self.laplacian(X)
+        n = np.zeros_like(X)
+        for i in range(self.num_vertices):
+
+            mcvec = lapX[i]
+            f = self.f_left_h(self.h_out_v(i))
+            af_vec = self.vec_area_f(f)
+            mcvec_sign = np.sign(np.dot(mcvec, af_vec))
+            n[i] = mcvec_sign * mcvec / np.linalg.norm(mcvec)
+
+        return n
+
     #######################################################
     # Differential operators
+    ######################################################
+    def laplacian(self, Q):
+        """
+        overwrite to set which laplacian to use
+        """
+        return self.cotan_laplacian(Q)
+
     def cotan_laplacian(self, Q):
         """
         Computes the cotan Laplacian of Q at each vertex
@@ -860,8 +1180,246 @@ class HalfEdgeMeshBase:
 
         return lapQ
 
+    def _get_cotan_laplacian_lil(self):
+        area_V = np.zeros(self.num_vertices)
+        rows = np.empty(self.num_vertices, dtype=object)
+        data = np.empty(self.num_vertices, dtype=object)
+
+        for i in range(self.num_vertices):
+            x_i = self.xyz_coord_v(i)
+            rows[i] = [i]
+            data[i] = [0.0]
+            for h in self.generate_H_out_v_clockwise(i):
+                j = self.v_head_h(h)
+                j_plus = self.v_head_h(self.h_next_h(h))
+
+                x_j = self.xyz_coord_v(j)
+                x_j_plus = self.xyz_coord_v(j_plus)
+
+                rows[i].append(j)
+                area_V[i] += np.linalg.norm(np.cross(x_j - x_i, x_j_plus - x_i)) / 6
+
+                cot_plus = np.dot(x_i - x_j_plus, x_j - x_j_plus) / np.linalg.norm(
+                    np.cross(x_i - x_j_plus, x_j - x_j_plus)
+                )
+                w = cot_plus / 2
+                if not self.positive_boundary_contains_h(h):
+                    j_minus = self.v_head_h(self.h_next_h(self.h_twin_h(h)))  #
+                    x_j_minus = self.xyz_coord_v(j_minus)  #
+                    cot_minus = np.dot(
+                        x_j - x_j_minus, x_i - x_j_minus
+                    ) / np.linalg.norm(np.cross(x_j - x_j_minus, x_i - x_j_minus))
+                    w += cot_minus / 2
+
+                data[i].append(w)
+                data[i][0] -= w
+            # sort nonzero column indices for row i
+            argsort_row = argsort(rows[i])
+            rows[i] = [rows[i][_] for _ in argsort_row]
+            data[i] = [data[i][_] for _ in argsort_row]
+        mat = lil_matrix((self.num_vertices, self.num_vertices), dtype=FLOAT_TYPE)
+        mat.rows = rows
+        mat.data = data
+
+        return mat, area_V
+
+    def get_cotan_laplacian_lil_no_bdry(self):
+        """
+        Computes the cotan Laplacian of Q at each vertex
+        """
+        area_V = np.zeros(self.num_vertices)
+        rows = np.empty(self.num_vertices, dtype=object)
+        data = np.empty(self.num_vertices, dtype=object)
+        for vi in range(self.num_vertices):
+            rows[vi] = [vi]
+            data[vi] = [0.0]
+            Atot = 0.0
+            ri = self.xyz_coord_v(vi)
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+            for hij in self.generate_H_out_v_clockwise(vi):
+                hijm1 = self.h_next_h(self.h_twin_h(hij))
+                hijp1 = self.h_twin_h(self.h_prev_h(hij))
+                vjm1 = self.v_head_h(hijm1)
+                vj = self.v_head_h(hij)
+                vjp1 = self.v_head_h(hijp1)
+
+                rjm1 = self.xyz_coord_v(vjm1)
+                rj = self.xyz_coord_v(vj)
+                rjp1 = self.xyz_coord_v(vjp1)
+
+                rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2
+                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+                ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]
+                rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]
+                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
+                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+
+                Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)
+                Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)
+                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
+                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+
+                cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1)
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
+                sin_thetam = np.sqrt(1 - cos_thetam**2)
+                sin_thetap = np.sqrt(1 - cos_thetap**2)
+
+                cot_thetam = cos_thetam / sin_thetam
+                cot_thetap = cos_thetap / sin_thetap
+
+                # Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
+                area_V[vi] += Lijp1 * Ljjp1 * sin_thetap / 6
+                w = (cot_thetam + cot_thetap) / 2
+                data[vi].append(w)
+                data[vi][0] -= w
+                rows[vi].append(vj)
+            # sort nonzero column indices for row i
+            argsort_row = argsort(rows[vi])
+            rows[vi] = [rows[vi][_] for _ in argsort_row]
+            data[vi] = [data[vi][_] for _ in argsort_row]
+
+        mat = lil_matrix((self.num_vertices, self.num_vertices), dtype=FLOAT_TYPE)
+        mat.rows = rows
+        mat.data = data
+
+        return mat, area_V
+
+    def get_cotan_laplacian_lil(self):
+        """
+        Computes the cotan Laplacian of Q at each vertex
+        """
+        area_V = np.zeros(self.num_vertices)
+        rows = np.empty(self.num_vertices, dtype=object)
+        data = np.empty(self.num_vertices, dtype=object)
+        for vi in range(self.num_vertices):
+            rows[vi] = [vi]
+            data[vi] = [0.0]
+            Atot = 0.0
+            ri = self.xyz_coord_v(vi)
+
+            ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
+            for hij in self.generate_H_out_v_clockwise(vi):
+
+                hijp1 = self.h_twin_h(self.h_prev_h(hij))
+
+                vj = self.v_head_h(hij)
+                vjp1 = self.v_head_h(hijp1)
+                rj = self.xyz_coord_v(vj)
+                rjp1 = self.xyz_coord_v(vjp1)
+
+                rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
+                rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
+                ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
+
+                ri_rjp1 = ri[0] * rjp1[0] + ri[1] * rjp1[1] + ri[2] * rjp1[2]
+                rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
+
+                Lijp1 = np.sqrt(ri_ri - 2 * ri_rjp1 + rjp1_rjp1)
+                Ljjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
+                Lij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
+
+                cos_thetap = (ri_rj + rjp1_rjp1 - ri_rjp1 - rj_rjp1) / (Lijp1 * Ljjp1)
+
+                sin_thetap = np.sqrt(1 - cos_thetap**2)
+
+                cot_thetap = cos_thetap / sin_thetap
+                w = cot_thetap / 2
+                if not self.positive_boundary_contains_h(hij):
+                    hijm1 = self.h_next_h(self.h_twin_h(hij))
+                    vjm1 = self.v_head_h(hijm1)  #
+
+                    rjm1 = self.xyz_coord_v(vjm1)  #
+                    rjm1_rjm1 = rjm1[0] ** 2 + rjm1[1] ** 2 + rjm1[2] ** 2  #
+                    ri_rjm1 = ri[0] * rjm1[0] + ri[1] * rjm1[1] + ri[2] * rjm1[2]  #
+                    rj_rjm1 = rj[0] * rjm1[0] + rj[1] * rjm1[1] + rj[2] * rjm1[2]  #
+                    Lijm1 = np.sqrt(ri_ri - 2 * ri_rjm1 + rjm1_rjm1)  #
+                    Ljjm1 = np.sqrt(rj_rj - 2 * rj_rjm1 + rjm1_rjm1)  #
+                    cos_thetam = (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (
+                        Lijm1 * Ljjm1
+                    )  #
+                    sin_thetam = np.sqrt(1 - cos_thetam**2)  #
+                    cot_thetam = cos_thetam / sin_thetam  #
+                    w += cot_thetam / 2  #
+
+                # Atot += Lij**2 * (cot_thetam + cot_thetap) / 8
+                area_V[vi] += Lijp1 * Ljjp1 * sin_thetap / 6
+
+                data[vi].append(w)
+                data[vi][0] -= w
+                rows[vi].append(vj)
+            # sort nonzero column indices for row i
+            argsort_row = argsort(rows[vi])
+            rows[vi] = [rows[vi][_] for _ in argsort_row]
+            data[vi] = [data[vi][_] for _ in argsort_row]
+
+        mat = lil_matrix((self.num_vertices, self.num_vertices), dtype=FLOAT_TYPE)
+        mat.rows = rows
+        mat.data = data
+
+        return mat, area_V
+
+    def get_cotan_laplacian_csr(self):
+        area_V = np.zeros(self.num_vertices)
+        rows = self.num_vertices * [[]]
+        data = self.num_vertices * [[]]
+
+        for i in range(self.num_vertices):
+            x_i = self.xyz_coord_v(i)
+            rows[i].append(i)
+            data[i].append(0.0)
+            for h in self.generate_H_out_v_clockwise(i):
+                j = self.v_head_h(h)
+                j_plus = self.v_head_h(self.h_next_h(h))
+
+                x_j = self.xyz_coord_v(j)
+                x_j_plus = self.xyz_coord_v(j_plus)
+
+                rows[i].append(j)
+                area_V[i] += np.linalg.norm(np.cross(x_j - x_i, x_j_plus - x_i)) / 6
+
+                cot_plus = np.dot(x_i - x_j_plus, x_j - x_j_plus) / np.linalg.norm(
+                    np.cross(x_i - x_j_plus, x_j - x_j_plus)
+                )
+                w = cot_plus / 2
+                if not self.positive_boundary_contains_h(h):
+                    j_minus = self.v_head_h(self.h_next_h(self.h_twin_h(h)))  #
+                    x_j_minus = self.xyz_coord_v(j_minus)  #
+                    cot_minus = np.dot(
+                        x_j - x_j_minus, x_i - x_j_minus
+                    ) / np.linalg.norm(np.cross(x_j - x_j_minus, x_i - x_j_minus))
+                    w += cot_minus / 2
+
+                data[i].append(w)
+                data[i][0] -= w
+            # sort nonzero column indices for row i
+            # argsort_row = argsort(rows[i])
+            # rows[i] = [rows[i][_] for _ in argsort_row]
+            # data[i] = [data[i][_] for _ in argsort_row]
+            # mat = lil_matrix((self.num_vertices, self.num_vertices), dtype=FLOAT_TYPE)
+            # mat.rows = rows
+            # mat.data = data
+        # return mat, area_V
+        return rows, data, area_V
+
     #######################################################
     # Mesh modification
+    ######################################################
+    def rigid_transform(self, translation, angle_vec, origin=None):
+        """
+        Apply a rigid transformation to the mesh.
+        t = translation in R3
+        w = angle_vec in R3~so3
+        R = exp_so3(w) in SO3
+        o = origin in R3~E3
+        x->o+R*(x-o)+t, or x->R*x+t if o is not provided
+        """
+        self.xyz_coord_V = rigid_transform(
+            translation, angle_vec, self.xyz_coord_V, origin=origin
+        )
+
     def update_vertex(self, v, xyz=None, h_out=None):
         if xyz is not None:
             self._xyz_coord_V[v] = xyz
@@ -1065,257 +1623,91 @@ class HalfEdgeMeshBase:
             weight=weight_inflate, smooth_boundary=smooth_boundary
         )
 
-    #######################################################
-    # Miscellaneous methods
-    def valence_v(self, v):
-        """get the valence of vertex v"""
-        valence = 0
-        for h in self.generate_H_out_v_clockwise(v):
-            valence += 1
-        return valence
+    def update_V_slice(self, index_slice, xyz_coord_V=None, h_out_V=None):
+        """ """
+        if xyz_coord_V is not None:
+            self.xyz_coord_V[index_slice] = xyz_coord_V
+        if h_out_V is not None:
+            self.h_out_V[index_slice] = h_out_V
 
-    def F_incident_b(self, b):
-        """get the faces incident on boundary b"""
-        F = set()
-        for h in self.generate_H_right_b(b):
-            v = self.v_origin_h(h)
-            F.update(set(self.generate_F_incident_v_clockwise(v, h_start=h)))
-        return np.array(list(F), dtype=_INT_TYPE_)
+    def update_H_slice(
+        self, index_slice, h_next_H=None, h_twin_H=None, v_origin_H=None, f_left_H=None
+    ):
+        """ """
+        if h_next_H is not None:
+            self.h_next_H[index_slice] = h_next_H
+        if h_twin_H is not None:
+            self.h_twin_H[index_slice] = h_twin_H
+        if v_origin_H is not None:
+            self.v_origin_H[index_slice] = v_origin_H
+        if f_left_H is not None:
+            self.f_left_H[index_slice] = f_left_H
 
-    def rigid_transform(self, translation, angle_vec, origin=None):
-        self.xyz_coord_V = rigid_transform(
-            translation, angle_vec, self.xyz_coord_V, origin=origin
+    def update_F_slice(self, index_slice, h_bound_F=None):
+        """ """
+        if h_bound_F is not None:
+            self.h_bound_F[index_slice] = h_bound_F
+
+    def divide_face_barycentric(self, f):
+        dNv = 1
+        dNh = 6
+        dNf = 2
+        # dNb = 0
+        self.xyz_coord_V = np.concatenate([self.xyz_coord_V, np.zeros((dNv, 3))])
+        self.h_out_V = np.concatenate([self.h_out_V, np.zeros(dNv, dtype=INT_TYPE)])
+        self.v_origin_H = np.concatenate(
+            [self.v_origin_H, np.zeros(dNh, dtype=INT_TYPE)]
         )
+        self.h_next_H = np.concatenate([self.h_next_H, np.zeros(dNh, dtype=INT_TYPE)])
+        self.h_twin_H = np.concatenate([self.h_twin_H, np.zeros(dNh, dtype=INT_TYPE)])
+        self.f_left_H = np.concatenate([self.f_left_H, np.zeros(dNh, dtype=INT_TYPE)])
+        self.h_bound_F = np.concatenate([self.h_bound_F, np.zeros(dNf, dtype=INT_TYPE)])
+        # self.h_right_B = np.concatenate([self.h_right_B, np.zeros(dNb, dtype=INT_TYPE)])
 
-    ######################################################
-    # Geometry
-    def vec_area_f(self, f):
-        h0 = self.h_bound_f(f)
+        # Get/create exsisting/new vertices, half-edges, faces, boundaries involved in the operation
+        f0 = f
+        h0 = self.h_bound_f(f0)
         h1 = self.h_next_h(h0)
         h2 = self.h_next_h(h1)
-        x0 = self.xyz_coord_v(self.v_origin_h(h0))
-        x1 = self.xyz_coord_v(self.v_origin_h(h1))
-        x2 = self.xyz_coord_v(self.v_origin_h(h2))
-        vec_area = 0.5 * (np.cross(x0, x1) + np.cross(x1, x2) + np.cross(x2, x0))
-        return vec_area
+        v0 = self.v_origin_h(h0)
+        v1 = self.v_origin_h(h1)
+        v2 = self.v_origin_h(h2)
+        V = np.concatenate(
+            [[v0, v1, v2], list(range(self.num_vertices, self.num_vertices + dNv))],
+            dtype=INT_TYPE,
+        )
+        H = np.concatenate(
+            [[h0, h1, h2], list(range(self.num_half_edges, self.num_half_edges + dNh))],
+            dtype=INT_TYPE,
+        )
+        F = np.concatenate(
+            [[f0], list(range(self.num_faces, self.num_faces + dNf))], dtype=INT_TYPE
+        )
 
-    def area_f(self, f):
-        return np.linalg.norm(self.vec_area_f(f))
+        #####
+        self.update_vertex(
+            V[3], xyz=np.sum(self.xyz_coord_V[V[:3]], axis=0), h_out=H[4]
+        )
+        self.update_H_slice(H[3:], v_origin_H=[V[1], V[3], V[2], V[3], V[0], V[3]])
+        self.update_H_slice(
+            H, h_next_H=[H[3], H[5], H[7], H[8], H[1], H[4], H[2], H[6], H[0]]
+        )
+        self.update_H_slice(
+            H[3:], h_next_H=None, h_twin_H=[H[4], H[3], H[6], H[5], H[8], H[7]]
+        )
+        self.update_H_slice(
+            H[1:], f_left_H=[F[1], F[2], F[0], F[1], F[1], F[2], F[2], F[0]]
+        )
+        self.update_F_slice(F, h_bound_F=H[:3])
+        return dNv, dNh, dNf
 
-    def area_F(self):
-        N = self.num_faces
-        A = np.zeros(N, dtype=_FLOAT_TYPE_)
-        for k in range(N):
-            A[k] = self.area_f(k)
-        return A
-
-    def length_h(self, h):
-        v0 = self.v_origin_h(h)
-        v1 = self.v_head_h(h)
-        return np.linalg.norm(self.xyz_coord_v(v1) - self.xyz_coord_v(v0))
-
-    def length_H(self):
-        L = np.zeros(self.num_half_edges, dtype=_FLOAT_TYPE_)
-        for h in range(self.num_half_edges):
-            L[h] = self.length_h(h)
-        return L
-
-    def total_area_of_faces(self):
-        Atot = 0.0
-        for f in range(self.num_faces):
-            Atot += self.area_f(f)
-
-        return Atot
-
-    def barcell_area(self, v):
-        """area of the barycentric cell dual to vertex v"""
-        r = self.xyz_coord_v(v)
-        A = 0.0
-        for h in self.generate_H_out_v_clockwise(v):
-            if self.negative_boundary_contains_h(h):
-                continue
-            # r1 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(h)))
-            # r2 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(self.h_next_h(h))))
-            # A_face_vec = (
-            #     np.cross(r, r1) / 2 + np.cross(r1, r2) / 2 + np.cross(r2, r) / 2
-            # )
-            # A_face = np.sqrt(
-            #     A_face_vec[0] ** 2 + A_face_vec[1] ** 2 + A_face_vec[2] ** 2
-            # )
-
-            A += self.area_f(self.f_left_h(h)) / 3
-
-        return A
-
-    def total_area_of_dual_barcells(self):
-        Atot = 0.0
-        for v in range(self.num_vertices):
-            Atot += self.barcell_area(v)
-
-        return Atot
-
-    def vorcell_area(self, v):
-        r"""area of voronoi cell dual to vertex v
-                  v=v0
-                //  \\
-               // |  \\
-              // /|   \\
-             //   ||   \\
-            //    || h20\\
-           //     ||     \\
-        ...       ||h01    v2
-           \\     ||     //
-            \\    || h12//
-             \\   ||   //
-              \\  ||/ //
-               \\ |  //
-                \\| //
-                  v1
-        """
-        Atot = 0.0
-        r0 = self.xyz_coord_v(v)
-        for h in self.generate_H_out_v_clockwise(v):
-            if self.negative_boundary_contains_h(h):
-                continue
-            r1 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(h)))
-            r2 = self.xyz_coord_v(self.v_origin_h(self.h_next_h(self.h_next_h(h))))
-            r01 = r1 - r0
-            r12 = r2 - r1
-            r20 = r0 - r2
-
-            norm_r20 = np.linalg.norm(r20)
-            norm_r01 = np.linalg.norm(r01)
-            norm_r12 = np.linalg.norm(r12)
-            cos_210 = -np.dot(r12, r01) / (norm_r12 * norm_r01)
-            cos_021 = -np.dot(r20, r12) / (norm_r20 * norm_r12)
-
-            cot_210 = cos_210 / np.sqrt(1 - cos_210**2)
-            cot_021 = cos_021 / np.sqrt(1 - cos_021**2)
-            Atot += norm_r20**2 * cot_210 / 8 + norm_r01**2 * cot_021 / 8
-
-        return Atot
-
-    def vorcell_area_V(self):
-
-        N = self.num_vertices
-        A = np.zeros(N, dtype=_FLOAT_TYPE_)
-        for k in range(N):
-            A[k] = self.vorcell_area(k)
-        return A
-
-    def total_area_of_dual_vorcells(self):
-        Atot = 0.0
-        for v in range(self.num_vertices):
-            Atot += self.vorcell_area(v)
-
-        return Atot
-
-    def meyercell_area(self, v):
-        """Meyer's mixed area of cell dual to vertex v"""
-        Atot = 0.0
-        ri = self.xyz_coord_v(v)
-        ri_ri = ri[0] ** 2 + ri[1] ** 2 + ri[2] ** 2
-        # h_start = self.V_hedge[v]
-        # hij = h_start
-        # while True:
-        for hij in self.generate_H_out_v_clockwise(v):
-            if self.negative_boundary_contains_h(hij):
-                continue
-            hjjp1 = self.h_next_h(hij)
-            hjp1i = self.h_next_h(hjjp1)
-            vj = self.v_origin_h(hjjp1)
-            rj = self.xyz_coord_v(vj)
-            vjp1 = self.v_origin_h(hjp1i)
-            rjp1 = self.xyz_coord_v(vjp1)
-
-            rj_rj = rj[0] ** 2 + rj[1] ** 2 + rj[2] ** 2
-            rjp1_rjp1 = rjp1[0] ** 2 + rjp1[1] ** 2 + rjp1[2] ** 2
-            ri_rj = ri[0] * rj[0] + ri[1] * rj[1] + ri[2] * rj[2]
-            rj_rjp1 = rj[0] * rjp1[0] + rj[1] * rjp1[1] + rj[2] * rjp1[2]
-            rjp1_ri = rjp1[0] * ri[0] + rjp1[1] * ri[1] + rjp1[2] * ri[2]
-
-            normDrij = np.sqrt(ri_ri - 2 * ri_rj + rj_rj)
-            # normu1 = np.sqrt(r1_r1 - 2 * r_r1 + r_r)  # jitnorm(u1)
-            normDrjjp1 = np.sqrt(rj_rj - 2 * rj_rjp1 + rjp1_rjp1)
-            # normu2 = np.sqrt(r2_r2 - 2 * r1_r2 + r1_r1)  # jitnorm(u2)
-            normDrjp1i = np.sqrt(rjp1_rjp1 - 2 * rjp1_ri + ri_ri)
-            cos_thetajijp1 = (ri_ri + rj_rjp1 - ri_rj - rjp1_ri) / (
-                normDrij * normDrjp1i
-            )
-            cos_thetajp1ji = (rj_rj + rjp1_ri - rj_rjp1 - ri_rj) / (
-                normDrij * normDrjjp1
-            )
-            cos_thetaijp1j = (rjp1_rjp1 + ri_rj - rj_rjp1 - rjp1_ri) / (
-                normDrjp1i * normDrjjp1
-            )
-            if cos_thetajijp1 < 0:
-                semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
-                Atot += (
-                    np.sqrt(
-                        semiP
-                        * (semiP - normDrij)
-                        * (semiP - normDrjjp1)
-                        * (semiP - normDrjp1i)
-                    )
-                    / 2
-                )
-                # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 4
-            elif cos_thetajp1ji < 0 or cos_thetaijp1j < 0:
-                semiP = (normDrij + normDrjjp1 + normDrjp1i) / 2
-                Atot += (
-                    np.sqrt(
-                        semiP
-                        * (semiP - normDrij)
-                        * (semiP - normDrjjp1)
-                        * (semiP - normDrjp1i)
-                    )
-                    / 4
-                )
-                # Atot += normDrij * normDrjp1i * np.sqrt(1 - cos_thetajijp1**2) / 8
-            else:
-                cot_thetaijp1j = cos_thetaijp1j / np.sqrt(1 - cos_thetaijp1j**2)
-                cot_thetajp1ji = cos_thetajp1ji / np.sqrt(1 - cos_thetajp1ji**2)
-                Atot += (
-                    normDrij**2 * cot_thetaijp1j / 8
-                    + normDrjp1i**2 * cot_thetajp1ji / 8
-                )
-
-        return Atot
-
-    def total_area_of_dual_meyercells(self):
-        Atot = 0.0
-        for v in range(self.num_vertices):
-            Atot += self.meyercell_area(v)
-
-        return Atot
-
-    def barcell_area_V(self):
-
-        N = self.num_vertices
-        A = np.zeros(N, dtype=_FLOAT_TYPE_)
-        for k in range(N):
-            A[k] = self.barcell_area(k)
-        return A
-
-    def total_volume(self):
-        Nf = self.num_faces
-        vol = 0.0
-        for f in range(Nf):
-            h0 = self.h_bound_f(f)
-            h1 = self.h_next_h(h0)
-            h2 = self.h_next_h(h1)
-            v0 = self.v_origin_h(h0)
-            v1 = self.v_origin_h(h1)
-            v2 = self.v_origin_h(h2)
-            x0 = self.xyz_coord_v(v0)
-            x1 = self.xyz_coord_v(v1)
-            x2 = self.xyz_coord_v(v2)
-            vol_f = np.dot(x0, np.cross(x1, x2)) / 6
-            vol += vol_f
-        return abs(vol)
+    #######################################################
+    # Miscellaneous methods
+    ######################################################
 
     ######################################################
     # to be deprecated
+    ######################################################
     def _smooth_graph_laplacian(self, weight=0.25):
         """ """
         Nv = self.num_vertices

@@ -7,57 +7,57 @@ import os
 import subprocess
 from sympy import latex
 
-_RGBA_DICT_ = {
-    "black": [0.0, 0.0, 0.0, 1.0],
-    "white": [1.0, 1.0, 1.0, 1.0],
-    "transparent": [0.0, 0.0, 0.0, 0.0],
-    "red": [0.8392, 0.1529, 0.1569, 1.0],
-    "red10": [0.8392, 0.1529, 0.1569, 0.1],
-    "red20": [0.8392, 0.1529, 0.1569, 0.2],
-    "red50": [0.8392, 0.1529, 0.1569, 0.5],
-    "red80": [0.8392, 0.1529, 0.1569, 0.8],
-    "green": [0.0, 0.6745, 0.2784, 1.0],
-    "green10": [0.0, 0.6745, 0.2784, 0.1],
-    "green20": [0.0, 0.6745, 0.2784, 0.2],
-    "green50": [0.0, 0.6745, 0.2784, 0.5],
-    "green80": [0.0, 0.6745, 0.2784, 0.8],
-    "blue": [0.0, 0.4471, 0.6980, 1.0],
-    "blue10": [0.0, 0.4471, 0.6980, 0.1],
-    "blue20": [0.0, 0.4471, 0.6980, 0.2],
-    "blue50": [0.0, 0.4471, 0.6980, 0.5],
-    "blue80": [0.0, 0.4471, 0.6980, 0.8],
-    "yellow": [1.0, 0.8431, 0.0, 1.0],
-    "yellow10": [1.0, 0.8431, 0.0, 0.1],
-    "yellow20": [1.0, 0.8431, 0.0, 0.2],
-    "yellow50": [1.0, 0.8431, 0.0, 0.5],
-    "yellow80": [1.0, 0.8431, 0.0, 0.8],
-    "cyan": [0.0, 0.8431, 0.8431, 1.0],
-    "cyan10": [0.0, 0.8431, 0.8431, 0.1],
-    "cyan20": [0.0, 0.8431, 0.8431, 0.2],
-    "cyan50": [0.0, 0.8431, 0.8431, 0.5],
-    "cyan80": [0.0, 0.8431, 0.8431, 0.8],
-    "magenta": [0.8784, 0.0, 0.8784, 1.0],
-    "magenta10": [0.8784, 0.0, 0.8784, 0.1],
-    "magenta20": [0.8784, 0.0, 0.8784, 0.2],
-    "magenta50": [0.8784, 0.0, 0.8784, 0.5],
-    "magenta80": [0.8784, 0.0, 0.8784, 0.8],
-    "orange": [1.0, 0.5490, 0.0, 1.0],
-    "orange10": [1.0, 0.5490, 0.0, 0.1],
-    "orange20": [1.0, 0.5490, 0.0, 0.2],
-    "orange50": [1.0, 0.5490, 0.0, 0.5],
-    "orange80": [1.0, 0.5490, 0.0, 0.8],
-    "purple": [0.5804, 0.0, 0.8275, 1.0],
-    "purple10": [0.5804, 0.0, 0.8275, 0.1],
-    "purple20": [0.5804, 0.0, 0.8275, 0.2],
-    "purple50": [0.5804, 0.0, 0.8275, 0.5],
-    "purple80": [0.5804, 0.0, 0.8275, 0.8],
-    "vertex_default": [0.7057, 0.0156, 0.1502, 1.0],
-    "half_edge_default": [1.0, 0.498, 0.0, 1.0],
-    "face_default": [0.0, 0.63335, 0.05295, 0.65],
-    "boundary_half_edge_default": [0.0, 0.4471, 0.6980, 1.0],
+RGBA_DICT = {
+    "black": (0.0, 0.0, 0.0, 1.0),
+    "white": (1.0, 1.0, 1.0, 1.0),
+    "transparent": (0.0, 0.0, 0.0, 0.0),
+    "red": (0.8392, 0.1529, 0.1569, 1.0),
+    "red10": (0.8392, 0.1529, 0.1569, 0.1),
+    "red20": (0.8392, 0.1529, 0.1569, 0.2),
+    "red50": (0.8392, 0.1529, 0.1569, 0.5),
+    "red80": (0.8392, 0.1529, 0.1569, 0.8),
+    "green": (0.0, 0.6745, 0.2784, 1.0),
+    "green10": (0.0, 0.6745, 0.2784, 0.1),
+    "green20": (0.0, 0.6745, 0.2784, 0.2),
+    "green50": (0.0, 0.6745, 0.2784, 0.5),
+    "green80": (0.0, 0.6745, 0.2784, 0.8),
+    "blue": (0.0, 0.4471, 0.6980, 1.0),
+    "blue10": (0.0, 0.4471, 0.6980, 0.1),
+    "blue20": (0.0, 0.4471, 0.6980, 0.2),
+    "blue50": (0.0, 0.4471, 0.6980, 0.5),
+    "blue80": (0.0, 0.4471, 0.6980, 0.8),
+    "yellow": (1.0, 0.8431, 0.0, 1.0),
+    "yellow10": (1.0, 0.8431, 0.0, 0.1),
+    "yellow20": (1.0, 0.8431, 0.0, 0.2),
+    "yellow50": (1.0, 0.8431, 0.0, 0.5),
+    "yellow80": (1.0, 0.8431, 0.0, 0.8),
+    "cyan": (0.0, 0.8431, 0.8431, 1.0),
+    "cyan10": (0.0, 0.8431, 0.8431, 0.1),
+    "cyan20": (0.0, 0.8431, 0.8431, 0.2),
+    "cyan50": (0.0, 0.8431, 0.8431, 0.5),
+    "cyan80": (0.0, 0.8431, 0.8431, 0.8),
+    "magenta": (0.8784, 0.0, 0.8784, 1.0),
+    "magenta10": (0.8784, 0.0, 0.8784, 0.1),
+    "magenta20": (0.8784, 0.0, 0.8784, 0.2),
+    "magenta50": (0.8784, 0.0, 0.8784, 0.5),
+    "magenta80": (0.8784, 0.0, 0.8784, 0.8),
+    "orange": (1.0, 0.5490, 0.0, 1.0),
+    "orange10": (1.0, 0.5490, 0.0, 0.1),
+    "orange20": (1.0, 0.5490, 0.0, 0.2),
+    "orange50": (1.0, 0.5490, 0.0, 0.5),
+    "orange80": (1.0, 0.5490, 0.0, 0.8),
+    "purple": (0.5804, 0.0, 0.8275, 1.0),
+    "purple10": (0.5804, 0.0, 0.8275, 0.1),
+    "purple20": (0.5804, 0.0, 0.8275, 0.2),
+    "purple50": (0.5804, 0.0, 0.8275, 0.5),
+    "purple80": (0.5804, 0.0, 0.8275, 0.8),
+    "meshbrane_red": (0.7057, 0.0156, 0.1502, 1.0),
+    "meshbrane_orange": (1.0, 0.498, 0.0, 1.0),
+    "meshbrane_green": (0.0, 0.63335, 0.05295, 0.65),
+    "meshbrane_blue": (0.0, 0.4471, 0.6980, 1.0),
 }
 
-_COLORS_ = [
+MATPLOTLIB_COLORS = (
     "b",  # Blue
     "g",  # Green
     "r",  # Red
@@ -87,9 +87,24 @@ _COLORS_ = [
     "orchid",  # Orchid
     "azure",  # Azure
     "lavender",  # Lavender
-]
-_MARKERS_ = ["o", "s", "^", "D", "v", "p", "*", "h", "H", "+", "x", "d", "|", "_"]
-_LINESTYLES_ = [
+)
+MATPLOTLIB_MARKERS = (
+    "o",
+    "s",
+    "^",
+    "D",
+    "v",
+    "p",
+    "*",
+    "h",
+    "H",
+    "+",
+    "x",
+    "d",
+    "|",
+    "_",
+)
+MATPLOTLIB_LINESTYLES = (
     "-",
     "--",
     "-.",
@@ -106,8 +121,8 @@ _LINESTYLES_ = [
     (0, (3, 5, 1, 5, 1, 5)),  # Dash-dot-dash-dot line
     (0, (1, 2, 3, 4)),  # Custom pattern
     (0, (2, 2, 10, 2)),  # Custom pattern with long dash
-]
-_CMAP_NAMES_ = [
+)
+MATPLOTLIB_CMAPS = (
     "Accent",
     "Accent_r",
     "Blues",
@@ -274,21 +289,21 @@ _CMAP_NAMES_ = [
     "viridis_r",
     "winter",
     "winter_r",
-]
+)
 
 
 def get_plt_combos(n):
     """
     Returns a list of n combinations of matplotlib color, marker, and linestyle.
     """
-    len_colors = len(_COLORS_)
-    len_markers = len(_MARKERS_)
-    len_linestyles = len(_LINESTYLES_)
+    len_colors = len(MATPLOTLIB_COLORS)
+    len_markers = len(MATPLOTLIB_MARKERS)
+    len_linestyles = len(MATPLOTLIB_LINESTYLES)
     return [
         [
-            _COLORS_[k % len_colors],
-            _MARKERS_[k % len_markers],
-            _LINESTYLES_[k % len_linestyles],
+            MATPLOTLIB_COLORS[k % len_colors],
+            MATPLOTLIB_MARKERS[k % len_markers],
+            MATPLOTLIB_LINESTYLES[k % len_linestyles],
         ]
         for k in range(n)
     ]
@@ -296,7 +311,7 @@ def get_plt_combos(n):
 
 def get_crange(samples, Nstd=2):
     """
-    Clip the samples to ramain within Nstd standard deviations of the mean.
+    Clip the samples to remain within Nstd standard deviations of the mean.
     """
     c0 = np.mean(samples)
     sig = np.std(samples)

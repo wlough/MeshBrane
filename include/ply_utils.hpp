@@ -5,7 +5,7 @@
 #ifndef ply_utils_hpp
 #define ply_utils_hpp
 
-// #include "data_types.hpp" // for _INT_TYPE_ and _FLOAT_TYPE_
+// #include "data_types.hpp" // for INT_TYPE and FLOAT_TYPE
 #include <Eigen/Dense> // for Eigen::Vector3d
 #include <chrono> // for std::chrono::high_resolution_clock and std::chrono::duration
 #include <fstream>   // for std::ifstream

@@ -3,11 +3,11 @@ from numpy import float64 as np_float64
 from numpy import dtype
 from numba import from_dtype
 
-_INT_TYPE_ = "int32"
-_FLOAT_TYPE_ = "float64"
+INT_TYPE = "int32"
+FLOAT_TYPE = "float64"
 
-_NUMPY_INT_ = dtype(_INT_TYPE_).type
-_NUMPY_FLOAT_ = dtype(_FLOAT_TYPE_).type
+_NUMPY_INT_ = dtype(INT_TYPE).type
+_NUMPY_FLOAT_ = dtype(FLOAT_TYPE).type
 
 _NUMBA_INT_ = from_dtype(_NUMPY_INT_)
 _NUMBA_FLOAT_ = from_dtype(_NUMPY_FLOAT_)

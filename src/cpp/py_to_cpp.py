@@ -4,11 +4,11 @@ from numpy import float64 as np_float64
 from numpy import dtype
 from numba import from_dtype
 
-_INT_TYPE_ = "int32"
-_FLOAT_TYPE_ = "float64"
+INT_TYPE = "int32"
+FLOAT_TYPE = "float64"
 
-_NUMPY_INT_ = dtype(_INT_TYPE_).type
-_NUMPY_FLOAT_ = dtype(_FLOAT_TYPE_).type
+_NUMPY_INT_ = dtype(INT_TYPE).type
+_NUMPY_FLOAT_ = dtype(FLOAT_TYPE).type
 
 _NUMBA_INT_ = from_dtype(_NUMPY_INT_)
 _NUMBA_FLOAT_ = from_dtype(_NUMPY_FLOAT_)
@@ -61,7 +61,7 @@ def find_V_of_F(
     h_right_B,
 ):
     Nf = len(h_bound_F)
-    V_of_F = np.zeros((Nf, 3), dtype=_INT_TYPE_)
+    V_of_F = np.zeros((Nf, 3), dtype=INT_TYPE)
     for f in range(Nf):
         h = h_bound_F[f]
         h_start = h
@@ -112,7 +112,7 @@ def find_h_right_B(
             H_need2visit.remove(h)
             f_left_H[h] = -(b + 1)
             h = h_next_H[h]
-    h_right_B = np.array(_h_right_B, dtype=_INT_TYPE_)
+    h_right_B = np.array(_h_right_B, dtype=INT_TYPE)
     return h_right_B
 
 
@@ -121,12 +121,12 @@ def vf_samples_to_he_samples(xyz_coord_V, vvv_of_F):
     Nfaces = len(vvv_of_F)
     Nvertices = len(xyz_coord_V)
     _Nhedges = 3 * Nfaces * 2
-    _H = np.zeros((_Nhedges, 2), dtype=_INT_TYPE_)
-    h_out_V = -np.ones(Nvertices, dtype=_INT_TYPE_)
-    _v_origin_H = np.zeros(_Nhedges, dtype=_INT_TYPE_)
-    _h_next_H = -np.ones(_Nhedges, dtype=_INT_TYPE_)
-    _f_left_H = np.zeros(_Nhedges, dtype=_INT_TYPE_)
-    h_bound_F = np.zeros(Nfaces, dtype=_INT_TYPE_)
+    _H = np.zeros((_Nhedges, 2), dtype=INT_TYPE)
+    h_out_V = -np.ones(Nvertices, dtype=INT_TYPE)
+    _v_origin_H = np.zeros(_Nhedges, dtype=INT_TYPE)
+    _h_next_H = -np.ones(_Nhedges, dtype=INT_TYPE)
+    _f_left_H = np.zeros(_Nhedges, dtype=INT_TYPE)
+    h_bound_F = np.zeros(Nfaces, dtype=INT_TYPE)
 
     # h_count = 0
     for f in range(Nfaces):
@@ -146,9 +146,7 @@ def vf_samples_to_he_samples(xyz_coord_V, vvv_of_F):
     need_twins = set([_NUMBA_INT_(_) for _ in range(h_count)])
     need_next = set([_NUMBA_INT_(0)])
     need_next.pop()
-    _h_twin_H = _NUMBA_INT_(-2) * np.ones(
-        _Nhedges, dtype=_INT_TYPE_
-    )  # -2 means not set
+    _h_twin_H = _NUMBA_INT_(-2) * np.ones(_Nhedges, dtype=INT_TYPE)  # -2 means not set
     while need_twins:
         h = need_twins.pop()
         if _h_twin_H[h] == -2:  # if twin not set
@@ -194,7 +192,7 @@ def vf_samples_to_he_samples(xyz_coord_V, vvv_of_F):
             H_need2visit.remove(h)
             f_left_H[h] = -(b + 1)
             h = h_next_H[h]
-    h_right_B = np.array(_h_right_B, dtype=_INT_TYPE_)
+    h_right_B = np.array(_h_right_B, dtype=INT_TYPE)
     return (
         xyz_coord_V,
         h_out_V,
