@@ -119,9 +119,11 @@ class Brane(HalfEdgeMeshBase):
         tether_repulsive_singularity=None,
         tether_attractive_onset=None,
         tether_attractive_singularity=None,
+        tether_well_slope=None,
         #
         drag_coefficient=None,
         #
+        kBT=0.2,
         flipping_frequency=None,
         flipping_probability=None,
         #
@@ -160,9 +162,11 @@ class Brane(HalfEdgeMeshBase):
         self.tether_repulsive_singularity = tether_repulsive_singularity
         self.tether_attractive_onset = tether_attractive_onset
         self.tether_attractive_singularity = tether_attractive_singularity
+        self.tether_well_slope = tether_well_slope
         #
         self.drag_coefficient = drag_coefficient
         #
+        self.kBT = kBT
         self.flipping_frequency = flipping_frequency
         self.flipping_probability = flipping_probability
         ################################################
@@ -251,9 +255,12 @@ class Brane(HalfEdgeMeshBase):
 
     def refresh_geometric_data(self):
         """
-        cosine 107-108 136 241
-        sin 42 107-108 136
         associate with each h the portion of f=f_left_h(h) that is closer to v=v_origin_h(h) than other vertices of f.
+
+        Fbend
+        Fpressure
+        Fsurface_tension
+        Ftether
         """
         num_vertices = self.num_vertices
         num_half_edges = self.num_half_edges
@@ -296,11 +303,11 @@ class Brane(HalfEdgeMeshBase):
             # d3 = np.linalg.norm(e3)
             ddd = np.linalg.norm(eee, axis=1)
             sort_indices = np.argsort(ddd)
-            h1, h2, h3 = hhh[sort_indices]
-            v1, v2, v3 = vvv[sort_indices]
-            x1, x2, x3 = xxx[sort_indices]
-            e1, e2, e3 = eee[sort_indices]
-            # d1, d2, d3 = ddd[sort_indices]
+            h3, h2, h1 = hhh[sort_indices]
+            v3, v2, v1 = vvv[sort_indices]
+            x3, x2, x1 = xxx[sort_indices]
+            e3, e2, e1 = eee[sort_indices]
+            d3, d2, d1 = ddd[sort_indices]
 
             # area_f = (1 / 4) * np.sqrt(
             #     (d1 + (d2 + d3))
@@ -311,14 +318,10 @@ class Brane(HalfEdgeMeshBase):
             a, b, c = ddd[sort_indices]
 
             area_f = (1 / 4) * np.sqrt(
-                (a + (b + c))
-                * (c - (a - b))
-                * (c + (a - b))
-                * (a + (b - c))
+                (a + (b + c)) * (c - (a - b)) * (c + (a - b)) * (a + (b - c))
             )
-            
-            
-            mu_c = c-(a-b)
+
+            mu_c = c - (a - b)
             theta_c = np.arctan2((b**2 + c**2 - a**2), (2 * b * c))
             ###############################
 
@@ -358,7 +361,7 @@ class Brane(HalfEdgeMeshBase):
             for hij in self.generate_H_out_v_clockwise(vi):
                 hji = self.h_twin_H[hij]
                 vj = self.v_origin_h(hji)
-                w = (cotan_opposite_H[hij]+cotan_opposite_H[hji])/2
+                w = (cotan_opposite_H[hij] + cotan_opposite_H[hji]) / 2
                 lap_data[vi].append(w)
                 lap_data[vi][0] -= w
                 lap_rows[vi].append(vj)
@@ -366,11 +369,10 @@ class Brane(HalfEdgeMeshBase):
             argsort_row = argsort(lap_rows[vi])
             lap_rows[vi] = [lap_rows[vi][_] for _ in argsort_row]
             lap_data[vi] = [lap_data[vi][_] for _ in argsort_row]
-            
+
         lap_mat = lil_matrix((self.num_vertices, self.num_vertices), dtype=FLOAT_TYPE)
         lap_mat.lap_rows = lap_rows
         lap_mat.lap_data = lap_data
-            
 
     def refresh_soft_penalty_A_soft_penalty_V(self, **kwargs):
         num_vertices = self.num_vertices
@@ -379,9 +381,189 @@ class Brane(HalfEdgeMeshBase):
 
         surface_tension_F = np.zeros(num_faces, dtype=FLOAT_TYPE)
         pressure_F = np.zeros(num_faces, dtype=FLOAT_TYPE)
-        Area_F = np.zeros(num_faces, dtype=FLOAT_TYPE)
+        area_F = np.zeros(num_faces, dtype=FLOAT_TYPE)
 
+        area_V = np.zeros(num_vertices, dtype=FLOAT_TYPE)
+        vec_area_V = np.zeros((num_vertices, 3), dtype=FLOAT_TYPE)
+
+        force_helfrich_V = np.zeros((num_vertices, 3), dtype=FLOAT_TYPE)
+        force_pressure_V = np.zeros((num_vertices, 3), dtype=FLOAT_TYPE)
+        force_surface_tension_V = np.zeros((num_vertices, 3), dtype=FLOAT_TYPE)
+        force_tether_V = np.zeros((num_vertices, 3), dtype=FLOAT_TYPE)
+        total_volume = 0.0
         for f in range(num_faces):
+            for h in self.generate_H_bound_f(f):
+                v = self.v_origin_h(h)
+
+    def flip_energy_area_penalty_tether_vutukuri(self, h):
+        h0 = h
+        h1 = self.h_next_h(h0)
+        h2 = self.h_next_h(h1)
+        h3 = self.h_twin_h(h0)
+        v0 = self.v_origin_h(h)
+        f_left = self.f_left_h(h)
+        f_right = self.f_left_h(self.h_twin_h(h))
+
+        f1 = self.f_left_h(h)
+        ht = self.h_twin_h(h)
+
+    def dimensionless_tethering_potential_vutukuri(self, s):
+        """
+        s = actual_length / preferred_length
+        """
+        Lmin = self.tether_repulsive_singularity
+        Lmax = self.tether_attractive_singularity
+        Lrep = self.tether_repulsive_onset
+        Latt = self.tether_attractive_onset
+
+        if s <= Latt:
+            if s >= Lrep:  # free region
+                return 0.0
+            elif s > Lmin:  # repulsive region
+                return np.exp(1 / (s - Lrep)) / (s - Lmin)
+            else:
+                raise ValueError("s < Lmin")
+        elif s < Lmax:  # attractive region
+            return np.exp(1 / (Latt - s)) / (Lmax - s)
+        else:
+            raise ValueError("s > Lmax")
+
+    def dimensionless_tethering_potential_siggel(self, s):
+        """
+                s = actual_length / preferred_length
+                TriMem: A parallelized hybrid Monte Carlo software for
+        efficient simulations of lipid membranes
+        Marc Sigge
+        """
+        r = self.tether_well_slope
+        Lrep = self.tether_repulsive_onset
+        Latt = self.tether_attractive_onset
+
+        if s <= Latt:
+            if s >= Lrep:  # free region  Lrep <= s <= Latt
+                return 0.0
+            else:  # repulsive region s < Lrep
+                return np.exp(1 / (s - Lrep)) / s**r
+        else:  # attractive region                     Latt < s
+            return r ** (r + 1) * (s - Latt) ** r
+
+    def flip_check(self, h):
+        r"""
+        h cannot be on boundary!
+                v2                           v2                                                      
+              /  |  \                      /    \                                                                      
+             /   |   \                    /      \                                                                        
+            /h2  |  h1\                  /h2    h1\                                                                       
+           /     |     \                /    ft    \                                                                    
+          /  f   | ft   \              /            \                                                                         
+         /       |       \            /      ht      \                                                                     
+        v3     h |ht     v1 |----->  v3--------------v1                                              
+         \       |       /            \      h       /                                                                    
+          \      |      /              \            /                                                                    
+           \     |     /                \    f     /                                                                        
+            \h3  |  h0/                  \h3    h0/                                                                             
+             \   |   /                    \      /                                                                         
+              \  |  /                      \    /                                                                             
+                v0                           v0                                                                            
+        """
+        energy = 0.0
+
+        # get involved half-edges/vertices/faces
+        f = self.f_left_h(h)
+        ht = self.h_twin_h(h)
+        ft = self.f_left_h(ht)
+        h0 = self.h_next_h(ht)
+        h1 = self.h_next_h(h0)
+        h2 = self.h_next_h(h)
+        h3 = self.h_twin_h(h2)
+        H = np.array([h0, h1, h2, h3])
+        v_origin_H = self.v_origin_h(H)
+        x0, x1, x2, x3 = self.xyz_coord_v(v_origin_H)
+        d0, d1, d2, d3, dpre, dpost = np.linalg.norm(
+            [x1 - x0, x2 - x1, x3 - x2, x0 - x3, x2 - x0, x3 - x1], axis=1
+        )
+        # tether penalty
+        k_tether = self.tether_stiffness
+        preUtether = k_tether * self.dimensionless_tethering_potential_siggel(
+            dpre / self.preferred_edge_length
+        )
+        postUtether = k_tether * self.dimensionless_tethering_potential_siggel(
+            dpost / self.preferred_edge_length
+        )
+        # area penalty
+        c, b, a = sorted([dpre, d2, d3])
+        preA = (1 / 4) * np.sqrt(
+            (a + (b + c)) * (c - (a - b)) * (c + (a - b)) * (a + (b - c))
+        )
+        c, b, a = sorted([dpre, d0, d1])
+        preAt = (1 / 4) * np.sqrt(
+            (a + (b + c)) * (c - (a - b)) * (c + (a - b)) * (a + (b - c))
+        )
+        c, b, a = sorted([dpost, d3, d0])
+        postA = (1 / 4) * np.sqrt(
+            (a + (b + c)) * (c - (a - b)) * (c + (a - b)) * (a + (b - c))
+        )
+        c, b, a = sorted([dpost, d1, d2])
+        postAt = (1 / 4) * np.sqrt(
+            (a + (b + c)) * (c - (a - b)) * (c + (a - b)) * (a + (b - c))
+        )
+        preUarea = self.area_reg_stiffness * (
+            (preA - self.preferred_face_area) ** 2
+            + (preAt - self.preferred_face_area) ** 2
+        )
+        postUarea = self.area_reg_stiffness * (
+            (postA - self.preferred_face_area) ** 2
+            + (postAt - self.preferred_face_area) ** 2
+        )
+
+        # area_f = (1 / 4) * np.sqrt(
+        #     (d1 + (d2 + d3))
+        #     * (d3 - (d1 - d2))
+        #     * (d3 + (d1 - d2))
+        #     * (d1 + (d2 - d3))
+        # )
+
+        # H = np.array([h0, h1, h2, h3, h4, h5])
+        # v0 = self.v_origin_h(h0)
+        # v1 = self.v_origin_h(h1)
+        # v2 = self.v_origin_h(h2)
+        # v3 = self.v_origin_h(h5)
+
+        f0 = self.f_left_h(h0)
+        f1 = self.f_left_h(h1)
+        V = self.v_origin_h([h0, h1, h2, h5])
+        x0, x1, x2, x3 = self.xyz_coord_v(V)
+        # xyz_coord_V=self.xyz_coord_v(V)
+
+        # e0 = x1 - x0
+        # e1 = x2 - x1
+        # e2 = x0 - x2
+        # e4 = x3 - x0
+        # e5 = x1 - x3
+
+        d0 = np.linalg.norm([x1 - x0, x2 - x1, x0 - x2, x3 - x0, x1 - x3], axis=1)
+
+        # things h0/h1, f0/f1 refer to
+
+        # things that refer to h0/h1, f0/f1
+
+        # update vertices
+        if self.h_out_v(v0) == h1:
+            self.update_vertex(v0, h_out=h2)
+        if self.h_out_v(v2) == h0:
+            self.update_vertex(v2, h_out=h4)
+        # update half-edges
+        self.update_half_edge(h0, v_origin=v3, h_next=h3)
+        self.update_half_edge(h1, v_origin=v1, h_next=h5)
+        self.update_half_edge(h2, h_next=h1, f_left=f1)
+        self.update_half_edge(h3, h_next=h4)
+        self.update_half_edge(h4, h_next=h0, f_left=f0)
+        self.update_half_edge(h5, h_next=h2)
+        # update faces
+        if self.h_bound_f(f0) == h2:
+            self.update_face(f0, h_bound=h3)
+        if self.h_bound_f(f1) == h4:
+            self.update_face(f1, h_bound=h5)
 
     def update_params(self, **kwargs):
         for key, val in kwargs.items():
@@ -1211,7 +1393,25 @@ class Brane(HalfEdgeMeshBase):
 
     #####################################
     # tethering
-    def _tethering_potential(
+
+    def tethering_potential_vutukuri_vectorized(self, s):
+        L0 = self.preferred_edge_length
+        Lmin = tether_repulsive_singularity * L0
+        Lmax = tether_attractive_singularity * L0
+        Lrep = tether_repulsive_onset * L0
+        Latt = tether_attractive_onset * L0
+        k = self.tether_stiffness
+
+        U = np.zeros_like(s)
+        Irep = s < Lrep
+        srep = s[Irep]
+        U[Irep] = np.exp(1 / (srep - Lrep)) / (srep - Lmin)
+        Iatt = s > Latt
+        satt = s[Iatt]
+        U[Iatt] = np.exp(1 / (Latt - satt)) / (Lmax - satt)
+        return U
+
+    def tethering_potential(
         self,
         s,
         preferred_length,

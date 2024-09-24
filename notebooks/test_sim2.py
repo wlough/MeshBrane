@@ -11,10 +11,11 @@ yaml_path = "./data/parameters.yaml"
 
 sim = StretchSim.from_parameters_file(yaml_path, overwrite_output_dir=True)
 sim.run()
-
+dir(m)
 #lower drag coeff
-
+np.roll([0,1,2], -1)
 m = sim.envelope
+m.xyz_coord_v([1, 2, 3])
 mv = sim.mesh_viewer
 mv.plot()
 # %%
