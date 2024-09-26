@@ -2,467 +2,8 @@ from src.python.half_edge_base_mesh import HalfEdgeMeshBase
 import numpy as np
 
 
-class HalfEdgeIndex:
-    def __init__(self, mesh=None, mesh_index=None, *args, **kwargs):
-        self.mesh = mesh
-        self.mesh_index = mesh_index
-
-
-class HalfEdgeVertexIndex(int):
-    """
-    Container for geometric data for vertices in a half-edge mesh.
-    """
-
-    def __init__(self, mesh=None, mesh_index=None, coord_xyz=None, *args, **kwargs):
-        super().__init__(mesh, mesh_index, *args, **kwargs)
-        self.coord_xyz = coord_xyz
-        self.h_out = h_out
-
-
-class HalfEdge(HalfEdgeObject):
-    def __init__(
-        self,
-        mesh=None,
-        mesh_index=None,
-        v_origin=None,
-        h_twin=None,
-        h_next=None,
-        f_left=None,
-        *args,
-        **kwargs
-    ):
-        super().__init__(mesh, mesh_index, *args, **kwargs)
-        self.v_origin = v_origin
-        self.h_twin = h_twin
-        self.h_next = h_next
-        self.f_left = f_left
-
-
-class HalfEdgeFace(HalfEdgeObject):
-    def __init__(self, mesh=None, mesh_index=None, h_bound=None, *args, **kwargs):
-        self.mesh = mesh
-        self.h_bound = h_bound
-
-
-class HalfEdgeBoundary(HalfEdgeFace):
-    def __init__(self, mesh=None, h_bound=None):
-        self.mesh = mesh
-        self.h_bound = h_bound
-
-
-class HalfEdgeComplex:
-    def __init__(
-        self,
-        xyz_coord_V,
-        h_out_V,
-        v_origin_H,
-        h_next_H,
-        h_twin_H,
-        f_left_H,
-        h_bound_F,
-        h_right_B,
-        *args,
-        **kwargs
-    ):
-        self.V = [HalfEdgeVertex(self, xyz, h) for xyz, h in zip(xyz_coord_V, h_out_V)]
-
-    #######################################################
-    # Initilization methods
-    ######################################################
-    @classmethod
-    def load_he_samples(cls, npz_path, *args, **kwargs):
-        """Initialize a half-edge mesh from npz file containing data arrays."""
-        data = np.load(npz_path)
-        return cls(
-            data["xyz_coord_V"],
-            data["h_out_V"],
-            data["v_origin_H"],
-            data["h_next_H"],
-            data["h_twin_H"],
-            data["f_left_H"],
-            data["h_bound_F"],
-            data["h_right_B"],
-            *args,
-            **kwargs
-        )
-
-    @classmethod
-    def from_vf_samples(cls, xyz_coord_V, vvv_of_F, *args, **kwargs):
-        """
-        Initialize a half-edge mesh from vertex/face data.
-
-        Parameters:
-        ----------
-        xyz_coord_V : list of numpy.array
-            xyz_coord_V[i] = xyz coordinates of vertex i
-        vvv_of_F : list of lists of integers
-            vvv_of_F[j] = [v0, v1, v2] = vertices in face j.
-
-        Returns:
-        -------
-            HalfEdgeMesh: An instance of the HalfEdgeMesh class with the given vertices and faces.
-        """
-        # return cls(
-        #     *VertTri2HalfEdgeMeshConverter.from_source_samples(
-        #         xyz_coord_V, vvv_of_F
-        #     ).target_samples,
-        #     *args,
-        #     **kwargs
-        # )
-        return cls(
-            *MeshConverterBase.from_vf_samples(xyz_coord_V, vvv_of_F).he_samples,
-            *args,
-            **kwargs
-        )
-
-    @classmethod
-    def from_vf_ply(cls, ply_path, *args, **kwargs):
-        """Initialize a half-edge mesh from a ply file containing vertex/face data.
-
-        Args:
-            ply_path (str): path to ply file
-
-        Returns:
-            HalfEdgeMesh: An instance of the HalfEdgeMesh class with data from the ply file.
-        """
-        # return cls(
-        #     *VertTri2HalfEdgeMeshConverter.from_source_ply(ply_path).target_samples,
-        #     *args,
-        #     **kwargs
-        # )
-        return cls(*MeshConverterBase.from_vf_ply(ply_path).he_samples, *args, **kwargs)
-
-    @classmethod
-    def from_he_ply(cls, ply_path, *args, **kwargs):
-        """Initialize a half-edge mesh from a ply file containing half-edge mesh data.
-
-        Args:
-            ply_path (str): path to ply file
-
-        Returns:
-            HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
-        """
-        # return cls(
-        #     *VertTri2HalfEdgeMeshConverter.from_target_ply(ply_path).target_samples,
-        #     *args,
-        #     **kwargs
-        # )
-        return cls(*MeshConverterBase.from_he_ply(ply_path).he_samples, *args, **kwargs)
-
-    @classmethod
-    def load(cls, **kwargs):
-        if "ply_path" in kwargs:
-            try:
-                return cls.from_he_ply(**kwargs)
-            except:
-                return cls.from_vf_ply(**kwargs)
-        elif "npz_path" in kwargs:
-            return cls.load_he_samples(kwargs["npz_path"], **kwargs)
-        elif "xyz_coord_V" in kwargs and "vvv_of_F" in kwargs:
-            return cls.from_vf_samples(
-                kwargs["xyz_coord_V"], kwargs["vvv_of_F"], **kwargs
-            )
-        elif "xyz_coord_V" in kwargs and "h_out_V" in kwargs:
-            return cls(**kwargs)
-        else:
-            raise ValueError("Invalid arguments")
-
-    #######################################################
-    # Fundamental accessors and properties
-    ######################################################
-    @property
-    def xyz_coord_V(self):
-        return self._xyz_coord_V
-
-    @xyz_coord_V.setter
-    def xyz_coord_V(self, value):
-        self._xyz_coord_V = np.array(value, dtype=FLOAT_TYPE)
-
-    @property
-    def h_out_V(self):
-        return self._h_out_V
-
-    @h_out_V.setter
-    def h_out_V(self, value):
-        self._h_out_V = np.array(value, dtype=INT_TYPE)
-
-    @property
-    def v_origin_H(self):
-        return self._v_origin_H
-
-    @v_origin_H.setter
-    def v_origin_H(self, value):
-        self._v_origin_H = np.array(value, dtype=INT_TYPE)
-
-    @property
-    def h_next_H(self):
-        return self._h_next_H
-
-    @h_next_H.setter
-    def h_next_H(self, value):
-        self._h_next_H = np.array(value, dtype=INT_TYPE)
-
-    @property
-    def h_twin_H(self):
-        return self._h_twin_H
-
-    @h_twin_H.setter
-    def h_twin_H(self, value):
-        self._h_twin_H = np.array(value, dtype=INT_TYPE)
-
-    @property
-    def f_left_H(self):
-        return self._f_left_H
-
-    @f_left_H.setter
-    def f_left_H(self, value):
-        self._f_left_H = np.array(value, dtype=INT_TYPE)
-
-    @property
-    def h_bound_F(self):
-        return self._h_bound_F
-
-    @h_bound_F.setter
-    def h_bound_F(self, value):
-        self._h_bound_F = np.array(value, dtype=INT_TYPE)
-
-    @property
-    def h_right_B(self):
-        return self._h_right_B
-
-    @h_right_B.setter
-    def h_right_B(self, value):
-        self._h_right_B = np.array(value, dtype=INT_TYPE)
-
-    @property
-    def num_vertices(self):
-        return len(self._xyz_coord_V)
-
-    @property
-    def num_edges(self):
-        return len(self._v_origin_H) // 2
-
-    @property
-    def num_half_edges(self):
-        return len(self._v_origin_H)
-
-    @property
-    def num_faces(self):
-        return len(self._h_bound_F)
-
-    @property
-    def euler_characteristic(self):
-        return self.num_vertices - self.num_edges + self.num_faces
-
-    @property
-    def num_boundaries(self):
-        return len(self._h_right_B)
-
-    @property
-    def genus(self):
-        return 1 - (self.euler_characteristic + self.num_boundaries) // 2
-
-    @property
-    def V_of_F(self):
-        return V_of_F(*self.he_samples)
-
-    @property
-    def V_of_H(self):
-        return np.array(
-            [[self.v_origin_h(h), self.v_head_h(h)] for h in range(self.num_half_edges)]
-        )
-
-    @property
-    def he_samples(self):
-        """
-        Get lists of vertex positions and connectivity data and required to reconstruct mesh or write to ply file. Vertex/half-edge/face indices are sorted in ascending order and relabeled so that the first index is 0, the second index is 1, etc...
-        """
-
-        return (
-            self.xyz_coord_V,
-            self.h_out_V,
-            self.v_origin_H,
-            self.h_next_H,
-            self.h_twin_H,
-            self.f_left_H,
-            self.h_bound_F,
-            self.h_right_B,
-        )
-
-    def save_he_samples(self, path):
-        """
-        Save data arrays to npz file
-
-        Args:
-            path (str): path to save file
-        """
-        (
-            xyz_coord_V,
-            h_out_V,
-            v_origin_H,
-            h_next_H,
-            h_twin_H,
-            f_left_H,
-            h_bound_F,
-            h_right_B,
-        ) = self.he_samples
-        np.savez(
-            path,
-            xyz_coord_V=xyz_coord_V,
-            h_out_V=h_out_V,
-            v_origin_H=v_origin_H,
-            h_next_H=h_next_H,
-            h_twin_H=h_twin_H,
-            f_left_H=f_left_H,
-            h_bound_F=h_bound_F,
-            h_right_B=h_right_B,
-        )
-
-    #######################################################
-    # Combinatorial maps ##################################
-    #######################################################
-    def xyz_coord_v(self, v):
-        """
-        get array of xyz coordinates of vertex v
-
-        Args:
-            v (int): vertex index
-
-        Returns:
-            numpy.array: xyz coordinates
-        """
-        return self._xyz_coord_V[v]
-
-    def h_out_v(self, v):
-        """
-        get index of an outgoing half-edge incident on vertex v
-
-        Args:
-            v (int): vertex index
-
-        Returns:
-            int: half-edge index
-        """
-        return self._h_out_V[v]
-
-    def h_bound_f(self, f):
-        """get index of a half-edge on the boundary of face f
-
-        Args:
-            f (int): face index
-
-        Returns:
-            int: half-edge index
-        """
-        return self._h_bound_F[f]
-
-    def v_origin_h(self, h):
-        """get index of the vertex at the origin of half-edge h
-
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: vertex index
-        """
-        return self._v_origin_H[h]
-
-    def f_left_h(self, h):
-        """get index of the face to the left of half-edge h
-
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: face index
-        """
-        return self._f_left_H[h]
-
-    def h_next_h(self, h):
-        """get index of the next half-edge after h in the face cycle
-
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: half-edge index
-        """
-        return self._h_next_H[h]
-
-    def h_twin_h(self, h):
-        """get index of the half-edge anti-parallel to half-edge h
-
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: half-edge index
-        """
-        return self._h_twin_H[h]
-
-    def h_right_b(self, b):
-        """get index of a half-edge contained in boundary b
-
-        Args:
-            b (int): boundary index
-
-        Returns:
-            int: half-edge index
-        """
-        if b < 0:
-            return self._h_right_B[-(b + 1)]
-        return self._h_right_B[b]
-
-    # Derived combinatorial maps
-    def h_in_v(self, v):
-        """get index of an incoming half-edge incident on vertex v"""
-        return self.h_twin_h(self.h_out_v(v))
-
-    def v_head_h(self, h):
-        """get index of the vertex at the head of half-edge h
-
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: vertex index
-        """
-        return self.v_origin_h(self.h_twin_h(h))
-
-    def h_rotcw_h(self, h):
-        return self.h_next_h(self.h_twin_h(h))
-
-    def h_rotccw_h(self, h):
-        return self.h_twin_h(self.h_prev_h(h))
-
-    def h_prev_h(self, h):
-        """
-        Finds half-edge previous to h by following next cycle.
-        Safe for half-edges of non-triangle faces and boundaries.
-        """
-        h_next = self.h_next_h(h)
-
-        while h_next != h:
-            h_prev = h_next
-            h_next = self.h_next_h(h_prev)
-        return h_prev
-
-    def h_prev_h_by_rot(self, h):
-        """
-        Finds half-edge previous to h by rotating around origin of h. Faster when length of next cycle is much larger than valence of origin of h (e.g. when h is on a boundary).
-        """
-        p_h = self.h_twin_h(h)
-        n_h = self.h_next_h(p_h)
-        while n_h != h:
-            p_h = self.h_twin_h(n_h)
-            n_h = self.h_next_h(p_h)
-        return p_h
-
-
-class MinimalBoundary:
-    """
-    Negatively oriented boundary
-    """
+class HalfEdgeBoundary:
+    """ """
 
     def __init__(self, supermesh, H):
         self.supermesh = supermesh
@@ -600,66 +141,65 @@ class MinimalPatch:
 
     """
 
-    def __init__(
-        self,
-        supermesh,
-        F,
-    ):
+    def __init__(self, supermesh, F, H_boundary):
         self.supermesh = supermesh
         self.F = F
 
-    @property
-    def V(self):
-        return set(self.supermesh.v_origin_h(np.array(list(self.H), dtype=INT_TYPE)))
-
-    @property
-    def H(self):
-        return self._H
-
-    @H.setter
-    def H(self, value):
-        if isinstance(value, set):
-            self._H = value
-        elif hasattr(value, "__iter__"):
-            self._H = set(value)
-        else:
-            raise ValueError("Argument must be set or iterable.")
+        ##########
 
     @property
     def F(self):
-        return set(self.supermesh.f_left_h(np.array(list(self.H), dtype=INT_TYPE)))
+        return self._F
 
-    #######################################################
-    def close_faces(self):
-        """
-        Find simplical closure of the complex in supermesh.
-        """
-        # next cycle of each face gets
-        #   *interior half-edges
-        #   *positive boundary half-edges
-        V, H, F = set(), set(), self.F
+    @F.setter
+    def F(self, value):
+        if isinstance(value, set):
+            self._F = value
+        elif hasattr(value, "__iter__"):
+            self._F = set(value)
+        else:
+            raise ValueError("Argument must be set or iterable.")
+
+    def get_H_bdry(self):
         arrF = np.array(list(F), dtype=INT_TYPE)
+        # generators for each face boundary
         h_bound_F = self.supermesh.h_bound_f(arrF)
         next_h_bound_F = self.supermesh.h_next_h(h_bound_F)
         next_next_h_bound_F = self.supermesh.h_next_h(next_h_bound_F)
-        H.update(h_bound_F)
-        H.update(next_h_bound_F)
-        H.update(next_next_h_bound_F)
-        # twin of interior half-edges gets
-        #   *negative boundary half-edges
-        arrH = np.array(list(H), dtype=INT_TYPE)
-        h_twin_H = self.supermesh.h_twin_h(arrH)
-        H.update(h_twin_H)
-        # origin of half-edges gets
-        #  *vertices missing from V0
-        arrH = np.array(list(H), dtype=INT_TYPE)
-        v_origin_H = self.supermesh.v_origin_h(arrH)
-        self.V.update(v_origin_H)
-        self.H.update(H)
+        # union of next cycles gives interior and positively oriented boundary half-edges
+        H_closed_plus = set(h_bound_F) | set(next_h_bound_F) | set(next_next_h_bound_F)
+        arrH_half_closed = np.array(list(H_half_closed), dtype=INT_TYPE)
+        # image under twin map gives interior and negatively oriented boundary half-edges
+        H_closed_minus = set(supermesh.h_twin_h(arrH_half_closed))
+        H_boundary_plus = H_closed_plus - H_closed_minus
+        H_interior = H_closed_plus - H_boundary_plus
+        H_boundary_minus = H_closed_minus - H_interior
+
+    def get_frontier(self):
+        arrF = np.array(list(F), dtype=INT_TYPE)
+        # generators for each face boundary
+        h_bound_F = self.supermesh.h_bound_f(arrF)
+        next_h_bound_F = self.supermesh.h_next_h(h_bound_F)
+        next_next_h_bound_F = self.supermesh.h_next_h(next_h_bound_F)
+        # union of next cycles gives interior and positively oriented boundary half-edges
+        H_closed_plus = set(h_bound_F) | set(next_h_bound_F) | set(next_next_h_bound_F)
+        arrH_half_closed = np.array(list(H_half_closed), dtype=INT_TYPE)
+        # image under twin map gives interior and negatively oriented boundary half-edges
+        H_closed_minus = set(supermesh.h_twin_h(arrH_half_closed))
+        H_boundary_plus = H_closed_plus - H_closed_minus
+        H_interior = H_closed_plus - H_boundary_plus
+        H_boundary_minus = H_closed_minus - H_interior
+
+        F_plus = set()
+        F_minus = set()
+        while H_boundary_plus:
+            h_in_v = H_boundary_plus.pop()
+            h_out_v = self.supermesh.h_twin_h(h_in_v)
+            # for h in self.super
 
     #######################################################
     #######################################################
-    ##############################################
+    #######################################################
     @classmethod
     def from_seed_vertex(cls, seed_vertex, supermesh):
         """
@@ -2264,95 +1804,3 @@ class HalfEdgeAtlas:
     def __init__(self, mesh=None, patches=None):
         self.mesh = mesh
         self.patches = patches
-
-
-######################################
-######################################
-class HalfEdgeMeshBuilder:
-    def __init__(
-        self,
-        mesh_type=HalfEdgeMeshBase,
-    ):
-        self.mesh_type = mesh_type
-
-    #######################################################
-    # Initilization methods
-    @classmethod
-    def from_he_data(cls, path, mesh_type=HalfEdgeMeshBase):
-        """Initialize an instance of mesh_type from npz file containing data arrays."""
-        data = np.load(path)
-        # cls(
-        #     data["xyz_coord_V"],
-        #     data["h_out_V"],
-        #     data["v_origin_H"],
-        #     data["h_next_H"],
-        #     data["h_twin_H"],
-        #     data["f_left_H"],
-        #     data["h_bound_F"],
-        #     data["h_right_B"],
-        # )
-        return mesh_type(**data)
-
-    @classmethod
-    def from_vf_data(cls, xyz_coord_V, vvv_of_F, mesh_type=HalfEdgeMeshBase):
-        """
-        Initialize a half-edge mesh from vertex/face data.
-
-        Parameters:
-        ----------
-        xyz_coord_V : list of numpy.ndarray
-            xyz_coord_V[i] = xyz coordinates of vertex i
-        vvv_of_F : list of lists of integers
-            vvv_of_F[j] = [v0, v1, v2] = vertices in face j.
-
-        Returns:
-        -------
-            HalfEdgeMeshBase: An instance of the HalfEdgeMeshBase class with the given vertices and faces.
-        """
-        return cls(
-            *VertTri2HalfEdgeMeshConverter.from_source_samples(
-                xyz_coord_V, vvv_of_F
-            ).target_samples
-        )
-
-    @classmethod
-    def from_vertex_face_ply(cls, ply_path):
-        """Initialize a half-edge mesh from a ply file containing vertex/face data.
-
-        Args:
-            ply_path (str): path to ply file
-
-        Returns:
-            HalfEdgeMesh: An instance of the HalfEdgeMesh class with data from the ply file.
-        """
-        return cls(
-            *VertTri2HalfEdgeMeshConverter.from_source_ply(ply_path).target_samples
-        )
-
-    @classmethod
-    def from_half_edge_ply(cls, ply_path):
-        """Initialize a half-edge mesh from a ply file containing half-edge mesh data.
-
-        Args:
-            ply_path (str): path to ply file
-
-        Returns:
-            HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
-        """
-        return cls(
-            *VertTri2HalfEdgeMeshConverter.from_target_ply(ply_path).target_samples
-        )
-
-    @classmethod
-    def from_half_edge_ply_no_bdry_twin(cls, ply_path):
-        """Initialize a half-edge mesh from a ply file containing half-edge mesh data using the h_twin = -1 convention for boundary edges.
-
-        Args:
-            ply_path (str): path to ply file
-
-        Returns:
-            HalfEdgeMesh: An instance of the HalfEdgeMesh class, initialized with data from the ply file.
-        """
-        return cls(
-            *VertTri2HalfEdgeMeshConverter.from_target_ply(ply_path).source_samples
-        )

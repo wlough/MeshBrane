@@ -578,7 +578,7 @@ class HalfEdgeMeshBase:
             raise ValueError("Starting half-edge does not terminate at vertex v")
         h = h_start
         while True:
-            yield h 
+            yield h
             h = self.h_twin_h(self.h_next_h(h))
             if h == h_start:
                 break
@@ -1699,3 +1699,24 @@ class HalfEdgeMeshBase:
                 H.update([h, self.h_twin_h(h)])
                 V.add(self.v_origin_h(h))
         return V, H, F
+
+
+class HalfEdgeStrip(HalfEdgeMeshBase):
+    def __init__(
+        self,
+        coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+        h_right_B,
+        *args,
+        **kwargs
+    ):
+        self.coord_V = coord_V
+        self.h_out_V = h_out_V
+        self.v_origin_H = v_origin_H
+        self.h_next_H = h_next_H
+        self.h_twin_H = h_twin_H
