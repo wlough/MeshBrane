@@ -96,7 +96,8 @@ class MeshViewer:
         rgba_half_edge=(1.0, 0.498, 0.0, 1.0),
         rgba_face=(0.0, 0.63335, 0.05295, 0.65),
         rgba_boundary_half_edge=(0.0, 0.4471, 0.6980, 1.0),
-        rgba_edge=(1.0, 0.498, 0.0, 1.0),
+        rgba_edge=(0.0, 0.4471, 0.698, 0.8),
+        rgba_surface=(0.0, 0.6745, 0.2784, 0.5),
         # mlab data that depends on mesh size
         radius_V=None,
         rgba_V=None,
@@ -456,7 +457,7 @@ class MeshViewer:
         )
         return vert_cloud
 
-    def add_wireframe_surface_to_fig(self, downsampled=False):
+    def add_wireframe_surface_to_fig(self, fig, downsampled=False):
         if downsampled:
             V = self.Msimp.xyz_coord_V
             F = self.Msimp.V_of_F
@@ -469,7 +470,7 @@ class MeshViewer:
             "color": tuple(self.rgba_edge[:3]),
             "representation": "wireframe",
         }
-        mesh = mlab.triangular_mesh(*V.T, F, **edge_mesh_kwargs)
+        mesh = mlab.triangular_mesh(*V.T, F, **edge_mesh_kwargs, figure=fig)
         return mesh
 
     def add_face_colored_surface_to_fig(self, downsampled=False):
@@ -626,7 +627,7 @@ class MeshViewer:
                 self.add_vector_field_to_fig(**data)
 
         if show_wireframe_surface:
-            wireframe_surface = self.add_wireframe_surface_to_fig(
+            wireframe_surface = self.add_wireframe_surface_to_fig(fig,
                 downsampled=downsampled
             )
         if show_face_colored_surface:
@@ -890,7 +891,7 @@ class MultiMeshViewer:
         fig = mlab.figure(title, size=figsize)
         for viewer in self.mesh_viewers:
             if viewer.show_wireframe_surface:
-                viewer.add_wireframe_surface_to_fig()
+                viewer.add_wireframe_surface_to_fig(fig)
             if viewer.show_face_colored_surface:
                 viewer.add_face_colored_surface_to_fig()
             if viewer.show_vertex_colored_surface:

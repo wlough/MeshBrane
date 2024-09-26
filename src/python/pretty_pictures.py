@@ -56,7 +56,6 @@ RGBA_DICT = {
     "meshbrane_green": (0.0, 0.63335, 0.05295, 0.65),
     "meshbrane_blue": (0.0, 0.4471, 0.6980, 1.0),
 }
-
 MATPLOTLIB_COLORS = (
     "b",  # Blue
     "g",  # Green
