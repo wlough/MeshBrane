@@ -1700,23 +1700,28 @@ class HalfEdgeMeshBase:
                 V.add(self.v_origin_h(h))
         return V, H, F
 
+class HalfEdgeSubMesh:
+    def __init__(self, coord_V, h_out_V, v_origin_H, h_next_H, *args, **kwargs):
+        pass
+class HalfEdgeSpaceCurve:
+    """
+    Curve in a half-edge mesh
+    """
+    def __init__(self, coord_V,  h_out_V, v_origin_H, h_next_H, *args, **kwargs):
+        pass
+# class HalfEdgeLoop:
+#     def __init__(self, )
+    
+# class HalfEdgeBoundary:
 
-class HalfEdgeStrip(HalfEdgeMeshBase):
-    def __init__(
-        self,
-        coord_V,
-        h_out_V,
-        v_origin_H,
-        h_next_H,
-        h_twin_H,
-        f_left_H,
-        h_bound_F,
-        h_right_B,
-        *args,
-        **kwargs
-    ):
-        self.coord_V = coord_V
-        self.h_out_V = h_out_V
-        self.v_origin_H = v_origin_H
-        self.h_next_H = h_next_H
-        self.h_twin_H = h_twin_H
+
+
+class Patch:
+    def __init__(self, coord_V, h_out_V, v_origin_H, h_next_H, *args, **kwargs):
+        pass
+
+class TransitionFunction:
+    def __init__(self, patch1, patch2, *args, **kwargs):
+        pass
+
+class 
