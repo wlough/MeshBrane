@@ -1,4 +1,4 @@
-from src.python.half_edge_base_mesh import HalfEdgeMeshBase
+from src.python.half_edge_mesh import HalfEdgeMeshBase
 import numpy as np
 from src.python.global_vars import INT_TYPE, FLOAT_TYPE
 

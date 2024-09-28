@@ -457,6 +457,44 @@ class MeshViewer:
         )
         return vert_cloud
 
+    def add_next_cycle_to_fig(self, h_start=None, h_end=None, max_num=1000):
+        if h_end is None:
+            h_end = h_start
+        if h_start is None:
+            h_start = 0
+        h = h_start
+        H = []
+        while True:
+            H.append(h)
+            h = self.M.h_next_h(h)
+            if h == h_end:
+                break
+            if h == h_start:
+                break
+            if len(H) > max_num:
+                break
+        H = np.array(H, dtype=INT_TYPE)
+        V = self.M.xyz_coord_v(self.M.v_origin_h(H))
+        edge_radius = 0.3 * self.radius_vertex
+        rgb_edge = self.rgba_edge[:3]
+        ####################################################
+        curve_kwargs = {
+            "name": "edge_curve",
+            "color": rgb_edge,
+            "tube_radius": edge_radius,
+        }
+        edge_tube = mlab.plot3d(*V.T, **curve_kwargs)
+        return edge_tube
+
+    def add_edge_curve_to_fig(self, ordered_V=True):
+
+        if ordered_V:
+            h_start = self.M.h_out_v(0)
+            max_num = self.M.num_vertices
+            return self.add_next_cycle_to_fig(h_start=h_start, max_num=max_num)
+        else:
+            raise NotImplementedError("Unordered edge curves not implemented")
+
     def add_wireframe_surface_to_fig(self, fig, downsampled=False):
         if downsampled:
             V = self.Msimp.xyz_coord_V
@@ -627,8 +665,8 @@ class MeshViewer:
                 self.add_vector_field_to_fig(**data)
 
         if show_wireframe_surface:
-            wireframe_surface = self.add_wireframe_surface_to_fig(fig,
-                downsampled=downsampled
+            wireframe_surface = self.add_wireframe_surface_to_fig(
+                fig, downsampled=downsampled
             )
         if show_face_colored_surface:
             face_colored_surface = self.add_face_colored_surface_to_fig(
@@ -642,6 +680,48 @@ class MeshViewer:
             vert_cloud = self.add_vertices_to_fig(downsampled=downsampled)
         if show_half_edges:
             half_edge_vector_field = self.add_half_edges_fig(downsampled=downsampled)
+
+        if show_plot_axes:
+            mlab.axes()
+            mlab.orientation_axes()
+        if view is not None:
+            mlab.view(**view)
+
+        # mview = mlab.view()
+        # print(mview)
+        if save:
+            if fig_path is None:
+                print("fig_path is None")
+            else:
+                mlab.savefig(fig_path, figure=fig, size=figsize)
+        if show:
+            mlab.show()
+
+        mlab.close(all=True)
+
+    def curve_plot(
+        self,
+        show=True,
+        save=False,
+        title="",
+        show_vertices=True,
+        show_edges=True,
+        show_plot_axes=False,
+        view=None,
+        figsize=(2180, 2180),
+        fig_path=None,
+    ):
+        """
+        fig_path=f"{output_directory}/temp_images/fig_{image_count:0>4}.png"
+        """
+        mlab.options.offscreen = not show
+        fig = mlab.figure(title, size=figsize)
+        ################################
+
+        if show_vertices:
+            vert_cloud = self.add_vertices_to_fig()
+        if show_edges:
+            edge_tube = self.add_edge_curve_to_fig()
 
         if show_plot_axes:
             mlab.axes()

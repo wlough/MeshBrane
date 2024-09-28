@@ -12,7 +12,7 @@ def mesh_gen_reg_force():
     from src.python.utilities import make_output_dir
     from src.python.half_edge_base_unit_torus import DoughnutFactory
     import numpy as np
-    from src.python.half_edge_base_mesh import HalfEdgeMeshBase
+    from python.half_edge_mesh import HalfEdgeMeshBase
     from src.python.half_edge_base_brane import Brane
     from src.python.half_edge_base_viewer import MeshViewer
     from src.python.half_edge_base_ply_tools import MeshConverterBase

@@ -5,7 +5,7 @@
 # os.chdir
 # os.path.basename
 
-from src.python.half_edge_base_mesh import HalfEdgeMeshBase
+from python.half_edge_mesh import HalfEdgeMeshBase
 from src.python.half_edge_base_brane import Brane
 from src.python.half_edge_base_viewer import MeshViewer
 import numpy as np
@@ -129,7 +129,7 @@ for iter in range(100):
     # mv2.vector_field_data
     mv.plot(save=True, show=False)
 # %%
-from src.python.half_edge_base_mesh import HalfEdgeMeshBase
+from python.half_edge_mesh import HalfEdgeMeshBase
 from src.python.half_edge_base_ply_tools import (
     VertTri2HalfEdgeMeshConverter,
     MeshConverterBase,

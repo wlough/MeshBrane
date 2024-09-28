@@ -21,7 +21,7 @@ t = np.r_[0, t]
 mlab.triangular_mesh(x, y, z, triangles, scalars=t)
 mlab.show()
 # %%
-from src.python.half_edge_base_mesh import Brane
+from python.half_edge_mesh import Brane
 import numpy as np
 
 # from src.python.mesh_viewer import MeshViewer

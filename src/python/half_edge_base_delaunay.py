@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.spatial import Delaunay
-from src.python.half_edge_base_mesh import HalfEdgeMeshBase
+from python.half_edge_mesh import HalfEdgeMeshBase
 from src.python.half_edge_base_viewer import MeshViewer
 from src.python.jit_utils import check_vf_list_orientation, fib_sphere, uniform_sphere
 from numba import jit

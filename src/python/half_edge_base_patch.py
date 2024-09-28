@@ -1,4 +1,4 @@
-from src.python.half_edge_base_mesh import HalfEdgeMeshBase
+from python.half_edge_mesh import HalfEdgeMeshBase
 import numpy as np
 
 

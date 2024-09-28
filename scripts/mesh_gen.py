@@ -4,7 +4,7 @@ from src.python.half_edge_base_named_mesh import (
     HalfEdgeSphere,
     HalfEdgeTorus,
 )
-from src.python.half_edge_base_mesh import HalfEdgeMeshBase
+from python.half_edge_mesh import HalfEdgeMeshBase
 from src.python.half_edge_base_viewer import MeshViewer
 
 # from src.python.torus_builder import
@@ -188,7 +188,7 @@ output_dir = "./output/test_ply"
 make_output_dir(output_dir, overwrite=True)
 DoughnutFactory.build_test_plys(num_refine=2, ply_dir=output_dir)
 # %%
-from src.python.half_edge_base_mesh import HalfEdgeMeshBase
+from python.half_edge_mesh import HalfEdgeMeshBase
 from src.python.half_edge_base_viewer import MeshViewer
 from src.python.half_edge_base_named_mesh import HalfEdgeTorus
 

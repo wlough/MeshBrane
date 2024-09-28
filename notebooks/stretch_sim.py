@@ -58,104 +58,74 @@ V2, H2, F2 = m.closure2(V.copy(), H.copy(), F.copy())
 # %%
 from src.python.half_edge_base_brane import Brane
 
-# from src.python.half_edge_base_viewer import MeshViewer
+from src.python.half_edge_base_viewer import MeshViewer
+
 # from src.python.half_edge_base_patch import HalfEdgePatch
+from src.python.half_edge_mesh import HalfEdgeMeshBase, HalfEdgeBoundary
 import numpy as np
 
 # from mayavi import mlab
 
 ply_path = "./data/half_edge_base/ply/unit_sphere_005120_he.ply"
-m = Brane.load(ply_path=ply_path)
+ply_path = "./data/half_edge_base/ply/neovius_he.ply"
+m = HalfEdgeMeshBase.load(ply_path=ply_path)
 
+mesh = m
+# bigH = np.arange(mesh.num_half_edges)
+H_minus = mesh.negative_boundary_contains_h(range(mesh.num_half_edges)).nonzero()[0]
+nextH_minus = mesh.h_next_h(H_minus)
+H_plus = mesh.h_twin_h(nextH_minus)
+nextH_plus = mesh.h_twin_h(H_minus)
 
-# class MaterialPoint:
-#     def __init__(self, coord_xyz=None, h_out=None):
-#         self.xyz = xyz
-
-
-class HalfEdgeVertex:
-    def __init__(self, xyz_coord=None, h_out=None):
-        self.xyz_coord = xyz_coord
-        self.h_out = h_out
-
-    def __hash__(self):
-        return hash(
-            (
-                tuple(self.xyz_coord),
-                self.h_out,
-            )
-        )
-
-
-class HalfEdge:
-    def __init__(self, v_origin=None, h_twin=None, h_next=None, f_left=None):
-        self.v_origin = v_origin
-        self.h_twin = h_twin
-        self.h_next = h_next
-        self.f_left = f_left
-
-    def __hash__(self):
-        return hash(
-            (
-                self.v_origin,
-                self.h_next,
-                self.h_twin,
-                self.f_left,
-            )
-        )
-
-
-class HalfEdgeFace:
-    def __init__(self, h_bound=None):
-        self.h_bound = h_bound
-
-    def __hash__(self):
-        return hash(
-            (
-                tuple(self.xyz_coord),
-                self.h_out,
-                self.v_origin,
-                self.h_next,
-                self.h_twin,
-                self.f_left,
-                self.h_bound,
-                self.h_right,
-            )
-        )
-
-
-# M = gen(V,H,F)
-H = set(np.random.randint(0, 555, 5, dtype="int32"))
-arrH = np.array(list(H), dtype="int32")
-# _f_left_H = m.f_left_h(_H)
-H.update(set(m.h_next_h(arrH)) | set(m.h_next_h(m.h_next_h(arrH))))
-arrH = np.array(list(H), dtype="int32")
-
-v_origin_H = m.v_origin_h(arrH)
-f_left_H = m.f_left_h(arrH)
-
-V = set(v_origin_H)
-F = set(f_left_H)
-arrV = np.array(list(V), dtype="int32")
-arrF = np.array(list(F), dtype="int32")
-xyz_coord_V = m.xyz_coord_v(arrV)
-h_out_V = m.h_out_v(arrV)
-h_bound_F = m.h_bound_f(arrF)
-
-h_next_H = m.h_next_h(arrH)
-h_twin_H = m.h_twin_h(arrH)
-f_left_H = m.f_left_h(arrH)
-
-H_interior = (
-    set(h_bound_F) | set(m.h_next_h(h_bound_F)) | set(m.h_next_h(m.h_next_h(h_bound_F)))
-)
-H_boundary = H - H_interior
-vertices = np.array([HalfEdgeVertex(xyz_coord=_) for _ in xyz_coord_V], dtype=object)
-halfedges = np.array([HalfEdge() for _ in arrH], dtype=object)
-faces = np.array([HalfEdgeFace() for _ in arrF], dtype=object)
+mv = MeshViewer(m, show_half_edges=True)
+# mv.update(rgba_half_edge=(0, 0, 0, 0))
+mv.update_rgba_H((0, 0, 0, 0))
+mv.update_rgba_H(np.array([1, 0, 0, 1]), H_plus)
+mv.plot()
 # %%
-vertices = [HalfEdgeVertex() for _ in V]
-halfedges = [HalfEdge() for _ in H]
-faces = [HalfEdgeFace() for _ in V]
-# h =
-# v = HalfEdgeVertex(m, )
+from src.python.combinatorics import arg_right_action
+
+P = arg_right_action(list(H_plus), list(nextH_plus))
+nextH_plus - H_plus[P]
+
+
+def arg_right_action0(Xsource, Xtarget):
+    """
+    Return permutation P that maps Xsource to Xtarget by right action:
+
+        Xtarget[i] = (P*Xsource)[i]=Xsource[P[i]].
+
+    Parameters
+    ----------
+    Xsource : array-like
+        each element of Xsource must be unique (no duplicates)
+    Xtarget : array-like
+        permutation of Xsource
+
+    Returns
+    -------
+    numpy.ndarray : array of source indices in the order they appear in target
+
+    Example
+    -------
+    Xsource=[a, b, c, d], Xtarget=[b, a, d, c]
+            [0, 1, 2, 3]        P=[1, 0, 3, 2]
+
+    Notes
+    -----
+    arg_right_action(Xsource, Xtarget) = [Xsource.index(x) for x in Xtarget]
+                                       = [Xsource.index(Xtarget[i]) for i in Zn]
+    """
+    Xsource = np.array(Xsource)
+    Xtarget = np.array(Xtarget)
+
+    # Create an array of indices for Xsource
+    indices = np.argsort(Xsource)
+
+    # Map Xtarget to the indices of Xsource
+    return indices[np.searchsorted(Xsource, Xtarget, sorter=indices)]
+
+
+P0 = list(arg_right_action0(H_plus, nextH_plus))
+
+P0 - P
