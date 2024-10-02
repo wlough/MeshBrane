@@ -88,6 +88,7 @@ class MeshViewer:
         image_format="png",
         image_prefix="frame",
         image_index_length=5,
+        movie_dir=None,
         movie_name="movie",
         movie_format="mp4",
         # Vertex/Edge/Face visual parameters
@@ -97,7 +98,7 @@ class MeshViewer:
         rgba_face=(0.0, 0.63335, 0.05295, 0.65),
         rgba_boundary_half_edge=(0.0, 0.4471, 0.6980, 1.0),
         rgba_edge=(0.0, 0.4471, 0.698, 0.8),
-        rgba_surface=(0.0, 0.6745, 0.2784, 0.5),
+        # rgba_surface=(0.0, 0.6745, 0.2784, 0.5),
         # mlab data that depends on mesh size
         radius_V=None,
         rgba_V=None,
@@ -134,6 +135,10 @@ class MeshViewer:
         self.image_format = image_format
         self.image_prefix = image_prefix
         self.image_index_length = image_index_length
+        if movie_dir is None:
+            self.movie_dir = image_dir
+        else:
+            self.movie_dir = movie_dir
         self.movie_name = movie_name
         self.movie_format = movie_format
         ###############################################################
@@ -806,7 +811,7 @@ class MeshViewer:
             image_prefix=self.image_prefix,
             index_length=self.image_index_length,
             movie_name=self.movie_name,
-            movie_dir=self.image_dir,
+            movie_dir=self.movie_dir,
             movie_format=self.movie_format,
         )
 

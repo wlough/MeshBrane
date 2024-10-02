@@ -19,6 +19,8 @@ RGBA_DICT = {
     "green": (0.0, 0.6745, 0.2784, 1.0),
     "green10": (0.0, 0.6745, 0.2784, 0.1),
     "green20": (0.0, 0.6745, 0.2784, 0.2),
+    "green30": (0.0, 0.6745, 0.2784, 0.3),
+    "green40": (0.0, 0.6745, 0.2784, 0.4),
     "green50": (0.0, 0.6745, 0.2784, 0.5),
     "green80": (0.0, 0.6745, 0.2784, 0.8),
     "blue": (0.0, 0.4471, 0.6980, 1.0),
@@ -49,8 +51,13 @@ RGBA_DICT = {
     "purple": (0.5804, 0.0, 0.8275, 1.0),
     "purple10": (0.5804, 0.0, 0.8275, 0.1),
     "purple20": (0.5804, 0.0, 0.8275, 0.2),
+    "purple30": (0.5804, 0.0, 0.8275, 0.3),
+    "purple40": (0.5804, 0.0, 0.8275, 0.4),
     "purple50": (0.5804, 0.0, 0.8275, 0.5),
+    "purple60": (0.5804, 0.0, 0.8275, 0.6),
+    "purple70": (0.5804, 0.0, 0.8275, 0.7),
     "purple80": (0.5804, 0.0, 0.8275, 0.8),
+    "purple90": (0.5804, 0.0, 0.8275, 0.9),
     "meshbrane_red": (0.7057, 0.0156, 0.1502, 1.0),
     "meshbrane_orange": (1.0, 0.498, 0.0, 1.0),
     "meshbrane_green": (0.0, 0.63335, 0.05295, 0.65),
@@ -504,7 +511,7 @@ def movie(
     image_path = os.path.join(image_dir, image_name)
     if movie_dir is None:
         movie_dir = image_dir
-    movie_path = os.path.join(image_dir, f"{movie_name}.{movie_format}")
+    movie_path = os.path.join(movie_dir, f"{movie_name}.{movie_format}")
     ###############################################################
     wkdir = image_dir
     relative_movie_path = os.path.relpath(movie_path, wkdir)

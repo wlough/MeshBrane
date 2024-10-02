@@ -20,46 +20,11 @@ m = sim.envelope
 mv = sim.mesh_viewer
 mv.plot()
 # %%
-from src.python.half_edge_base_brane import Brane
-from src.python.half_edge_base_viewer import MeshViewer
-from src.python.half_edge_base_patch import HalfEdgePatch
-import numpy as np
-from mayavi import mlab
-
-ply_path = "./data/half_edge_base/ply/unit_sphere_005120_he.ply"
-m = Brane.load(ply_path=ply_path)
-v = 1322
-p1 = HalfEdgePatch.from_seed_to_radius(v, m, 0.3)
-p2 = HalfEdgePatch.from_seed_to_radius(v, m, 0.2)
-p0 = HalfEdgePatch.from_seed_to_radius(v, m, 0.1)
-F = p2.F - p0.F
-H = p2.H - p0.H
-V = p2.V - p0.V
-V0, H0, F0 = m.closure(V.copy(), H.copy(), F.copy())
-V1, H1, F1 = m.closure1(V.copy(), H.copy(), F.copy())
-V2, H2, F2 = m.closure2(V.copy(), H.copy(), F.copy())
-[
-    V1.symmetric_difference(V0),
-    V2.symmetric_difference(V1),
-    V0.symmetric_difference(V2),
-    H1.symmetric_difference(H0),
-    H2.symmetric_difference(H1),
-    H0.symmetric_difference(H2),
-    F1.symmetric_difference(F0),
-    F2.symmetric_difference(F1),
-    F0.symmetric_difference(F2),
-]
-
-# %timeit m.closure(V.copy(), H.copy(), F.copy())
-# %timeit m.closure1(V.copy(), H.copy(), F.copy())
-# %timeit m.closure2(V.copy(), H.copy(), F.copy())
 
 
 # %%
 from src.python.half_edge_base_brane import Brane
-
 from src.python.half_edge_base_viewer import MeshViewer
-
 from src.python.half_edge_base_patch import HalfEdgePatch
 from src.python.half_edge_mesh import HalfEdgeMeshBase, HalfEdgeBoundary
 import numpy as np
@@ -68,80 +33,104 @@ import numpy as np
 
 ply_path = "./data/half_edge_base/ply/unit_sphere_005120_he.ply"
 ply_path = "./data/half_edge_base/ply/neovius_he.ply"
+
 m = HalfEdgeMeshBase.load(ply_path=ply_path)
-p = HalfEdgePatch.from_seed_to_radius(33, m, .3)
-b = HalfEdgeBoundary.from_mesh(m)
-b1 = HalfEdgeBoundary.from_faces(m, p.F)
-mv = MeshViewer(m, show_half_edges=True)
-# mv.update(rgba_half_edge=(0, 0, 0, 0))
-mv.update_rgba_H((0, 0, 0, 0))
-arrF = np.array(list(p.F))
-mv.update_rgba_F(np.array([1, 0, 0,.6]), arrF)
-arrH = np.array(list(b.H))
-mv.update_rgba_H(np.array([0, 1, 0, 1]), arrH)
-arrH1 = np.array(list(b1.H))
-mv.update_rgba_H(np.array([0, 0, 1, 1]), arrH1)
 
-mv.plot()
+p = HalfEdgePatch.from_seed_to_radius(313, m, 0.3)
+
+mv = MeshViewer(m, show_half_edges=True, show_wireframe_surface=False)
+mv.update_rgba_H((0, 0, 0, 0))
+
+bm = HalfEdgeBoundary.from_mesh(m)
+bm_rgba_H = (0, 0, 0, 1)
+bm_rgba_F = bm_rgba_H[:-1] + (0.5,)
+bm_arrH = bm.arrH
+bm_arrF_interior = np.array(sorted(bm.get_F_interior()))
+mv.update_rgba_H(bm_rgba_H, bm_arrH)
+mv.update_rgba_F(bm_rgba_F, bm_arrF_interior)
+
+# bm2 = HalfEdgeBoundary.from_faces(m, set(range(m.num_faces)))
+# bm2_rgba_H = (1, 1, 1, 1)
+# bm2_rgba_F = bm2_rgba_H[:-1] + (0.5,)
+# bm2_arrH = bm2.arrH
+# bm2_arrF_interior = np.array(sorted(bm2.get_interior_F()))
+# mv.update_rgba_H(bm2_rgba_H, bm2_arrH)
+# mv.update_rgba_F(bm2_rgba_F, bm2_arrF_interior)
+
+bp = HalfEdgeBoundary.from_faces(m, p.F)
+bp_rgba_H = (1, 0, 0, 1)
+bp_rgba_F = bp_rgba_H[:-1] + (0.5,)
+bp_arrH = bp.arrH
+bp_arrF_interior = np.array(sorted(bp.get_F_interior()))
+mv.update_rgba_H(bp_rgba_H, bp_arrH)
+mv.update_rgba_F(bp_rgba_F, bp_arrF_interior)
+
+# mv.plot()
+
+
+def apply_fun_iter(self, fun, num_iters=1):
+    m = self.M
+    self.plot(save=True, show=False, title=f"iter_{0}")
+    for i in range(num_iters):
+        print(f"Applying fun to mesh {i+1} of {num_iters}")
+        fun(m)
+        self.plot(save=True, show=False, title=f"iter_{i+1}")
+    self.movie()
+
 
 # %%
-# bigH = np.arange(mesh.num_half_edges)
-H_minus = mesh.negative_boundary_contains_h(range(mesh.num_half_edges)).nonzero()[0]
-nextH_minus = mesh.h_next_h(H_minus)
-H_plus = mesh.h_twin_h(nextH_minus)
-nextH_plus = mesh.h_twin_h(H_minus)
 
-mv = MeshViewer(m, show_half_edges=True)
-# mv.update(rgba_half_edge=(0, 0, 0, 0))
-mv.update_rgba_H((0, 0, 0, 0))
-mv.update_rgba_H(np.array([1, 0, 0, 1]), H_plus)
-mv.plot()
+
+def movie_generate_cumulative_F_interior():
+    from src.python.half_edge_base_viewer import MeshViewer
+    from src.python.half_edge_mesh import HalfEdgeMeshBase, HalfEdgeBoundary
+    from src.python.pretty_pictures import RGBA_DICT
+
+    rgba_F_surface = RGBA_DICT["green50"]
+    rgba_H_surface = RGBA_DICT["orange80"]
+
+    rgba_H_boundary = RGBA_DICT["blue"]
+    rgba_F_interior = RGBA_DICT["purple70"]
+    rgba_F_frontier = RGBA_DICT["purple30"]
+    mv_kwargs = {
+        "show_half_edges": True,
+        "show_wireframe_surface": False,
+        "show_face_colored_surface": True,
+        "show_vertex_colored_surface": False,
+        "rgba_half_edge": rgba_H_surface,
+        "rgba_face": rgba_F_surface,
+    }
+    ply_path = "./data/half_edge_base/ply/neovius_he.ply"
+
+    m = HalfEdgeMeshBase.load(ply_path=ply_path)
+    b = HalfEdgeBoundary.from_mesh(m)
+    mv = MeshViewer(m, **mv_kwargs)
+
+    mv.update_rgba_H(rgba_H_boundary, b.arrH)
+    title = f"{mv.image_prefix}_{mv.image_count:0{mv.image_index_length}d}.{mv.image_format}"
+    mv.plot(save=True, show=False, title=title)
+    for F_interior, F_frontier in b.generate_cumulative_F_interior():
+        # print(f"creating frame {i} of {num_iters}...                          ", end="\r")
+        arrF_interior = np.array(list(F_interior))
+        arrF_frontier = np.array(list(F_frontier))
+        mv.update_rgba_F(rgba_F_interior, arrF_interior)
+        mv.update_rgba_F(rgba_F_frontier, arrF_frontier)
+        title = f"{mv.image_prefix}_{mv.image_count:0{mv.image_index_length}d}.{mv.image_format}"
+        print(f"\r{' ' * 50}\n{' ' * 50}", end="")
+        # Print the progress messages
+        print(f"\rCreating {title}...", end="")
+        print(
+            f"\nnum_interior={len(F_interior)}, num_frontier={len(F_frontier)}", end=""
+        )
+        mv.plot(save=True, show=False, title=title)
+    mv.movie()
+
+
+movie_generate_cumulative_F_interior()
 # %%
-from src.python.combinatorics import arg_right_action, compute_cycles
+from src.python.atlas_test_sim import AtlasTestSim
 
 
-
-
-def arg_right_action0(Xsource, Xtarget):
-    """
-    Return permutation P that maps Xsource to Xtarget by right action:
-
-        Xtarget[i] = (P*Xsource)[i]=Xsource[P[i]].
-
-    Parameters
-    ----------
-    Xsource : array-like
-        each element of Xsource must be unique (no duplicates)
-    Xtarget : array-like
-        permutation of Xsource
-
-    Returns
-    -------
-    numpy.ndarray : array of source indices in the order they appear in target
-
-    Example
-    -------
-    Xsource=[a, b, c, d], Xtarget=[b, a, d, c]
-            [0, 1, 2, 3]        P=[1, 0, 3, 2]
-
-    Notes
-    -----
-    arg_right_action(Xsource, Xtarget) = [Xsource.index(x) for x in Xtarget]
-                                       = [Xsource.index(Xtarget[i]) for i in Zn]
-    """
-    Xsource = np.array(Xsource)
-    Xtarget = np.array(Xtarget)
-
-    # Create an array of indices for Xsource
-    indices = np.argsort(Xsource)
-
-    # Map Xtarget to the indices of Xsource
-    return indices[np.searchsorted(Xsource, Xtarget, sorter=indices)]
-
-
-
-P = arg_right_action(list(H_plus), list(nextH_plus))
-P0 = list(arg_right_action0(H_plus, nextH_plus))
-
-%timeit arg_right_action(list(H_plus), list(nextH_plus))
-%timeit list(arg_right_action0(H_plus, nextH_plus))
+s = TestSim(clean_output_dir=True, dF_draw=100, make_movie_frames=True)
+s.run()
+# np.array(list(s.F_frontier))

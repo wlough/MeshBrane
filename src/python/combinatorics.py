@@ -1,7 +1,7 @@
 ###########################################################################################
 # Finite groups
 # -------------
-# A bag of tricks for working with permutations, group actions/representations, and other combinatorial things
+# A bag of tricks for working with permutations, finite group actions/representations, and other combinatorial things
 ###########################################################################################
 
 ###################################################
