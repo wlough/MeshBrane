@@ -1,4 +1,4 @@
-from python.half_edge_mesh import HalfEdgeMeshBase
+from src.python.half_edge_mesh import HalfEdgeMeshBase
 import numpy as np
 
 
@@ -478,7 +478,7 @@ class MinimalPatch:
             H_check = self.H.copy()
         if F_check is None:
             F_check = set()  # set of faces that need to be checked
-        H_right_B = set()
+        h_right_B = set()
         while V_check:
             v = V_check.pop()
             for hv in self.supermesh.generate_H_out_v_clockwise(v):
@@ -489,9 +489,9 @@ class MinimalPatch:
                     f_in_F = f in self.F
                     ft_in_F = ft in self.F
                     if f_in_F and (not ft_in_F):
-                        H_right_B.add(ht)
+                        h_right_B.add(ht)
                     elif (not f_in_F) and ft_in_F:
-                        H_right_B.add(h)
+                        h_right_B.add(h)
                     H_check.discard(h)
                     H_check.discard(ht)
                     F_check.discard(f)
@@ -504,9 +504,9 @@ class MinimalPatch:
                 ft = self.supermesh.f_left_h(ht)
                 ft_in_F = ft in self.F
                 if f_in_F and (not ft_in_F):
-                    H_right_B.add(ht)
+                    h_right_B.add(ht)
                 elif (not f_in_F) and ft_in_F:
-                    H_right_B.add(h)
+                    h_right_B.add(h)
                 H_check.discard(h)
                 H_check.discard(ht)
 
@@ -516,17 +516,17 @@ class MinimalPatch:
             f_in_F = f in self.F
             ft_in_F = ft in self.F
             if f_in_F and (not ft_in_F):
-                H_right_B.add(ht)
+                h_right_B.add(ht)
             elif (not f_in_F) and ft_in_F:
-                H_right_B.add(h)
+                h_right_B.add(h)
             H_check.discard(ht)
 
         h_right_B = []
-        while H_right_B:
-            h = H_right_B.pop()
+        while h_right_B:
+            h = h_right_B.pop()
             h_right_B.append(h)
             for h in self.generate_H_next_h(h):
-                H_right_B.discard(h)
+                h_right_B.discard(h)
         return np.array(h_right_B, dtype="int32")
 
     def expand_by_one_ring(self):
@@ -623,7 +623,7 @@ class MinimalPatch:
                     ]
                 )
                 self.F.add(f)
-        H_right_B = set()
+        h_right_B = set()
         while H_frontier:
             h = H_frontier.pop()
             ht = self.supermesh.h_twin_h(h)
@@ -633,9 +633,9 @@ class MinimalPatch:
             f_in_F = f in self.F
             ft_in_F = ft in self.F
             if f_in_F and (not ft_in_F):
-                H_right_B.add(ht)
+                h_right_B.add(ht)
             elif (not f_in_F) and ft_in_F:
-                H_right_B.add(h)
+                h_right_B.add(h)
             else:
                 continue
             v = self.supermesh.v_origin_h(h)
@@ -644,11 +644,11 @@ class MinimalPatch:
             self.H.update([h, ht])
 
         h_right_B = []
-        while H_right_B:
-            h = H_right_B.pop()
+        while h_right_B:
+            h = h_right_B.pop()
             h_right_B.append(h)
             for h in self.generate_H_next_h(h):
-                H_right_B.discard(h)
+                h_right_B.discard(h)
         self.h_right_B = np.array(h_right_B, dtype="int32")
 
         delta_num_faces = len(self.F) - num_faces
@@ -796,7 +796,7 @@ class HalfEdgeComplex:
     # def h_twin_h(self, h):
     #     return self._h_twin_H[h]
 
-    def h_right_b(self, b):
+    def h_right_B(self, b):
         if b < 0:
             return self._h_right_B[-(b + 1)]
         return self._h_right_B[b]
@@ -1275,7 +1275,7 @@ class HalfEdgePatch:
             H_check = self.H.copy()
         if F_check is None:
             F_check = set()  # set of faces that need to be checked
-        H_right_B = set()
+        h_right_B = set()
         while V_check:
             v = V_check.pop()
             for hv in self.supermesh.generate_H_out_v_clockwise(v):
@@ -1286,9 +1286,9 @@ class HalfEdgePatch:
                     f_in_F = f in self.F
                     ft_in_F = ft in self.F
                     if f_in_F and (not ft_in_F):
-                        H_right_B.add(ht)
+                        h_right_B.add(ht)
                     elif (not f_in_F) and ft_in_F:
-                        H_right_B.add(h)
+                        h_right_B.add(h)
                     H_check.discard(h)
                     H_check.discard(ht)
                     F_check.discard(f)
@@ -1301,9 +1301,9 @@ class HalfEdgePatch:
                 ft = self.supermesh.f_left_h(ht)
                 ft_in_F = ft in self.F
                 if f_in_F and (not ft_in_F):
-                    H_right_B.add(ht)
+                    h_right_B.add(ht)
                 elif (not f_in_F) and ft_in_F:
-                    H_right_B.add(h)
+                    h_right_B.add(h)
                 H_check.discard(h)
                 H_check.discard(ht)
 
@@ -1313,17 +1313,17 @@ class HalfEdgePatch:
             f_in_F = f in self.F
             ft_in_F = ft in self.F
             if f_in_F and (not ft_in_F):
-                H_right_B.add(ht)
+                h_right_B.add(ht)
             elif (not f_in_F) and ft_in_F:
-                H_right_B.add(h)
+                h_right_B.add(h)
             H_check.discard(ht)
 
         h_right_B = []
-        while H_right_B:
-            h = H_right_B.pop()
+        while h_right_B:
+            h = h_right_B.pop()
             h_right_B.append(h)
             for h in self.generate_H_next_h(h):
-                H_right_B.discard(h)
+                h_right_B.discard(h)
         return np.array(h_right_B, dtype="int32")
 
     def expand_by_one_ring(self):
@@ -1420,7 +1420,7 @@ class HalfEdgePatch:
                     ]
                 )
                 self.F.add(f)
-        H_right_B = set()
+        h_right_B = set()
         while H_frontier:
             h = H_frontier.pop()
             ht = self.supermesh.h_twin_h(h)
@@ -1430,9 +1430,9 @@ class HalfEdgePatch:
             f_in_F = f in self.F
             ft_in_F = ft in self.F
             if f_in_F and (not ft_in_F):
-                H_right_B.add(ht)
+                h_right_B.add(ht)
             elif (not f_in_F) and ft_in_F:
-                H_right_B.add(h)
+                h_right_B.add(h)
             else:
                 continue
             v = self.supermesh.v_origin_h(h)
@@ -1441,11 +1441,11 @@ class HalfEdgePatch:
             self.H.update([h, ht])
 
         h_right_B = []
-        while H_right_B:
-            h = H_right_B.pop()
+        while h_right_B:
+            h = h_right_B.pop()
             h_right_B.append(h)
             for h in self.generate_H_next_h(h):
-                H_right_B.discard(h)
+                h_right_B.discard(h)
         self.h_right_B = np.array(h_right_B, dtype="int32")
 
         delta_num_faces = len(self.F) - num_faces

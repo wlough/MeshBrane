@@ -60,7 +60,7 @@ from src.python.half_edge_base_brane import Brane
 
 from src.python.half_edge_base_viewer import MeshViewer
 
-# from src.python.half_edge_base_patch import HalfEdgePatch
+from src.python.half_edge_base_patch import HalfEdgePatch
 from src.python.half_edge_mesh import HalfEdgeMeshBase, HalfEdgeBoundary
 import numpy as np
 
@@ -69,8 +69,22 @@ import numpy as np
 ply_path = "./data/half_edge_base/ply/unit_sphere_005120_he.ply"
 ply_path = "./data/half_edge_base/ply/neovius_he.ply"
 m = HalfEdgeMeshBase.load(ply_path=ply_path)
+p = HalfEdgePatch.from_seed_to_radius(33, m, .3)
+b = HalfEdgeBoundary.from_mesh(m)
+b1 = HalfEdgeBoundary.from_faces(m, p.F)
+mv = MeshViewer(m, show_half_edges=True)
+# mv.update(rgba_half_edge=(0, 0, 0, 0))
+mv.update_rgba_H((0, 0, 0, 0))
+arrF = np.array(list(p.F))
+mv.update_rgba_F(np.array([1, 0, 0,.6]), arrF)
+arrH = np.array(list(b.H))
+mv.update_rgba_H(np.array([0, 1, 0, 1]), arrH)
+arrH1 = np.array(list(b1.H))
+mv.update_rgba_H(np.array([0, 0, 1, 1]), arrH1)
 
-mesh = m
+mv.plot()
+
+# %%
 # bigH = np.arange(mesh.num_half_edges)
 H_minus = mesh.negative_boundary_contains_h(range(mesh.num_half_edges)).nonzero()[0]
 nextH_minus = mesh.h_next_h(H_minus)
@@ -83,10 +97,9 @@ mv.update_rgba_H((0, 0, 0, 0))
 mv.update_rgba_H(np.array([1, 0, 0, 1]), H_plus)
 mv.plot()
 # %%
-from src.python.combinatorics import arg_right_action
+from src.python.combinatorics import arg_right_action, compute_cycles
 
-P = arg_right_action(list(H_plus), list(nextH_plus))
-nextH_plus - H_plus[P]
+
 
 
 def arg_right_action0(Xsource, Xtarget):
@@ -126,6 +139,9 @@ def arg_right_action0(Xsource, Xtarget):
     return indices[np.searchsorted(Xsource, Xtarget, sorter=indices)]
 
 
+
+P = arg_right_action(list(H_plus), list(nextH_plus))
 P0 = list(arg_right_action0(H_plus, nextH_plus))
 
-P0 - P
+%timeit arg_right_action(list(H_plus), list(nextH_plus))
+%timeit list(arg_right_action0(H_plus, nextH_plus))

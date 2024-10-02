@@ -328,14 +328,14 @@ class MeshViewer:
             else:
                 self._rgba_F[indices] = value
 
-    def update_rgba_H_right_b(self, value, b):
-        H_right_b = np.array(list(self.M.generate_H_right_b(b)))
-        self.update_rgba_H(value, indices=H_right_b)
+    def update_rgba_h_right_B(self, value, b):
+        h_right_B = np.array(list(self.M.generate_h_right_B(b)))
+        self.update_rgba_H(value, indices=h_right_B)
 
-    def update_rgba_H_right_B(self, value):
+    def update_rgba_h_right_B(self, value):
         """."""
         for b in range(self.M.num_boundaries):
-            self.update_rgba_H_right_b(value, b)
+            self.update_rgba_h_right_B(value, b)
 
     def update_rgba_F_incident_b(self, value, b):
         F_incident_b = self.M.F_incident_b(b)
@@ -359,7 +359,7 @@ class MeshViewer:
         if "rgba_face" in kwargs:
             self.update_rgba_F(kwargs["rgba_face"])
         if "rgba_boundary_half_edge" in kwargs:
-            self.update_rgba_H_right_B(kwargs["rgba_boundary_half_edge"])
+            self.update_rgba_h_right_B(kwargs["rgba_boundary_half_edge"])
         if "rgba_boundary_face" in kwargs:
             self.update_rgba_F_incident_B(kwargs["rgba_boundary_face"])
 
@@ -837,7 +837,7 @@ class MeshViewer:
     def _color_boundary_H(self, b, rgba=None):
         if rgba is None:
             rgba = self.colors["boundary_half_edge_default"]
-        h = self.M.h_right_b(b)
+        h = self.M.h_right_B(b)
         Hindices = list(self.M.generate_H_next_h(h))
         self._rgba_H[indices] = rgba
 

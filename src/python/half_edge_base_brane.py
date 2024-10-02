@@ -18,7 +18,7 @@ class ReferenceTriangle:
         # self.h_twin_H
         # self.f_left_H
         # self.h_bound_F
-        # self.h_right_B
+        # self.h_gen_B
 
     def affine_coodinates_of_nodes(self, resolution):
         """
@@ -97,7 +97,7 @@ class Brane(HalfEdgeMeshBase):
         h_twin_H,
         f_left_H,
         h_bound_F,
-        h_right_B,
+        h_gen_B,
         #
         surface_tension_model="local_harmonic",  # "constant"
         pressure_model="harmonic",  # "constant"
@@ -141,7 +141,7 @@ class Brane(HalfEdgeMeshBase):
             h_twin_H,
             f_left_H,
             h_bound_F,
-            h_right_B,
+            h_gen_B,
         )
         if preferred_area is None:
             preferred_area = self.total_area_of_faces()
@@ -191,7 +191,7 @@ class Brane(HalfEdgeMeshBase):
             "h_twin_H": self.h_twin_H,
             "f_left_H": self.f_left_H,
             "h_bound_F": self.h_bound_F,
-            "h_right_B": self.h_right_B,
+            "h_gen_B": self.h_gen_B,
         }
 
     def apply_laplacian_matrix(self, x):
