@@ -603,7 +603,7 @@ class AbstractSpace(HalfPlexObject):
 #################################################
 
 #################################################
-# Simplical Complexes #
+# Simplicial Complexes #
 
 
 class OrientedSimplex(HalfPlexContainer):
@@ -617,7 +617,7 @@ class OrientedSimplex(HalfPlexContainer):
     parity : bool
         orientation of the simplex relative to the simplex whose points are sorted by EuclideanPoint hash key
     dim : int
-        simplical dimension (len(points) - 1)
+        simplicial dimension (len(points) - 1)
     face : OrientedSimplex
         (n-1)-simplex incident on the self with same orientation
     coface : OrientedSimplex

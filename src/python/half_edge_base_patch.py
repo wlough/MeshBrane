@@ -138,7 +138,6 @@ class MinimalPatch:
     supermesh (HalfEdgeMesh): mesh containing the patch
     F (set): set of faces in the patch
 
-
     """
 
     def __init__(self, supermesh, F, H_boundary):
@@ -760,7 +759,7 @@ class MinimalPatch:
 
 
 class HalfEdgeComplex:
-    """An oriented simplical subcomplex representing a submanifold of a HalfEdgeMesh."""
+    """An oriented simplicial subcomplex representing a submanifold of a HalfEdgeMesh."""
 
     def __init__(self, supermesh, V, H, F, close_complex=False):
         self.supermesh = supermesh
@@ -840,7 +839,7 @@ class HalfEdgeComplex:
 
     def close_faces(self):
         """
-        Find simplical closure of the complex in supermesh.
+        Find simplicial closure of the complex in supermesh.
         """
         # next cycle of each face gets
         #   *interior half-edges
@@ -867,7 +866,7 @@ class HalfEdgeComplex:
 
     def close_edges(self):
         """
-        Find simplical closure of 2d edge complex.
+        Find simplicial closure of 2d edge complex.
         """
         # twin of interior half-edges gets
         #   *negative boundary half-edges

@@ -1,12 +1,12 @@
-from src.python.half_edge_base_ply_tools import (
-    MeshConverterBase,
-)  # VertTri2HalfEdgeMeshConverter
+from src.python.half_edge_base_ply_tools import MeshConverterBase
 from src.python.half_edge_base_utils import V_of_F
 import numpy as np
 from src.python.global_vars import INT_TYPE, FLOAT_TYPE
 from src.python.linear_algebra import rigid_transform
 from src.python.combinatorics import argsort, compute_cycles
 from scipy.sparse import lil_matrix
+
+# See: ./notebooks/testing.py, ./src/python/back_half_edge_mesh.py
 
 
 class HalfEdgeMeshBase:
@@ -87,6 +87,19 @@ class HalfEdgeMeshBase:
     #######################################################
     # Initilization methods
     ######################################################
+    @classmethod
+    def init_empty(cls):
+        return cls(
+            np.zeros((0, 3), dtype=FLOAT_TYPE),
+            np.zeros(0, dtype=INT_TYPE),
+            np.zeros(0, dtype=INT_TYPE),
+            np.zeros(0, dtype=INT_TYPE),
+            np.zeros(0, dtype=INT_TYPE),
+            np.zeros(0, dtype=INT_TYPE),
+            np.zeros(0, dtype=INT_TYPE),
+            np.zeros(0, dtype=INT_TYPE),
+        )
+
     @classmethod
     def load_he_samples(cls, npz_path, *args, **kwargs):
         """Initialize a half-edge mesh from npz file containing data arrays."""
@@ -185,68 +198,9 @@ class HalfEdgeMeshBase:
         else:
             raise ValueError("Invalid arguments")
 
-    def initialize_sub_mesh_VHF(self, V, H, F):
-        Vglobal = sorted(V)
-        Hglobal = sorted(H)
-        Fglobal = sorted(F)
-        Vlocal = list(range(len(Vglobal)))
-        Hlocal = list(range(len(Hglobal)))
-        Flocal = list(range(len(Fglobal)))
-
-        Vlocal_Vglobal = np.empty(self.num_vertices, dtype=INT_TYPE)
-        Vlocal_Vglobal[Vglobal] = Vlocal
-
-        Hlocal_Hglobal = np.empty(self.num_half_edges, dtype=INT_TYPE)
-        Hlocal_Hglobal[Hglobal] = Hlocal
-
-        Flocal_Fglobal = np.empty(self.num_faces, dtype=INT_TYPE)
-        Flocal_Fglobal[Fglobal] = Flocal
-
-        xyz_coord_V = self.xyz_coord_v(Vglobal)
-        hglobal_out_V = self.h_out_v(Vglobal)
-        vglobal_origin_H = self.v_origin_h(Hglobal)
-        hglobal_next_H = self.h_next_h(Hglobal)
-        hglobal_twin_H = self.h_twin_h(Hglobal)
-        fglobal_left_H = self.f_left_h(Hglobal)
-        hglobal_bound_F = self.h_bound_f(Fglobal)
-
-        h_out_V = Hlocal_Hglobal[hglobal_out_V]
-        v_origin_H = Vlocal_Vglobal[vglobal_origin_H]
-        h_next_H = Hlocal_Hglobal[hglobal_next_H]
-        h_twin_H = Hlocal_Hglobal[hglobal_twin_H]
-        f_left_H = Flocal_Fglobal[fglobal_left_H]
-        h_bound_F = Hlocal_Hglobal[hglobal_bound_F]
-
-        ####################
-        # arrF = np.array(Fglobal, dtype=INT_TYPE)
-        # generators for each face boundary
-        # h_bound_F = self.supermesh.h_bound_f(arrF)
-        next_hglobal_bound_F = self.h_next_h(hglobal_bound_F)
-        next_next_hglobal_bound_F = self.h_next_h(next_h_bound_F)
-        H_interior = (
-            set(hglobal_bound_F)
-            | set(next_hglobal_bound_F)
-            | set(next_next_hglobal_bound_F)
-        )
-        arrH_interior = np.array(list(H_interior), dtype=INT_TYPE)
-        h_twin_H_interior = set(self.h_twin_h(arrH_interior))
-        H_boundary_minus = h_twin_H_interior - H_interior
-        h_right_B = []
-
-        return (
-            xyz_coord_V,
-            h_out_V,
-            v_origin_H,
-            h_next_H,
-            h_twin_H,
-            f_left_H,
-            h_bound_F,
-            h_right_B,
-        )
-
     #######################################################
-    # Fundamental accessors and properties
-    ######################################################
+    # Fundamental accessors and properties ###############
+    #######################################################
     @property
     def xyz_coord_V(self):
         return self._xyz_coord_V
@@ -345,9 +299,15 @@ class HalfEdgeMeshBase:
 
     @property
     def V_of_H(self):
-        return np.array(
-            [[self.v_origin_h(h), self.v_head_h(h)] for h in range(self.num_half_edges)]
-        )
+        # return np.array(
+        #     [[self.v_origin_h(h), self.v_head_h(h)] for h in range(self.num_half_edges)]
+        # )
+        return self.v_origin_h([range(self.num_half_edges), self.h_twin_H]).T
+
+    @property
+    def V_of_E(self):
+        V_of_H = self.v_origin_h([range(self.num_half_edges), self.h_twin_H]).T
+        return V_of_H[V_of_H[:, 0] < V_of_H[:, 1]]
 
     @property
     def he_samples(self):
@@ -396,11 +356,10 @@ class HalfEdgeMeshBase:
         )
 
     #######################################################
-    # Combinatorial maps ##################################
+    # Combinatorial maps #################################
     #######################################################
     def xyz_coord_v(self, v):
-        """
-        get array of xyz coordinates of vertex v
+        """get array of xyz coordinates of vertex v
 
         Args:
             v (int): vertex index
@@ -535,9 +494,9 @@ class HalfEdgeMeshBase:
             n_h = self.h_next_h(p_h)
         return p_h
 
-    ######################################################
-    # Predicates #########################################
-    ######################################################
+    #######################################################
+    # Predicates ##########################################
+    #######################################################
     def negative_boundary_contains_h(self, h):
         """check if half-edge h is in a negatively oriented boundary of the mesh"""
         return self.f_left_h(h) < 0
@@ -549,7 +508,9 @@ class HalfEdgeMeshBase:
     def boundary_contains_h(self, h):
         """check if half-edge h is on the boundary of the mesh"""
         # return self.f_left_h(h) < 0 or self.f_left_h(self.h_twin_h(h)) < 0
-        return np.logical_or(self.f_left_h(h) < 0, self.f_left_h(self.h_twin_h(h)) < 0)
+        return np.logical_or(
+            self.negative_boundary_contains_h(h), self.positive_boundary_contains_h(h)
+        )
 
     def boundary_contains_v(self, v):
         """check if vertex v is on the boundary of the mesh"""
@@ -612,7 +573,7 @@ class HalfEdgeMeshBase:
 
     #######################################################
     # Generators ##########################################
-    ######################################################
+    #######################################################
     def generate_H_out_v_clockwise(self, v, h_start=None):
         """
         Generate outgoing half-edges from vertex v in clockwise order until the starting half-edge is reached again
@@ -662,11 +623,6 @@ class HalfEdgeMeshBase:
             if h == h_start:
                 break
 
-    def generate_V_nearest_v_clockwise(self, v, h_start=None):
-        """Generates nearest neighbor vertices of vertex v in clockwise order"""
-        for h in self.generate_H_out_v_clockwise(v, h_start=h_start):
-            yield self.v_head_h(h)
-
     def generate_H_next_h(self, h):
         """Generate half-edges in the face/boundary cycle containing half-edge h"""
         h_start = h
@@ -703,146 +659,306 @@ class HalfEdgeMeshBase:
             if h == h_start:
                 break
 
-    ######################################################
-    # Simplical Computations #############################
-    ######################################################
+    #######################################################
+    # Mesh modification ##################################
+    #######################################################
+    def rigid_transform(self, translation, angle_vec, origin=None):
+        """
+        Apply a rigid transformation to the mesh.
+        t = translation in R3
+        w = angle_vec in R3~so3
+        R = exp_so3(w) in SO3
+        o = origin in R3~E3
+        x->o+R*(x-o)+t, or x->R*x+t if o is not provided
+        """
+        self.xyz_coord_V = rigid_transform(
+            translation, angle_vec, self.xyz_coord_V, origin=origin
+        )
 
-    def closure(self, V0, H0, F0, in_place=False):
+    def update_vertex(self, v, xyz=None, h_out=None):
+        if xyz is not None:
+            self._xyz_coord_V[v] = xyz
+        if h_out is not None:
+            self._h_out_V[v] = h_out
+
+    def update_half_edge(self, h, h_next=None, h_twin=None, v_origin=None, f_left=None):
+        if h_next is not None:
+            self._h_next_H[h] = h_next
+        if h_twin is not None:
+            self._h_twin_H[h] = h_twin
+        if v_origin is not None:
+            self._v_origin_H[h] = v_origin
+        if f_left is not None:
+            self._f_left_H[h] = f_left
+
+    def update_face(self, f, h_bound=None):
+        if h_bound is not None:
+            self._h_bound_F[f] = h_bound
+
+    def flip_edge(self, h):
+        r"""
+        h cannot be on boundary!
+                v1                           v1
+              /    \                       /  |  \
+             /      \                     /   |   \
+            /h3    h2\                   /h3  |  h2\
+           /    f0    \                 /     |     \
+          /            \               /  f0  |  f1  \
+         /      h0      \             /       |       \
+        v2--------------v0  |----->  v2     h0|h1     v0
+         \      h1      /             \       |       /
+          \            /               \      |      /
+           \    f1    /                 \     |     /
+            \h4    h5/                   \h4  |  h5/
+             \      /                     \   |   /
+              \    /                       \  |  /
+                v3                           v3
+        v0
+        --
+        h_out
+            pre-flip: may be h1
+            post-flip: set to h2 if needed
+        v2
+        --
+            pre-flip: may be h0
+            post-flip: set to h4 if needed
+        h0
+        --
+        v_origin_h(h0)
+            pre-flip: v2
+            post-flip: v3
+        h_next
+            pre-flip: h2
+            post-flip: h3
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        h1
+        --
+        v_origin
+            pre-flip: v0
+            post-flip: v1
+        h_next
+            pre-flip: h4
+            post-flip: h5
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        h2
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h3
+            post-flip: h1
+        h_twin
+            unchanged
+        f_left
+            pre-flip: f0
+            post-flip: f1
+        h3
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h0
+            post-flip: h4
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        h4
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h5
+            post-flip: h0
+        h_twin
+            unchanged
+        f_left
+            pre-flip: f1
+            post-flip: f0
+        h5
+        --
+        v_origin
+            unchanged
+        h_next
+            pre-flip: h1
+            post-flip: h2
+        h_twin
+            unchanged
+        f_left
+            unchanged
+        f0
+        --
+        h_bound
+            pre-flip: may be h2
+            post-flip: set to h3 if needed
+        f1
+        --
+        h_bound
+            pre-flip: may be h4
+            post-flip: set to h5 if needed
         """
-        Find simplical closure of (V,H,F) in M by searching F and H. Uses array slicing
-        """
-        if in_place:
-            V, H, F = V0, H0, F0
+        # get involved half-edges/vertices/faces
+        h0 = h
+        h1 = self.h_twin_h(h0)
+        h2 = self.h_next_h(h0)
+        h3 = self.h_next_h(h2)
+        h4 = self.h_next_h(h1)
+        h5 = self.h_next_h(h4)
+
+        v0 = self.v_origin_h(h1)
+        v1 = self.v_origin_h(h3)
+        v2 = self.v_origin_h(h0)
+        v3 = self.v_origin_h(h5)
+
+        f0 = self.f_left_h(h0)
+        f1 = self.f_left_h(h1)
+
+        # update vertices
+        if self.h_out_v(v0) == h1:
+            self.update_vertex(v0, h_out=h2)
+        if self.h_out_v(v2) == h0:
+            self.update_vertex(v2, h_out=h4)
+        # update half-edges
+        self.update_half_edge(h0, v_origin=v3, h_next=h3)
+        self.update_half_edge(h1, v_origin=v1, h_next=h5)
+        self.update_half_edge(h2, h_next=h1, f_left=f1)
+        self.update_half_edge(h3, h_next=h4)
+        self.update_half_edge(h4, h_next=h0, f_left=f0)
+        self.update_half_edge(h5, h_next=h2)
+        # update faces
+        if self.h_bound_f(f0) == h2:
+            self.update_face(f0, h_bound=h3)
+        if self.h_bound_f(f1) == h4:
+            self.update_face(f1, h_bound=h5)
+
+    def flip_non_delaunay(self):
+        flip_count = 0
+        for h in range(self.num_half_edges):
+            if not self.h_is_locally_delaunay(h):
+                if self.h_is_flippable(h):
+                    self.flip_edge(h)
+                    flip_count += 1
+        return flip_count
+
+    def smooth_graph_laplacian(self, weight=0.25, smooth_boundary=False):
+        """ """
+        Q = self.xyz_coord_V
+        if smooth_boundary:
+            lapQ = self.graph_laplacian(Q)
+
         else:
-            V, H, F = V0.copy(), H0.copy(), F0.copy()
-        # next cycle of each face gets
-        #   *interior half-edges
-        #   *positive boundary half-edges
-        arrF = np.array(list(F), dtype=INT_TYPE)
-        h_bound_F = self.h_bound_f(arrF)
-        next_h_bound_F = self.h_next_h(h_bound_F)
-        next_next_h_bound_F = self.h_next_h(next_h_bound_F)
-        H.update(h_bound_F)
-        H.update(next_h_bound_F)
-        H.update(next_next_h_bound_F)
-        # twin of interior half-edges gets
-        #   *negative boundary half-edges
-        #   *any other twins missing from H0
-        arrH = np.array(list(H), dtype=INT_TYPE)
-        h_twin_H = self.h_twin_h(arrH)
-        H.update(h_twin_H)
-        # origin of half-edges gets
-        #  *vertices missing from V0
-        arrH = np.array(list(H), dtype=INT_TYPE)
-        v_origin_H = self.v_origin_h(arrH)
-        V.update(v_origin_H)
-        return V, H, F
+            lapQ = np.zeros_like(Q)
+            for i in range(self.num_vertices):
+                if self.boundary_contains_v(i):
+                    # lapQ[i] = Q[i]
+                    continue
+                deg = 0
+                for h in self.generate_H_out_v_clockwise(i):
+                    lapQ[i] += Q[self.v_head_h(h)]
+                    deg += 1
 
-    def closure1(self, V, H, F, Hneed2visit=None, Fneed2visit=None, in_place=False):
-        """
-        Find simplical closure of (V,H,F) in M by searching F and H.
-        """
-        # V, H, F = VHF
-        if Hneed2visit is None:
-            Hneed2visit = H.copy()
-        if Fneed2visit is None:
-            Fneed2visit = F.copy()
-        if in_place:
-            closedV, closedH, closedF = V, H, F
-        else:
-            closedV, closedH, closedF = V.copy(), H.copy(), F.copy()
-        # add edges and verts for faces in F
-        while Fneed2visit:
-            f = Fneed2visit.pop()
-            for h in self.generate_H_bound_f(f):
-                ht = self.h_twin_h(h)
-                v = self.v_origin_h(h)
-                closedV.add(v)
-                closedH.add(h)
-                closedH.add(ht)
-                Hneed2visit.discard(h)
-                Hneed2visit.discard(ht)
-        # add twins and verts for remaining half-edges
-        while Hneed2visit:
-            h = Hneed2visit.pop()
-            ht = self.h_twin_h(h)
-            v = self.v_origin_h(h)
-            vt = self.v_origin_h(ht)
-            closedV.add(v)
-            closedV.add(vt)
-            closedH.add(ht)
-            Hneed2visit.discard(ht)
-        return closedV, closedH, closedF
+                lapQ[i] /= deg
+                lapQ[i] -= Q[i]
 
-    def star_of_vertex(self, v):
-        """Star of a vertex is the set of all simplices that contain the vertex."""
-        V = {v}
-        H = set()
-        F = set()
-        for h in self.generate_H_out_v_clockwise(v):
-            ht = self.h_twin_h(h)
-            H.update([h, ht])
-            if not self.negative_boundary_contains_h(h):
-                F.add(self.f_left_h(h))
+        self.xyz_coord_V += weight * lapQ
 
-        return V, H, F
+    def taubin_smooth_graph_laplacian(
+        self, weight_shrink=0.25, weight_inflate=-0.25, smooth_boundary=False
+    ):
+        self.smooth_graph_laplacian(
+            weight=weight_shrink, smooth_boundary=smooth_boundary
+        )
+        self.smooth_graph_laplacian(
+            weight=weight_inflate, smooth_boundary=smooth_boundary
+        )
 
-    def star_of_edge(self, h):
-        """Star of an edge is the set of all simplices that contain the edge."""
-        V = set()
-        H = {h, self.h_twin_h(h)}
-        F = set()
-        for hi in H:
-            if not self.negative_boundary_contains_h(hi):
-                F.add(self.f_left_h(hi))
+    def update_V_slice(self, index_slice, xyz_coord_V=None, h_out_V=None):
+        """ """
+        if xyz_coord_V is not None:
+            self.xyz_coord_V[index_slice] = xyz_coord_V
+        if h_out_V is not None:
+            self.h_out_V[index_slice] = h_out_V
 
-        return V, H, F
+    def update_H_slice(
+        self, index_slice, h_next_H=None, h_twin_H=None, v_origin_H=None, f_left_H=None
+    ):
+        """ """
+        if h_next_H is not None:
+            self.h_next_H[index_slice] = h_next_H
+        if h_twin_H is not None:
+            self.h_twin_H[index_slice] = h_twin_H
+        if v_origin_H is not None:
+            self.v_origin_H[index_slice] = v_origin_H
+        if f_left_H is not None:
+            self.f_left_H[index_slice] = f_left_H
 
-    def star(self, V_in, H_in, F_in):
-        """The star of a single simplex is the set of all simplices that have the simplex as a face. The star St(s) of a k-simplex s consists of: s and all (n>k)-simplices that contain s."""
-        F = F_in.copy()
-        H = H_in.copy()
-        V = V_in.copy()
+    def update_F_slice(self, index_slice, h_bound_F=None):
+        """ """
+        if h_bound_F is not None:
+            self.h_bound_F[index_slice] = h_bound_F
 
-        for h in H_in:
-            ht = self.h_twin_h(h)
-            H.add(ht)
-            if not self.negative_boundary_contains_h(h):
-                F.add(self.f_left_h(h))
-            if not self.negative_boundary_contains_h(ht):
-                F.add(self.f_left_h(ht))
-        for v in V_in:
-            for h in self.generate_H_out_v_clockwise(v):
-                H.add(h)
-                H.add(self.h_twin_h(h))
-                if not self.negative_boundary_contains_h(h):
-                    F.add(self.f_left_h(h))
-        return V, H, F
+    def divide_face_barycentric(self, f):
+        dNv = 1
+        dNh = 6
+        dNf = 2
+        # dNb = 0
+        self.xyz_coord_V = np.concatenate([self.xyz_coord_V, np.zeros((dNv, 3))])
+        self.h_out_V = np.concatenate([self.h_out_V, np.zeros(dNv, dtype=INT_TYPE)])
+        self.v_origin_H = np.concatenate(
+            [self.v_origin_H, np.zeros(dNh, dtype=INT_TYPE)]
+        )
+        self.h_next_H = np.concatenate([self.h_next_H, np.zeros(dNh, dtype=INT_TYPE)])
+        self.h_twin_H = np.concatenate([self.h_twin_H, np.zeros(dNh, dtype=INT_TYPE)])
+        self.f_left_H = np.concatenate([self.f_left_H, np.zeros(dNh, dtype=INT_TYPE)])
+        self.h_bound_F = np.concatenate([self.h_bound_F, np.zeros(dNf, dtype=INT_TYPE)])
+        # self.h_right_B = np.concatenate([self.h_right_B, np.zeros(dNb, dtype=INT_TYPE)])
 
-    def link(self, V, H, F):
-        """Lk(s)=Cl(St(s))-St(Cl(s))."""
-        StCl_V, StCl_H, StCl_F = self.star(*self.closure(V, H, F))
-        ClSt_V, ClSt_H, ClSt_F = self.closure(*self.star(V, H, F))
-        return ClSt_V - StCl_V, ClSt_H - StCl_H, ClSt_F - StCl_F
+        # Get/create exsisting/new vertices, half-edges, faces, boundaries involved in the operation
+        f0 = f
+        h0 = self.h_bound_f(f0)
+        h1 = self.h_next_h(h0)
+        h2 = self.h_next_h(h1)
+        v0 = self.v_origin_h(h0)
+        v1 = self.v_origin_h(h1)
+        v2 = self.v_origin_h(h2)
+        V = np.concatenate(
+            [[v0, v1, v2], list(range(self.num_vertices, self.num_vertices + dNv))],
+            dtype=INT_TYPE,
+        )
+        H = np.concatenate(
+            [[h0, h1, h2], list(range(self.num_half_edges, self.num_half_edges + dNh))],
+            dtype=INT_TYPE,
+        )
+        F = np.concatenate(
+            [[f0], list(range(self.num_faces, self.num_faces + dNf))], dtype=INT_TYPE
+        )
 
-    def valence_v(self, v):
-        """get the valence of vertex v"""
-        valence = 0
-        for h in self.generate_H_out_v_clockwise(v):
-            valence += 1
-        return valence
+        #####
+        self.update_vertex(
+            V[3], xyz=np.sum(self.xyz_coord_V[V[:3]], axis=0), h_out=H[4]
+        )
+        self.update_H_slice(H[3:], v_origin_H=[V[1], V[3], V[2], V[3], V[0], V[3]])
+        self.update_H_slice(
+            H, h_next_H=[H[3], H[5], H[7], H[8], H[1], H[4], H[2], H[6], H[0]]
+        )
+        self.update_H_slice(
+            H[3:], h_next_H=None, h_twin_H=[H[4], H[3], H[6], H[5], H[8], H[7]]
+        )
+        self.update_H_slice(
+            H[1:], f_left_H=[F[1], F[2], F[0], F[1], F[1], F[2], F[2], F[0]]
+        )
+        self.update_F_slice(F, h_bound_F=H[:3])
+        return dNv, dNh, dNf
 
-    def F_incident_b(self, b):
-        """get the faces incident on boundary b"""
-        F = set()
-        for h in self.generate_h_right_B(b):
-            v = self.v_origin_h(h)
-            F.update(set(self.generate_F_incident_v_clockwise(v, h_start=h)))
-        return np.array(list(F), dtype=INT_TYPE)
-
-    ######################################################
-    # Geometric computations #############################
-    ######################################################
+    #######################################################
+    # Geometric Computations #############################
+    #######################################################
     def vec_area_f(self, f):
         h0 = self.h_bound_f(f)
         h1 = self.h_next_h(h0)
@@ -1076,6 +1192,10 @@ class HalfEdgeMeshBase:
 
     ##############
     # unit normals
+    def normal_v(self, i):
+        """default vertex unit normal"""
+        return self.normal_other_weighted_v(i)
+
     def normal_some_face_of_v(self, i):
         h = self.h_out_v(i)
         f = self.f_left_h(h)
@@ -1133,8 +1253,8 @@ class HalfEdgeMeshBase:
         return n
 
     #######################################################
-    # Differential operators
-    ######################################################
+    # Differential operators ##############################
+    #######################################################
     def laplacian(self, Q):
         """
         overwrite to set which laplacian to use
@@ -1434,309 +1554,17 @@ class HalfEdgeMeshBase:
         return rows, data, area_V
 
     #######################################################
-    # Mesh modification
-    ######################################################
-    def rigid_transform(self, translation, angle_vec, origin=None):
-        """
-        Apply a rigid transformation to the mesh.
-        t = translation in R3
-        w = angle_vec in R3~so3
-        R = exp_so3(w) in SO3
-        o = origin in R3~E3
-        x->o+R*(x-o)+t, or x->R*x+t if o is not provided
-        """
-        self.xyz_coord_V = rigid_transform(
-            translation, angle_vec, self.xyz_coord_V, origin=origin
-        )
-
-    def update_vertex(self, v, xyz=None, h_out=None):
-        if xyz is not None:
-            self._xyz_coord_V[v] = xyz
-        if h_out is not None:
-            self._h_out_V[v] = h_out
-
-    def update_half_edge(self, h, h_next=None, h_twin=None, v_origin=None, f_left=None):
-        if h_next is not None:
-            self._h_next_H[h] = h_next
-        if h_twin is not None:
-            self._h_twin_H[h] = h_twin
-        if v_origin is not None:
-            self._v_origin_H[h] = v_origin
-        if f_left is not None:
-            self._f_left_H[h] = f_left
-
-    def update_face(self, f, h_bound=None):
-        if h_bound is not None:
-            self._h_bound_F[f] = h_bound
-
-    def flip_edge(self, h):
-        r"""
-        h cannot be on boundary!
-                v1                           v1
-              /    \                       /  |  \
-             /      \                     /   |   \
-            /h3    h2\                   /h3  |  h2\
-           /    f0    \                 /     |     \
-          /            \               /  f0  |  f1  \
-         /      h0      \             /       |       \
-        v2--------------v0  |----->  v2     h0|h1     v0
-         \      h1      /             \       |       /
-          \            /               \      |      /
-           \    f1    /                 \     |     /
-            \h4    h5/                   \h4  |  h5/
-             \      /                     \   |   /
-              \    /                       \  |  /
-                v3                           v3
-        v0
-        --
-        h_out
-            pre-flip: may be h1
-            post-flip: set to h2 if needed
-        v2
-        --
-            pre-flip: may be h0
-            post-flip: set to h4 if needed
-        h0
-        --
-        v_origin_h(h0)
-            pre-flip: v2
-            post-flip: v3
-        h_next
-            pre-flip: h2
-            post-flip: h3
-        h_twin
-            unchanged
-        f_left
-            unchanged
-        h1
-        --
-        v_origin
-            pre-flip: v0
-            post-flip: v1
-        h_next
-            pre-flip: h4
-            post-flip: h5
-        h_twin
-            unchanged
-        f_left
-            unchanged
-        h2
-        --
-        v_origin
-            unchanged
-        h_next
-            pre-flip: h3
-            post-flip: h1
-        h_twin
-            unchanged
-        f_left
-            pre-flip: f0
-            post-flip: f1
-        h3
-        --
-        v_origin
-            unchanged
-        h_next
-            pre-flip: h0
-            post-flip: h4
-        h_twin
-            unchanged
-        f_left
-            unchanged
-        h4
-        --
-        v_origin
-            unchanged
-        h_next
-            pre-flip: h5
-            post-flip: h0
-        h_twin
-            unchanged
-        f_left
-            pre-flip: f1
-            post-flip: f0
-        h5
-        --
-        v_origin
-            unchanged
-        h_next
-            pre-flip: h1
-            post-flip: h2
-        h_twin
-            unchanged
-        f_left
-            unchanged
-        f0
-        --
-        h_bound
-            pre-flip: may be h2
-            post-flip: set to h3 if needed
-        f1
-        --
-        h_bound
-            pre-flip: may be h4
-            post-flip: set to h5 if needed
-        """
-        # get involved half-edges/vertices/faces
-        h0 = h
-        h1 = self.h_twin_h(h0)
-        h2 = self.h_next_h(h0)
-        h3 = self.h_next_h(h2)
-        h4 = self.h_next_h(h1)
-        h5 = self.h_next_h(h4)
-
-        v0 = self.v_origin_h(h1)
-        v1 = self.v_origin_h(h3)
-        v2 = self.v_origin_h(h0)
-        v3 = self.v_origin_h(h5)
-
-        f0 = self.f_left_h(h0)
-        f1 = self.f_left_h(h1)
-
-        # update vertices
-        if self.h_out_v(v0) == h1:
-            self.update_vertex(v0, h_out=h2)
-        if self.h_out_v(v2) == h0:
-            self.update_vertex(v2, h_out=h4)
-        # update half-edges
-        self.update_half_edge(h0, v_origin=v3, h_next=h3)
-        self.update_half_edge(h1, v_origin=v1, h_next=h5)
-        self.update_half_edge(h2, h_next=h1, f_left=f1)
-        self.update_half_edge(h3, h_next=h4)
-        self.update_half_edge(h4, h_next=h0, f_left=f0)
-        self.update_half_edge(h5, h_next=h2)
-        # update faces
-        if self.h_bound_f(f0) == h2:
-            self.update_face(f0, h_bound=h3)
-        if self.h_bound_f(f1) == h4:
-            self.update_face(f1, h_bound=h5)
-
-    def flip_non_delaunay(self):
-        flip_count = 0
-        for h in range(self.num_half_edges):
-            if not self.h_is_locally_delaunay(h):
-                if self.h_is_flippable(h):
-                    self.flip_edge(h)
-                    flip_count += 1
-        return flip_count
-
-    def smooth_graph_laplacian(self, weight=0.25, smooth_boundary=False):
-        """ """
-        Q = self.xyz_coord_V
-        if smooth_boundary:
-            lapQ = self.graph_laplacian(Q)
-
-        else:
-            lapQ = np.zeros_like(Q)
-            for i in range(self.num_vertices):
-                if self.boundary_contains_v(i):
-                    # lapQ[i] = Q[i]
-                    continue
-                deg = 0
-                for h in self.generate_H_out_v_clockwise(i):
-                    lapQ[i] += Q[self.v_head_h(h)]
-                    deg += 1
-
-                lapQ[i] /= deg
-                lapQ[i] -= Q[i]
-
-        self.xyz_coord_V += weight * lapQ
-
-    def taubin_smooth_graph_laplacian(
-        self, weight_shrink=0.25, weight_inflate=-0.25, smooth_boundary=False
-    ):
-        self.smooth_graph_laplacian(
-            weight=weight_shrink, smooth_boundary=smooth_boundary
-        )
-        self.smooth_graph_laplacian(
-            weight=weight_inflate, smooth_boundary=smooth_boundary
-        )
-
-    def update_V_slice(self, index_slice, xyz_coord_V=None, h_out_V=None):
-        """ """
-        if xyz_coord_V is not None:
-            self.xyz_coord_V[index_slice] = xyz_coord_V
-        if h_out_V is not None:
-            self.h_out_V[index_slice] = h_out_V
-
-    def update_H_slice(
-        self, index_slice, h_next_H=None, h_twin_H=None, v_origin_H=None, f_left_H=None
-    ):
-        """ """
-        if h_next_H is not None:
-            self.h_next_H[index_slice] = h_next_H
-        if h_twin_H is not None:
-            self.h_twin_H[index_slice] = h_twin_H
-        if v_origin_H is not None:
-            self.v_origin_H[index_slice] = v_origin_H
-        if f_left_H is not None:
-            self.f_left_H[index_slice] = f_left_H
-
-    def update_F_slice(self, index_slice, h_bound_F=None):
-        """ """
-        if h_bound_F is not None:
-            self.h_bound_F[index_slice] = h_bound_F
-
-    def divide_face_barycentric(self, f):
-        dNv = 1
-        dNh = 6
-        dNf = 2
-        # dNb = 0
-        self.xyz_coord_V = np.concatenate([self.xyz_coord_V, np.zeros((dNv, 3))])
-        self.h_out_V = np.concatenate([self.h_out_V, np.zeros(dNv, dtype=INT_TYPE)])
-        self.v_origin_H = np.concatenate(
-            [self.v_origin_H, np.zeros(dNh, dtype=INT_TYPE)]
-        )
-        self.h_next_H = np.concatenate([self.h_next_H, np.zeros(dNh, dtype=INT_TYPE)])
-        self.h_twin_H = np.concatenate([self.h_twin_H, np.zeros(dNh, dtype=INT_TYPE)])
-        self.f_left_H = np.concatenate([self.f_left_H, np.zeros(dNh, dtype=INT_TYPE)])
-        self.h_bound_F = np.concatenate([self.h_bound_F, np.zeros(dNf, dtype=INT_TYPE)])
-        # self.h_right_B = np.concatenate([self.h_right_B, np.zeros(dNb, dtype=INT_TYPE)])
-
-        # Get/create exsisting/new vertices, half-edges, faces, boundaries involved in the operation
-        f0 = f
-        h0 = self.h_bound_f(f0)
-        h1 = self.h_next_h(h0)
-        h2 = self.h_next_h(h1)
-        v0 = self.v_origin_h(h0)
-        v1 = self.v_origin_h(h1)
-        v2 = self.v_origin_h(h2)
-        V = np.concatenate(
-            [[v0, v1, v2], list(range(self.num_vertices, self.num_vertices + dNv))],
-            dtype=INT_TYPE,
-        )
-        H = np.concatenate(
-            [[h0, h1, h2], list(range(self.num_half_edges, self.num_half_edges + dNh))],
-            dtype=INT_TYPE,
-        )
-        F = np.concatenate(
-            [[f0], list(range(self.num_faces, self.num_faces + dNf))], dtype=INT_TYPE
-        )
-
-        #####
-        self.update_vertex(
-            V[3], xyz=np.sum(self.xyz_coord_V[V[:3]], axis=0), h_out=H[4]
-        )
-        self.update_H_slice(H[3:], v_origin_H=[V[1], V[3], V[2], V[3], V[0], V[3]])
-        self.update_H_slice(
-            H, h_next_H=[H[3], H[5], H[7], H[8], H[1], H[4], H[2], H[6], H[0]]
-        )
-        self.update_H_slice(
-            H[3:], h_next_H=None, h_twin_H=[H[4], H[3], H[6], H[5], H[8], H[7]]
-        )
-        self.update_H_slice(
-            H[1:], f_left_H=[F[1], F[2], F[0], F[1], F[1], F[2], F[2], F[0]]
-        )
-        self.update_F_slice(F, h_bound_F=H[:3])
-        return dNv, dNh, dNf
+    # Miscellaneous ######################################
+    #######################################################
 
     #######################################################
-    # Miscellaneous methods
-    ######################################################
+    # To be deprecated ###################################
+    #######################################################
+    def _generate_V_nearest_v_clockwise(self, v, h_start=None):
+        """Generates nearest neighbor vertices of vertex v in clockwise order"""
+        for h in self.generate_H_out_v_clockwise(v, h_start=h_start):
+            yield self.v_head_h(h)
 
-    ######################################################
-    # to be deprecated
-    ######################################################
     def _smooth_graph_laplacian(self, weight=0.25):
         """ """
         Nv = self.num_vertices
@@ -1772,101 +1600,200 @@ class HalfEdgeMeshBase:
         return V, H, F
 
 
-class HalfEdgeBoundary:
-    """
-    Boundary of a (sub)mesh
-
-    Parameters
-    ----------
-    mesh : HalfEdgeMesh
-        mesh containing the boundary
-    H : set
-        set of half-edges
-    h_right_B : ndarray
-        half-edge which generates each connected component of the positively oriented boundary
-    """
-
-    def __init__(self, supermesh, H=None, h_gen_B=None, *args, **kwargs):
-        if H is None:
-            H = set()
-        if h_gen_B is None:
-            h_gen_B = np.array([], dtype=INT_TYPE)
-        self.supermesh = supermesh
-        self.H = H
-        self.h_gen_B = h_gen_B
-
-    ######################################################
-    # Initilization and update methods
-    ######################################################
-    @classmethod
-    def from_mesh(cls, supermesh):
-        arrH = supermesh.positive_boundary_contains_h(
-            range(supermesh.num_half_edges)
-        ).nonzero()[0]
-        H = set(arrH)
-        h_gen_B = supermesh.h_twin_h(supermesh.h_right_B)
-        return cls(supermesh, H, h_gen_B)
-
-    @classmethod
-    def from_faces(cls, supermesh, F):
-        arrF = np.array(list(F), dtype=INT_TYPE)
-        # generators for each face boundary
-        h_bound_F = supermesh.h_bound_f(arrF)
-        next_h_bound_F = supermesh.h_next_h(h_bound_F)
-        next_next_h_bound_F = supermesh.h_next_h(next_h_bound_F)
-        # union of next cycles gives interior and positively oriented boundary half-edges
-        H_closed_plus = set(h_bound_F) | set(next_h_bound_F) | set(next_next_h_bound_F)
-        arrH_closed_plus = np.array(list(H_closed_plus), dtype=INT_TYPE)
-        # image under twin map gives interior and negatively oriented boundary half-edges
-        H_closed_minus = set(supermesh.h_twin_h(arrH_closed_plus))
-        H_boundary_plus = H_closed_plus - H_closed_minus
-        # H_interior = H_closed_plus - H_boundary_plus
-        # H_boundary_minus = H_closed_minus - H_interior
-        self = cls(supermesh, H=H_boundary_plus)
-        self.refresh_h_gen_B()
-        return self
-
-    def initialize_complement(self):
-        arrH = self.arrH
-        twin_arrH = self.supermesh.h_twin_h(arrH)
-        F_left_twin_arrH = self.supermesh.h_left_h(twin_arrH)
-        H_complement = set(twin_arrH[F_left_twin_arrH >= 0])
-        complement_boundary = HalfEdgeBoundary(self.supermesh, H=H_complement)
-        complement_boundary.refresh_h_gen_B()
-        return complement_boundary
-
-    def refresh_h_gen_B(self):
-        """
-        Find half-edge which generates each connected component of the boundary
-        """
-        Hneed2visit = set(self.H)
-        h_gen_B = []
-        while Hneed2visit:
-            h = Hneed2visit.pop()
-            h_gen_B.append(h)
-            for h in self.generate_H_next_h(h):
-                Hneed2visit.discard(h)
-
-        self.h_gen_B = np.array(h_gen_B, dtype=INT_TYPE)
-
-    def update_from_faces(self, F):
-        arrF = np.array(list(F), dtype=INT_TYPE)
-        # generators for each face boundary
-        h_bound_F = self.supermesh.h_bound_f(arrF)
-        next_h_bound_F = self.supermesh.h_next_h(h_bound_F)
-        next_next_h_bound_F = self.supermesh.h_next_h(next_h_bound_F)
-        # union of next cycles gives interior and positively oriented boundary half-edges
-        H_closed_plus = set(h_bound_F) | set(next_h_bound_F) | set(next_next_h_bound_F)
-        arrH_closed_plus = np.array(list(H_closed_plus), dtype=INT_TYPE)
-        # image under twin map gives interior and negatively oriented boundary half-edges
-        H_closed_minus = set(self.supermesh.h_twin_h(arrH_closed_plus))
-        H_boundary_plus = H_closed_plus - H_closed_minus
-        self.H = H_boundary_plus
-        self.refresh_h_gen_B()
+class OrientedTwoComplex(HalfEdgeMeshBase):
+    def __init__(
+        self,
+        xyz_coord_V,
+        h_out_V,
+        v_origin_H,
+        h_next_H,
+        h_twin_H,
+        f_left_H,
+        h_bound_F,
+        h_right_B,
+        *args,
+        **kwargs
+    ):
+        super().__init__(
+            xyz_coord_V,
+            h_out_V,
+            v_origin_H,
+            h_next_H,
+            h_twin_H,
+            f_left_H,
+            h_bound_F,
+            h_right_B,
+            *args,
+            **kwargs
+        )
 
     #######################################################
-    # Fundamental accessors and properties
-    ######################################################
+    # Simplicial Computations ###########################
+    #######################################################
+
+    def closure(self, V0, H0, F0, in_place=False):
+        """
+        Find simplicial closure of (V,H,F) in M by searching F and H. Uses array slicing
+        """
+
+        if in_place:
+            V, H, F = V0, H0, F0
+        else:
+            V, H, F = V0.copy(), H0.copy(), F0.copy()
+        # next cycle of each face gets
+        #   *interior half-edges
+        #   *positive boundary half-edges
+        arrF = np.array(list(F), dtype=INT_TYPE)
+        h_bound_F = self.h_bound_f(arrF)
+        next_h_bound_F = self.h_next_h(h_bound_F)
+        next_next_h_bound_F = self.h_next_h(next_h_bound_F)
+        H.update(h_bound_F)
+        H.update(next_h_bound_F)
+        H.update(next_next_h_bound_F)
+        # twin of interior half-edges gets
+        #   *negative boundary half-edges
+        #   *any other twins missing from H0
+        arrH = np.array(list(H), dtype=INT_TYPE)
+        h_twin_H = self.h_twin_h(arrH)
+        H.update(h_twin_H)
+        # origin of half-edges gets
+        #  *vertices missing from V0
+        arrH = np.array(list(H), dtype=INT_TYPE)
+        v_origin_H = self.v_origin_h(arrH)
+        V.update(v_origin_H)
+        return V, H, F
+
+    def closure1(self, V, H, F, Hneed2visit=None, Fneed2visit=None, in_place=False):
+        """
+        Find simplicial closure of (V,H,F) in M by searching F and H.
+        """
+        # V, H, F = VHF
+        if Hneed2visit is None:
+            Hneed2visit = H.copy()
+        if Fneed2visit is None:
+            Fneed2visit = F.copy()
+        if in_place:
+            closedV, closedH, closedF = V, H, F
+        else:
+            closedV, closedH, closedF = V.copy(), H.copy(), F.copy()
+        # add edges and verts for faces in F
+        while Fneed2visit:
+            f = Fneed2visit.pop()
+            for h in self.generate_H_bound_f(f):
+                ht = self.h_twin_h(h)
+                v = self.v_origin_h(h)
+                closedV.add(v)
+                closedH.add(h)
+                closedH.add(ht)
+                Hneed2visit.discard(h)
+                Hneed2visit.discard(ht)
+        # add twins and verts for remaining half-edges
+        while Hneed2visit:
+            h = Hneed2visit.pop()
+            ht = self.h_twin_h(h)
+            v = self.v_origin_h(h)
+            vt = self.v_origin_h(ht)
+            closedV.add(v)
+            closedV.add(vt)
+            closedH.add(ht)
+            Hneed2visit.discard(ht)
+        return closedV, closedH, closedF
+
+    def star_of_vertex(self, v):
+        """Star of a vertex is the set of all simplices that contain the vertex."""
+        V = {v}
+        H = set()
+        F = set()
+        for h in self.generate_H_out_v_clockwise(v):
+            ht = self.h_twin_h(h)
+            H.update([h, ht])
+            if not self.negative_boundary_contains_h(h):
+                F.add(self.f_left_h(h))
+
+        return V, H, F
+
+    def star_of_edge(self, h):
+        """Star of an edge is the set of all simplices that contain the edge."""
+        V = set()
+        H = {h, self.h_twin_h(h)}
+        F = set()
+        for hi in H:
+            if not self.negative_boundary_contains_h(hi):
+                F.add(self.f_left_h(hi))
+
+        return V, H, F
+
+    def star(self, V_in, H_in, F_in):
+        """The star of a single simplex is the set of all simplices that have the simplex as a face. The star St(s) of a k-simplex s consists of: s and all (n>k)-simplices that contain s."""
+        F = F_in.copy()
+        H = H_in.copy()
+        V = V_in.copy()
+
+        for h in H_in:
+            ht = self.h_twin_h(h)
+            H.add(ht)
+            if not self.negative_boundary_contains_h(h):
+                F.add(self.f_left_h(h))
+            if not self.negative_boundary_contains_h(ht):
+                F.add(self.f_left_h(ht))
+        for v in V_in:
+            for h in self.generate_H_out_v_clockwise(v):
+                H.add(h)
+                H.add(self.h_twin_h(h))
+                if not self.negative_boundary_contains_h(h):
+                    F.add(self.f_left_h(h))
+        return V, H, F
+
+    def link(self, V, H, F):
+        """Lk(s)=Cl(St(s))-St(Cl(s))."""
+        StCl_V, StCl_H, StCl_F = self.star(*self.closure(V, H, F))
+        ClSt_V, ClSt_H, ClSt_F = self.closure(*self.star(V, H, F))
+        return ClSt_V - StCl_V, ClSt_H - StCl_H, ClSt_F - StCl_F
+
+    def valence_v(self, v):
+        """get the valence of vertex v"""
+        valence = 0
+        for h in self.generate_H_out_v_clockwise(v):
+            valence += 1
+        return valence
+
+    def F_incident_b(self, b):
+        """get the faces incident on boundary b"""
+        F = set()
+        for h in self.generate_h_right_B(b):
+            v = self.v_origin_h(h)
+            F.update(set(self.generate_F_incident_v_clockwise(v, h_start=h)))
+        return np.array(list(F), dtype=INT_TYPE)
+
+
+class HalfEdgeCurve:
+    def __init__(self, supermesh, H, h_gen, *args, **kwargs):
+        self.supermesh = supermesh
+        self.H = H
+        self.h_gen = h_gen
+
+    #######################################################
+    # Initialization ######################################
+    #######################################################
+    def find_V_boundary(self):
+        arrH = np.array(list(self.H), dtype=INT_TYPE)
+        origins = set(self.supermesh.v_origin_h(arrH))
+        heads = set(self.supermesh.v_head_h(arrH))
+        V_origin = origins - heads
+        V_head = heads - origins
+
+    #######################################################
+    # Predicates ##########################################
+    #######################################################
+    def is_closed(self):
+        return self.h_start == self.h_end
+
+    def h_is_plus_end(self, h):
+        return self.h_end == h
+
+    #######################################################
+    # Fundamental accessors and properties ###############
+    #######################################################
     @property
     def H(self):
         return self._H
@@ -1876,66 +1803,15 @@ class HalfEdgeBoundary:
         self._H = set(value)
 
     @property
-    def h_gen_B(self):
-        return self._h_gen_B
-
-    @h_gen_B.setter
-    def h_gen_B(self, value):
-        self._h_gen_B = np.array(value, dtype=INT_TYPE)
-
-    @property
     def arrH(self):
         return np.array(list(self.H), dtype=INT_TYPE)
 
-    def h_gen_b(self, b):
-        """get index of a half-edge contained in boundary b
-
-        Args:
-            b (int): boundary index
-
-        Returns:
-            int: half-edge index
-        """
-        return self._h_gen_B[b]
-
-    def get_interior_faces(self):
-        F_interior = set()
-        F_frontier = set(
-            self.supermesh.f_left_h(np.array(list(self.H), dtype=INT_TYPE))
-        )
-        while F_frontier:
-            f = F_frontier.pop()
-            for h in self.supermesh.generate_H_bound_f(f):
-                if h in self.H:
-                    continue
-                ht = self.supermesh.h_twin_h(h)
-                ft = self.supermesh.f_left_h(ht)
-                if ft in F_interior:
-                    continue
-                F_frontier.add(ft)
-            F_interior.add(f)
-        return F_interior
-
-    def get_frontier_faces(self):
-        F_plus = set()
-        F_minus = set()
-        for h_start in self.H:
-            # h_start = self.supermesh.h_twin_h(h_boundary)
-            f_is_interior = True
-            for h in self.supermesh.generate_H_rotcw_h(h_start):
-                f = self.supermesh.f_left_h(h)
-                if f < 0:
-                    continue
-                if f_is_interior:
-                    F_plus.add(f)
-                else:
-                    F_minus.add(f)
-                if h in self.H:
-                    f_is_interior = not f_is_interior
-        return F_plus, F_minus
+    def v_origin_h(self, h):
+        return self.supermesh.v_origin_h(h)
 
     def h_next_h(self, h):
-        """get index of the next half-edge after h in the face/boundary cycle
+        """
+        Get index of the next half-edge after h in the curve. Returns -1 if h is the final half-edge in the curve.
         Args:
             h (int): half-edge index
 
@@ -1948,188 +1824,12 @@ class HalfEdgeBoundary:
         for n in self.supermesh.generate_H_rotcw_h(n_start):
             if n in self.H:
                 return n
-        return h
+        return -1
 
     #######################################################
     # Generators ##########################################
-    ######################################################
-    def generate_H_next_h(self, h_start):
-        h = h_start
-        while True:
-            yield h
-            h = self.h_next_h(h)
-            if h == h_start:
-                break
-
-    def generate_interior_faces_cumulative(self):
-        F_interior = set()
-        F_frontier = set(
-            self.supermesh.f_left_h(np.array(list(self.H), dtype=INT_TYPE))
-        )
-        while F_frontier:
-            f = F_frontier.pop()
-            for h in self.supermesh.generate_H_bound_f(f):
-                if h in self.H:
-                    continue
-                ht = self.supermesh.h_twin_h(h)
-                ft = self.supermesh.f_left_h(ht)
-                if ft in F_interior:
-                    continue
-                F_frontier.add(ft)
-            F_interior.add(f)
-            yield F_interior, F_frontier
-
-    def generate_H_interior_wedge_h(self, h):
-        while True:
-            ht = self.supermesh.h_twin_h(h)
-            if ht in self.H:
-                break
-            else:
-                h = self.supermesh.h_next_h(h)
-                yield h
-
-    def generate_H_exterior_wedge_h(self, h):
-        while True:
-            h = self.supermesh.h_twin_h(h)
-            if h in self.H:
-                break
-            else:
-                h = self.supermesh.h_next_h(h)
-                yield h
-
-    ######################################################
-    # To be deprecated
-    ######################################################
-    def build_interior_mesh(self):
-        F_interior = set()
-        F_frontier = set(
-            self.supermesh.f_left_h(np.array(list(self.H), dtype=INT_TYPE))
-        )
-        while F_frontier:
-            f = F_frontier.pop()
-            H_bound_f = set(self.supermesh.generate_H_bound_f(f))
-            for h in H_bound_f:
-                if h in self.H:
-                    continue
-                ht = self.supermesh.h_twin_h(h)
-                ft = self.supermesh.f_left_h(ht)
-                if ft in F_interior:
-                    continue
-                F_frontier.add(ft)
-            F_interior.add(f)
-
-        return HalfEdgeMesh.from_faces(self.supermesh, F_interior)
-
-    def _get_F_adjacent_b(self, b):
-        h_gen = self.h_gen_b(b)
-        F = set()
-        h = self.supermesh.h_next_h(h_gen)
-        # while h != h_gen:
-        #     while h not in self.H:
-        #         f = self.supermesh.f_left_h(h)
-        #         F.add(f)
-        #         h = self.supermesh.h_rotcw_h(h)
-        #     h = self.supermesh.h_next_h(h)
-        while True:
-            f = self.supermesh.f_left_h(h)
-            F.add(f)
-            h = self.supermesh.h_rotcw_h(h)
-            if h in self.H:
-                if h == h_gen:
-                    return F
-                else:
-                    h = self.supermesh.h_next_h(h)
-        return F
-
-    def _xyz_coord_v(self, v):
-        """
-        get array of xyz coordinates of vertex v
-
-        Args:
-            v (int): vertex index
-
-        Returns:
-            numpy.array: xyz coordinates
-        """
-        return self.supermesh.xyz_coord_v(v)
-
-    # def h_out_v(self, v):
-    #     """
-    #     get index of an non-boundary outgoing half-edge incident on vertex v
-
-    #     Args:
-    #         v (int): vertex index
-
-    #     Returns:
-    #         int: half-edge index
-    #     """
-    #     if v not in self.V:
-    #         raise ValueError("Vertex not in patch.")
-    #     for h in self.supermesh.generate_H_out_v_clockwise(v):
-    #         if h not in self.H:
-    #             continue
-    #         elif self.supermesh.f_left_h(h) in self.F:
-    #             return h
-
-    def _h_next_h(self, h):
-        """get index of the next half-edge after h in the face/boundary cycle
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: half-edge index
-        """
-        if h not in self.H:
-            raise ValueError("Half-edge not in boundary.")
-        n = self.supermesh.h_next_h(h)
-        while n not in self.H:
-            n = self.supermesh.h_rotcw_h(n)
-        return n
-
-    def _h_twin_h(self, h):
-        """get index of the half-edge anti-parallel to half-edge h
-
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: half-edge index
-        """
-        if h not in self.H:
-            raise ValueError("Half-edge not in patch.")
-        return self.supermesh.h_twin_h(h)
-
-    def _f_left_h(self, h):
-        """get index of the face to the left of half-edge h
-
-        Args:
-            h (int): half-edge index
-
-        Returns:
-            int: face index
-        """
-        if h not in self.H:
-            raise ValueError("Half-edge not in patch.")
-        elif self.supermesh.f_left_h(h) in self.F:
-            return self.supermesh.f_left_h(h)
-        else:
-            b = self.b_left_h(h)
-            return -(b + 1)
-
-    def _h_bound_f(self, f):
-        """get index of a half-edge on the boundary of face f
-
-        Args:
-            f (int): face index
-
-        Returns:
-            int: half-edge index
-        """
-        if f not in self.F:
-            raise ValueError("Face not in patch.")
-        return self.supermesh.h_bound_f(f)
-
-    def _generate_H_next_h(self, h):
+    #######################################################
+    def generate_H_next_h(self, h):
         """Generate half-edges in the face/boundary cycle containing half-edge h"""
         h_start = h
         while True:
@@ -2139,73 +1839,32 @@ class HalfEdgeBoundary:
                 break
 
 
-class SubMesh:
-    """
-    A submanifold of a HalfEdgeMesh.
-
-    Parameters:
-    ----------
-    supermesh (HalfEdgeMesh): mesh containing the patch
-    F (set): set of faces in the patch
-
-    """
-
-    def __init__(self, supermesh, F=None, boundary=None, *args, **kwargs):
+class Boundary2D:
+    def __init__(self, supercomplex, H=None, h_gen_B=None, *args, **kwargs):
+        if H is None:
+            H = set()
+        if h_gen_B is None:
+            h_gen_B = np.array([], dtype=INT_TYPE)
         self.supermesh = supermesh
+        self.H = H
+        self.h_gen_B = h_gen_B
+
+
+class SubComplex2D:
+    """ """
+
+    def __init__(self, supercomplex, F=None, boundary=None, *args, **kwargs):
+        self.supercomplex = supercomplex
         if F is None:
             F = set()
         if boundary is None:
-            boundary = HalfEdgeBoundary(supermesh)
-        self.F = F
-        self.boundary = boundary
-
-    ######################################################
-    # Initilization and update methods
-    ######################################################
-    @classmethod
-    def from_seed_vertex(cls, seed_vertex, supermesh):
-        """
-        Initialize a patch from a seed vertex by including taking the closure of all simplices in supermesh that contain the seed vertex. If seed_vertex is not in a boundary of supermesh, the patch will be a disk centered at seed_vertex. If seed_vertex is on a boundary, the patch will be wedge or sector of a disk.
-
-        Parameters:
-            seed_vertex (int): vertex index
-            supermesh (HalfEdgeMesh): mesh from which the patch is extracted
-        """
-        F = set()
-        h = supermesh.h_out_v(seed_vertex)
-        for h in supermesh.generate_H_rotcw_h(h):
-            f = supermesh.f_left_h(h)
-            if f < 0:
-                continue
-            F.add(f)
-        self = cls(supermesh, F)
-        self.refresh_boundary()
-        return self
-
-    ######################################################
-    # Fundamental accessors and properties
-    ######################################################
-    @property
-    def F(self):
-        return self._F
-
-    @F.setter
-    def F(self, value):
-        if isinstance(value, set):
-            self._F = value
-        elif hasattr(value, "__iter__"):
-            self._F = set(value)
-        else:
-            raise ValueError("Argument must be set or iterable.")
-
-    @property
-    def num_faces(self):
-        return len(self.F)
-
-    def refresh_boundary(self):
-        self.boundary.update_from_faces(self.F)
+            boundary = Boundary2D(supermesh)
 
 
-class TransitionFunction:
-    def __init__(self, patch1, patch2, *args, **kwargs):
+class HalfEdgeAtlas:
+    """
+    ...
+    """
+
+    def __init__(self, surface, *args, **kwargs):
         pass

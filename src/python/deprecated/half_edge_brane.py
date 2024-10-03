@@ -290,7 +290,7 @@ class Brane:
         self.V_of_F
         self.data_arrays
         self.data_dicts
-        # Simplical operations
+        # Simplicial operations
         V, H, F = self.star_of_vertex(v)
         self.star_of_vertex(v)
         # self.star_of_edge(h)
