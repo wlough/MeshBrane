@@ -5,6 +5,7 @@ from src.python.global_vars import INT_TYPE, FLOAT_TYPE
 from src.python.linear_algebra import rigid_transform
 from src.python.combinatorics import argsort, compute_cycles
 from scipy.sparse import lil_matrix
+from src.python.combinatorics import CombinatorialSimplex
 
 # See: ./notebooks/testing.py, ./src/python/back_half_edge_mesh.py
 
@@ -1600,7 +1601,7 @@ class HalfEdgeMeshBase:
         return V, H, F
 
 
-class OrientedTwoComplex(HalfEdgeMeshBase):
+class HalfEdgeComplex(HalfEdgeMeshBase):
     def __init__(
         self,
         xyz_coord_V,
@@ -1765,8 +1766,21 @@ class OrientedTwoComplex(HalfEdgeMeshBase):
             F.update(set(self.generate_F_incident_v_clockwise(v, h_start=h)))
         return np.array(list(F), dtype=INT_TYPE)
 
+    def get_unsigned_simplicial_sets(self):
+        S0 = {frozenset(v) for v in range(self.num_vertices)}
+
 
 class HalfEdgeCurve:
+    """
+    Piecewise linear curve embedded in a half-edge mesh.
+
+    Parameters
+    ----------
+    supermesh (HalfEdgeComplex)
+        Simplicial complex containing the curve
+    H (set):
+    """
+
     def __init__(self, supermesh, H, h_gen, *args, **kwargs):
         self.supermesh = supermesh
         self.H = H
