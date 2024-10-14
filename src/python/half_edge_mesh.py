@@ -1781,29 +1781,35 @@ class HalfEdgeCurve:
     H (set):
     """
 
-    def __init__(self, supermesh, H, h_gen, *args, **kwargs):
+    def __init__(self, supermesh, H, h_start, h_end, *args, **kwargs):
         self.supermesh = supermesh
         self.H = H
-        self.h_gen = h_gen
+        self.h_start = h_start
+        self.h_end = h_end
+
+    def __add__(self, other):
+        is_implemented = all(
+            [
+                self.supermesh == other.supermesh,
+                self.h_end == other.h_start,
+            ]
+        )
+        if is_implemented:
+            return HalfEdgeCurve(
+                self.supermesh, self.H.union(other.H), self.h_start, other.h_end
+            )
+
+        raise ValueError("Not implemented")
 
     #######################################################
     # Initialization ######################################
     #######################################################
-    def find_V_boundary(self):
-        arrH = np.array(list(self.H), dtype=INT_TYPE)
-        origins = set(self.supermesh.v_origin_h(arrH))
-        heads = set(self.supermesh.v_head_h(arrH))
-        V_origin = origins - heads
-        V_head = heads - origins
 
     #######################################################
     # Predicates ##########################################
     #######################################################
     def is_closed(self):
         return self.h_start == self.h_end
-
-    def h_is_plus_end(self, h):
-        return self.h_end == h
 
     #######################################################
     # Fundamental accessors and properties ###############
@@ -1840,9 +1846,43 @@ class HalfEdgeCurve:
                 return n
         return -1
 
+    def h_prev_h(self, h):
+        """
+        Get index of the previous half-edge after h in the curve. Returns -1 if h is the starting half-edge in the curve.
+        Args:
+            h (int): half-edge index
+
+        Returns:
+            int: half-edge index
+        """
+        if h not in self.H:
+            raise ValueError("Half-edge not in patch.")
+        h_start = h
+        for h in self.supermesh.generate_H_rotcw_h(h_start):
+            p = self.supermesh.h_twin_h(h)
+            if p in self.H:
+                return p
+        return -1
+
     #######################################################
     # Generators ##########################################
     #######################################################
+
+    #######################################################
+    # To be deprecated ###################################
+    #######################################################
+    def _find_V_boundary(self):
+        arrH = np.array(list(self.H), dtype=INT_TYPE)
+        origins = set(self.supermesh.v_origin_h(arrH))
+        heads = set(self.supermesh.v_head_h(arrH))
+        V_origin = origins - heads
+        V_head = heads - origins
+
+
+class HalfEdgeLoop(HalfEdgeCurve):
+    def __init__(self, supermesh, H, h_start, *args, **kwargs):
+        super().__init__(supermesh, H, h_start, h_start, *args, **kwargs)
+
     def generate_H_next_h(self, h):
         """Generate half-edges in the face/boundary cycle containing half-edge h"""
         h_start = h
@@ -1854,7 +1894,7 @@ class HalfEdgeCurve:
 
 
 class Boundary2D:
-    def __init__(self, supercomplex, H=None, h_gen_B=None, *args, **kwargs):
+    def __init__(self, supermesh, H=None, h_gen_B=None, *args, **kwargs):
         if H is None:
             H = set()
         if h_gen_B is None:
@@ -1863,19 +1903,73 @@ class Boundary2D:
         self.H = H
         self.h_gen_B = h_gen_B
 
+    @classmethod
+    def from_supermesh(cls, supermesh, *args, **kwargs):
+        # h_right_B = supermesh.h_right_B
+        H_twin = set()
+        for h in supermesh.h_right_B:
+            H_twin.update(supermesh.generate_H_next_h(h))
+        H = set(supermesh.h_twin_h(np.array(list(H_twin), dtype=INT_TYPE)))
+        h_gen_B = supermesh.h_twin_h(supermesh.h_right_B)
+        return cls(supermesh, H, h_gen_B, *args, **kwargs)
+
+    def get_interior_faces(self):
+        F_interior = set()
+        F_frontier = set(
+            self.supermesh.f_left_h(np.array(list(self.H), dtype=INT_TYPE))
+        )
+        while F_frontier:
+            f = F_frontier.pop()
+            for h in self.supermesh.generate_H_bound_f(f):
+                if h in self.H:
+                    continue
+                ht = self.supermesh.h_twin_h(h)
+                ft = self.supermesh.f_left_h(ht)
+                if ft in F_interior:
+                    continue
+                F_frontier.add(ft)
+            F_interior.add(f)
+        return F_interior
+
+    def get_loops(self):
+        loops = []
+        for h_start in self.h_gen_B:
+            H = set(self.supermesh.generate_H_next_h(h_start))
+            loop = HalfEdgeLoop(self.supermesh, H, h_start)
+            loops.append(loop)
+        return loops
+
+    def generate_interior_faces_cumulative(self):
+        F_interior = set()
+        F_frontier = set(
+            self.supermesh.f_left_h(np.array(list(self.H), dtype=INT_TYPE))
+        )
+        while F_frontier:
+            f = F_frontier.pop()
+            for h in self.supermesh.generate_H_bound_f(f):
+                if h in self.H:
+                    continue
+                ht = self.supermesh.h_twin_h(h)
+                ft = self.supermesh.f_left_h(ht)
+                if ft in F_interior:
+                    continue
+                F_frontier.add(ft)
+            F_interior.add(f)
+            yield F_interior, F_frontier
+
 
 class SubComplex2D:
     """ """
 
-    def __init__(self, supercomplex, F=None, boundary=None, *args, **kwargs):
-        self.supercomplex = supercomplex
+    def __init__(self, supermesh, F=None, boundary=None, *args, **kwargs):
+        self.supermesh = supermesh
         if F is None:
             F = set()
         if boundary is None:
             boundary = Boundary2D(supermesh)
 
 
-class HalfEdgeAtlas:
+class _HalfEdgeAtlas:
     """
     ...
     """

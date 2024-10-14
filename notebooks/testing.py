@@ -1,3 +1,7 @@
+import numpy as np
+from src.python.global_vars import INT_TYPE
+
+
 class HalfEdgeBoundary:
     """
     Boundary of a (sub)mesh
@@ -26,9 +30,7 @@ class HalfEdgeBoundary:
     ######################################################
     @classmethod
     def from_mesh(cls, supermesh):
-        arrH = supermesh.positive_boundary_contains_h(
-            range(supermesh.num_half_edges)
-        ).nonzero()[0]
+        arrH = supermesh.positive_boundary_contains_h(range(supermesh.num_half_edges)).nonzero()[0]
         H = set(arrH)
         h_gen_B = supermesh.h_twin_h(supermesh.h_right_B)
         return cls(supermesh, H, h_gen_B)
@@ -126,9 +128,7 @@ class HalfEdgeBoundary:
 
     def get_interior_faces(self):
         F_interior = set()
-        F_frontier = set(
-            self.supermesh.f_left_h(np.array(list(self.H), dtype=INT_TYPE))
-        )
+        F_frontier = set(self.supermesh.f_left_h(np.array(list(self.H), dtype=INT_TYPE)))
         while F_frontier:
             f = F_frontier.pop()
             for h in self.supermesh.generate_H_bound_f(f):
@@ -189,9 +189,7 @@ class HalfEdgeBoundary:
 
     def generate_interior_faces_cumulative(self):
         F_interior = set()
-        F_frontier = set(
-            self.supermesh.f_left_h(np.array(list(self.H), dtype=INT_TYPE))
-        )
+        F_frontier = set(self.supermesh.f_left_h(np.array(list(self.H), dtype=INT_TYPE)))
         while F_frontier:
             f = F_frontier.pop()
             for h in self.supermesh.generate_H_bound_f(f):
@@ -228,9 +226,7 @@ class HalfEdgeBoundary:
     ######################################################
     def build_interior_mesh(self):
         F_interior = set()
-        F_frontier = set(
-            self.supermesh.f_left_h(np.array(list(self.H), dtype=INT_TYPE))
-        )
+        F_frontier = set(self.supermesh.f_left_h(np.array(list(self.H), dtype=INT_TYPE)))
         while F_frontier:
             f = F_frontier.pop()
             H_bound_f = set(self.supermesh.generate_H_bound_f(f))

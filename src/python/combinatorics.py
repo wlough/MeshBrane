@@ -941,7 +941,7 @@ class ZeroChain(SimplicialChain):
         return self
 
 
-class SignedSimplex:
+class _SignedSimplex:
     """
     Integer multiple of an oriented simplex.
 
@@ -1056,7 +1056,7 @@ class SignedSimplex:
         ]
 
 
-class CombinatorialTetrahedron:
+class _CombinatorialTetrahedron:
     """
     name : str
         Name of the cell.
