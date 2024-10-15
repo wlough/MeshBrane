@@ -1,72 +1,68 @@
-from src.python.ply_tools import SphereFactory, TorusFactory
-from src.python.half_edge_mesh import HalfEdgeMesh
-from src.python.sym_tools import UniformCoordinateInterval, Samples1D, Samples2D, Samples, alphaseq_symbols
-import sympy as sp
+from src.python.mesh import (
+    HalfEdgeMesh,
+    # HalfEdgeCurve,
+    # HalfEdgeLoop,
+    # Boundary2D,
+)
+
+
+# from src.python.mesh.viewer import MeshViewer
+
+# from src.python.half_edge_base_patch import HalfEdgePatch
 import numpy as np
-from sympy.abc import a, b, c, i, j, k, l, m, n, s, t, u, v, w, x, y, z
 
-a, b, n = 1.1, 22.6, 55
-s = Samples1D.linspace(a, b, n)
-# s.apply_index_transform(lambda i: i+1)
-s(5)
+# from mayavi import mlab
 
-s
-S = [
-    [Samples1D.linspacebc(a, b, include_lower=bool(i), include_upper=bool(j), num=n) for j in range(2)]
-    for i in range(2)
-]
-s00 = Samples1D.linspacebc(a, b, include_lower=bool(0), include_upper=bool(0), num=n)
-s01 = Samples1D.linspacebc(a, b, include_lower=bool(0), include_upper=bool(1), num=n)
-s00 = Samples1D.linspacebc(a, b, include_lower=bool(1), include_upper=bool(0), num=n)
-s01 = Samples1D.linspacebc(a, b, include_lower=bool(1), include_upper=bool(1), num=n)
+ply_path = "./data/half_edge_base/ply/unit_sphere_005120_he.ply"
+ply_path = "./data/half_edge_base/ply/neovius_he.ply"
 
-S[0][0]
 
+m = HalfEdgeMesh.load(ply_path=ply_path)
+# mv = MeshViewer(m)
+# mv.plot()
+he_samples = m.he_samples
+vf_samples = (m.xyz_coord_V, m.V_of_F)
+H = m.V_of_H
+h = 0
 # %%
-
-R = UniformCoordinateInterval(
-    lower_bound=0,
-    upper_bound=1,
-    num_samples="2**p",
-    dummy_index="k",
-    subs={"p": 6},
-    include_lower=False,
-    include_upper=True,
+from src.cpp.half_edge_utils import (
+    get_V_of_F,
+    get_halfedge_index_of_twin,
+    find_h_right_B,
+    vf_samples_to_he_samples,
 )
-Theta = UniformCoordinateInterval(
-    lower_bound=0,
-    upper_bound="pi",
-    num_samples="2**p",
-    dummy_index="k",
-    subs={"p": 6},
-    include_lower=False,
-    include_upper=False,
-)
-Phi = UniformCoordinateInterval(
-    lower_bound=0,
-    upper_bound="2*pi",
-    num_samples="2**p",
-    dummy_index="k",
-    subs={"p": 6},
-    include_lower=True,
-    include_upper=False,
+from src.python.half_edge_base_utils import V_of_F as get_V_of_F_numba
+from src.python.half_edge_base_utils import find_h_right_B as find_h_right_B_numba
+from src.python.half_edge_base_utils import (
+    vf_samples_to_he_samples as vf_samples_to_he_samples_numba,
 )
 
+ht = get_halfedge_index_of_twin(H, h)
 
-R.numpy_samples - np.linspace(0, 1, 2**6 + 1)[1:]
-# Theta.numpy_samples-np.linspace(0,np.pi,2**6+2)[1:-1]*********
-Phi.numpy_samples - np.linspace(0, 2 * np.pi, 2**6 + 1)[:-1]
-# %%
-import tracemalloc
+V_of_F = get_V_of_F(*he_samples)
+V_of_F_numba = get_V_of_F_numba(*he_samples)
 
-tracemalloc.start()
-xx = [x**2 for x in range(1000)]
-# Place code here
+h_right_B = find_h_right_B(*he_samples[:-1])
+h_right_B_numba = find_h_right_B_numba(*he_samples[:-1])
 
-current, peak = tracemalloc.get_traced_memory()
-print(f"Current memory usage is {current / 10**6}MB; Peak was {peak / 10**6}MB")
 
-tracemalloc.stop()
+_B = [set(m.generate_H_next_h(h)) for h in h_right_B]
+_B_numba = [set(m.generate_H_next_h(h)) for h in h_right_B_numba]
+[sum([x == y for y in _B]) for x in _B_numba]
+B = set()
+B_numba = set()
+for _ in _B:
+    B |= _
+for _ in _B_numba:
+    B_numba |= _
 
-# %load_ext memory_profiler
-# %memit [x**2 for x in range(1000)]
+B_numba == B
+set(h_right_B) - set(h_right_B_numba)
+set(h_right_B_numba) - set(h_right_B)
+
+# %timeit find_h_right_B(*he_samples[:-1])
+# %timeit find_h_right_B_numba(*he_samples[:-1])
+
+
+# %timeit get_V_of_F(*he_samples)
+# %timeit V_of_F(*he_samples)
