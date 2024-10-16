@@ -76,8 +76,8 @@ vf_samples_to_he_samples(const Samples3d &xyz_coord_V,
     }
   }
 
-  auto Nh1 = H_boundary_plus.size();
-  auto Nh = Nh0 + Nh1;
+  INT_TYPE Nh1 = H_boundary_plus.size();
+  INT_TYPE Nh = Nh0 + Nh1;
   v_origin_H.conservativeResize(Nh);
   h_next_H.conservativeResize(Nh);
   h_twin_H.conservativeResize(Nh);
@@ -91,7 +91,7 @@ vf_samples_to_he_samples(const Samples3d &xyz_coord_V,
   for (INT_TYPE i = 0; i < Nh1; ++i) {
     INT_TYPE h = H_boundary_plus[i];
     INT_TYPE h_twin = Nh0 + i;
-    INT_TYPE v0 = H0(h, 0);
+    // INT_TYPE v0 = H0(h, 0);
     INT_TYPE v1 = H0(h, 1);
     H_boundary_minus.insert(h_twin);
     v_origin_H[h_twin] = v1;
@@ -104,22 +104,25 @@ vf_samples_to_he_samples(const Samples3d &xyz_coord_V,
   // assign left face for negative boundary half-edges
   while (!H_boundary_minus.empty()) {
     INT_TYPE b = h_right_B.size();
-    INT_TYPE h_start = *H_boundary_minus.begin();
-    // H_boundary_minus.erase(h_start);
-    f_left_H[h_start] = -(b + 1);
+    INT_TYPE h_right_b = *H_boundary_minus.begin();
+    // H_boundary_minus.erase(h_right_b);
+    f_left_H[h_right_b] = -(b + 1);
+    h_right_B.conservativeResize(b + 1);
+    h_right_B[b] = h_right_b; // Assign new value
 
-    INT_TYPE h = h_start;
-    // follow next cycle along negative boundary until we get back to h=h_start
+    INT_TYPE h = h_right_b;
+    // follow next cycle along boundary b until we get back to h=h_right_b
     do {
       INT_TYPE h_next = h_twin_H[h];
-      // rotate ccw around origin of twin until we find next h on boundary
+      // rotate ccw around origin of twin until we find next h on boundary b
+      // erase h from H_boundary_minus
       while (H_boundary_minus.find(h_next) == H_boundary_minus.end()) {
         h_next = h_twin_H[h_next_H[h_next_H[h_next]]];
       }
-      H_boundary_minus.erase(h);
       h_next_H[h] = h_next;
       h = h_next;
-    } while (h != h_start);
+      H_boundary_minus.erase(h);
+    } while (h != h_right_b);
   }
 
   return std::make_tuple(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
