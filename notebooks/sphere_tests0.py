@@ -130,7 +130,7 @@ def get_test_data():
 # %%
 import numpy as np
 import matplotlib.pyplot as plt
-from src.python.utilities import round_to, log_log_fit
+from src.python.utilities.misc_utils import round_to, log_log_fit
 
 
 def ten_pow(X, decimals=3):

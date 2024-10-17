@@ -3,7 +3,7 @@ import os
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-from src.python.utilities import round_to, log_log_fit
+from src.python.utilities.misc_utils import round_to, log_log_fit
 from src.python.half_edge_test import (
     get_plt_combos,
     scalars_to_rgba,

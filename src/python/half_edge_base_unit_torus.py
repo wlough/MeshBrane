@@ -273,7 +273,7 @@ class DoughnutFactory:
                   = 2 * scale_phi * scale_psi * 4**resolution
         num_edges = 3 * Nphi * Npsi
         """
-        from src.python.utilities import make_output_dir
+        from src.python.utilities.misc_utils import make_output_dir
 
         make_output_dir(output_dir, overwrite=False)
         ##############################################################

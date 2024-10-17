@@ -28,7 +28,7 @@ def mesh_gen_laplacian_smooth():
     import sys
 
     sys.path.append("./")
-    from src.python.utilities import make_output_dir
+    from src.python.utilities.misc_utils import make_output_dir
     from src.python.half_edge_base_unit_torus import DoughnutFactory
     import numpy as np
     from python.half_edge_mesh import HalfEdgeMeshBase
@@ -131,7 +131,7 @@ def mesh_gen_reg_force():
     import sys
 
     sys.path.append("./")
-    from src.python.utilities import make_output_dir
+    from src.python.utilities.misc_utils import make_output_dir
     from src.python.half_edge_base_unit_torus import DoughnutFactory
     import numpy as np
     from python.half_edge_mesh import HalfEdgeMeshBase

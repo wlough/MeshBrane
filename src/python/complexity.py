@@ -3,7 +3,7 @@ from time import time
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from src.python.utilities import round_to
+from src.python.utilities.misc_utils import round_to
 from src.python.combinatorics import argsort
 
 

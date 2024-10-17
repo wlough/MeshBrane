@@ -1,7 +1,7 @@
 # O(N) compute time
 
 from src.python.half_edge_mesh import HalfEdgeMesh, HeatLaplacian
-from src.python.utilities import round_to, log_log_fit
+from src.python.utilities.misc_utils import round_to, log_log_fit
 from scipy.sparse import csr_matrix, save_npz, load_npz
 import os
 from time import time
@@ -32,7 +32,9 @@ def load_heat_laplacian_weights_compute(surf):
             L.append(pickle.load(f))
     Nvertices = np.array([l.num_vertices for l in L])
     Tweights = np.array([l.t_weights for l in L])
-    norm_inf_W = np.array([np.linalg.norm(np.ravel(l.weights.todense()), np.inf) for l in L])
+    norm_inf_W = np.array(
+        [np.linalg.norm(np.ravel(l.weights.todense()), np.inf) for l in L]
+    )
     norm_two_W = np.array([np.linalg.norm(np.ravel(l.weights.todense()), 2) for l in L])
     return Nvertices, Tweights, norm_inf_W, norm_two_W, L
 
@@ -77,7 +79,9 @@ def heat_laplacian_weights_compute(surf):
 
     Nvertices = np.array([l.num_vertices for l in L])
     Tweights = np.array([l.t_weights for l in L])
-    norm_inf_W = np.array([np.linalg.norm(np.ravel(l.weights.todense()), np.inf) for l in L])
+    norm_inf_W = np.array(
+        [np.linalg.norm(np.ravel(l.weights.todense()), np.inf) for l in L]
+    )
     norm_two_W = np.array([np.linalg.norm(np.ravel(l.weights.todense()), 2) for l in L])
     np.save(output_dir + "/Nvertices.npy", Nvertices)
     np.save(output_dir + "/Tweights.npy", Tweights)
@@ -96,7 +100,9 @@ def heat_laplacian_weights_compute(surf):
 
 
 # Nvertices, Tweights, norm_inf_W, norm_two_W, L = heat_laplacian_weights_compute("dumbbell")
-Nvertices, Tweights, norm_inf_W, norm_two_W, L = load_heat_laplacian_weights_compute("dumbbell")
+Nvertices, Tweights, norm_inf_W, norm_two_W, L = load_heat_laplacian_weights_compute(
+    "dumbbell"
+)
 # %%
 N, T, W = Nvertices, Tweights, norm_inf_W
 
@@ -117,7 +123,7 @@ log_log_fit(N, W, Xlabel="N", Ylabel="W", title="")
 #
 #
 from src.python.half_edge_mesh import HalfEdgeMesh, HeatLaplacian
-from src.python.utilities import round_to, log_log_fit
+from src.python.utilities.misc_utils import round_to, log_log_fit
 from scipy.sparse import csr_matrix, save_npz, load_npz
 import os
 from time import time
@@ -139,7 +145,9 @@ def load_heat_laplacian_weights_compute():
             L.append(pickle.load(f))
     Nvertices = np.array([l.num_vertices for l in L])
     Tweights = np.array([l.t_weights for l in L])
-    norm_inf_W = np.array([np.linalg.norm(np.ravel(l.weights.todense()), np.inf) for l in L])
+    norm_inf_W = np.array(
+        [np.linalg.norm(np.ravel(l.weights.todense()), np.inf) for l in L]
+    )
     norm_two_W = np.array([np.linalg.norm(np.ravel(l.weights.todense()), 2) for l in L])
     return Nvertices, Tweights, norm_inf_W, norm_two_W, L
 
@@ -192,7 +200,9 @@ def heat_laplacian_weights_compute():
 
     Nvertices = np.array([l.num_vertices for l in L])
     Tweights = np.array([l.t_weights for l in L])
-    norm_inf_W = np.array([np.linalg.norm(np.ravel(l.weights.todense()), np.inf) for l in L])
+    norm_inf_W = np.array(
+        [np.linalg.norm(np.ravel(l.weights.todense()), np.inf) for l in L]
+    )
     norm_two_W = np.array([np.linalg.norm(np.ravel(l.weights.todense()), 2) for l in L])
     np.save(output_dir + "/Nvertices.npy", Nvertices)
     np.save(output_dir + "/Tweights.npy", Tweights)
@@ -231,7 +241,7 @@ log_log_fit(N, W, Xlabel="N", Ylabel="W", title="")
 #
 #
 from src.python.half_edge_mesh import HalfEdgeMesh, HeatLaplacian
-from src.python.utilities import log_log_fit
+from src.python.utilities.misc_utils import log_log_fit
 import os
 import pickle
 
@@ -253,7 +263,13 @@ def unit_sphere_mean_curvature_normal_compute(surfs=surfs, output_dir=output_dir
         data_path = f"{output_dir}/{surf}"
         ply = f"./data/ply/binary/{surf}.ply"
         m = HalfEdgeMesh.from_half_edge_ply(ply)
-        laplacian_kwargs = {"mesh": m, "rtol": 1e-12, "atol": 1e-12, "data_path": data_path, "run_tests": True}
+        laplacian_kwargs = {
+            "mesh": m,
+            "rtol": 1e-12,
+            "atol": 1e-12,
+            "data_path": data_path,
+            "run_tests": True,
+        }
         l = HeatLaplacian(**laplacian_kwargs)
         l.save()
         M.append(m)

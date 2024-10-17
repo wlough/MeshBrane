@@ -18,7 +18,7 @@ from numba.experimental import jitclass
 import pickle
 from time import time
 import os
-from src.python.utilities import save_npz
+from src.python.utilities.misc_utils import save_npz
 
 
 @jit

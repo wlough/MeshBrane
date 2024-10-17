@@ -3,7 +3,7 @@ from src.python.ply_tools import SphereFactory
 # import numpy as np
 # from time import time
 # import matplotlib.pyplot as plt
-# from src.python.utilities import round_to, log_log_fit
+# from src.python.utilities.misc_utils import round_to, log_log_fit
 
 # from src.python.half_edge_test import (
 #     # get_plt_combos,
@@ -84,7 +84,7 @@ for nv, t in zip(Npred, Tpred):
 # from src.python.half_edge_mesh import HalfEdgeMesh
 # from time import time
 # import matplotlib.pyplot as plt
-# from src.python.utilities import round_to, log_log_fit
+# from src.python.utilities.misc_utils import round_to, log_log_fit
 # import numpy as np
 # from src.python.half_edge_test import (
 #     get_plt_combos,

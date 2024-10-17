@@ -1,8 +1,8 @@
 /**
- * @file half_edge_utils.hpp
+ * @file half_edge_cutils.hpp
  */
-#ifndef HALF_EDGE_UTILS_HPP
-#define HALF_EDGE_UTILS_HPP
+#ifndef HALF_EDGE_CUTILS_HPP
+#define HALF_EDGE_CUTILS_HPP
 
 #include <Eigen/Dense> // Eigen::Vector3d
 #include <cstdint>     // std::int32_t
@@ -34,10 +34,10 @@ struct HalfEdgeSamples {
   Samplesi h_right_B;
 };
 
-INT_TYPE get_halfedge_index_of_twin(const Samples2i &H, const INT_TYPE &h);
+INT_TYPE find_halfedge_index_of_twin(const Samples2i &H, const INT_TYPE &h);
 
 std::tuple<Samples3d, Samplesi, Samplesi, Samplesi, Samplesi, Samplesi,
            Samplesi, Samplesi>
 vf_samples_to_he_samples(const Samples3d &xyz_coord_V, const Samples3i &V_of_F);
 
-#endif /* HALF_EDGE_UTILS_HPP */
+#endif /* HALF_EDGE_CUTILS_HPP */

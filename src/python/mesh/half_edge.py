@@ -421,7 +421,7 @@ class HalfEdgeMesh:
         """
         return self._h_twin_H[h]
 
-    def h_right_B(self, b):
+    def h_right_b(self, b):
         """get index of a half-edge contained in boundary b
 
         Args:
@@ -617,8 +617,8 @@ class HalfEdgeMesh:
             if h == h_start:
                 break
 
-    def generate_h_right_B(self, b):
-        h_start = self.h_right_B(b)
+    def generate_H_right_b(self, b):
+        h_start = self.h_right_b(b)
         h = h_start
         while True:
             yield h
@@ -777,7 +777,7 @@ class HalfEdgeMesh:
     def F_incident_b(self, b):
         """get the faces incident on boundary b"""
         F = set()
-        for h in self.generate_h_right_B(b):
+        for h in self.generate_H_right_b(b):
             v = self.v_origin_h(h)
             F.update(set(self.generate_F_incident_v_clockwise(v, h_start=h)))
         return np.array(list(F), dtype=INT_TYPE)

@@ -1,4 +1,4 @@
-from src.python.utilities import make_output_dir
+from src.python.utilities.misc_utils import make_output_dir
 from src.python.half_edge_base_named_mesh import (
     HalfEdgeNamedMesh,
     HalfEdgeSphere,
@@ -181,7 +181,7 @@ def refine(surf_coord_V_coarse, V_of_F_coarse):
 #############################################
 # make torii
 # %%
-from src.python.utilities import make_output_dir
+from src.python.utilities.misc_utils import make_output_dir
 from src.python.torus_builder import DoughnutFactory
 
 output_dir = "./output/test_ply"

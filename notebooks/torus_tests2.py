@@ -58,7 +58,9 @@ def get_test_data():
     # num_M = len(M)
     num_timelike = len(timelike_param)
     mcvec_belkin = [[m.mcvec_belkin[_] for m in M] for _ in range(num_timelike)]
-    mcvec_belkin_L2error = np.array([[m.mcvec_belkin_L2error[_] for m in M] for _ in range(num_timelike)])
+    mcvec_belkin_L2error = np.array(
+        [[m.mcvec_belkin_L2error[_] for m in M] for _ in range(num_timelike)]
+    )
     mcvec_belkin_Lifntyerror = np.array(
         [[m.mcvec_belkin_Lifntyerror[_] for m in M] for _ in range(num_timelike)]
     )
@@ -144,7 +146,7 @@ Z - z
 # %%
 import numpy as np
 import matplotlib.pyplot as plt
-from src.python.utilities import round_to, log_log_fit
+from src.python.utilities.misc_utils import round_to, log_log_fit
 
 
 def ten_pow(X, decimals=3):
@@ -179,7 +181,10 @@ def to_scinotation_tex(X, decimals=3):
             coeff[_] = int(coeff[_])
         else:
             coeff[_] = np.round(coeff[_], decimals=decimals)
-    xlabels = [r"$" + f"{c}" + r" \times " + r"10^{" + f"{p}" + r"}$" for c, p in zip(coeff, pow)]
+    xlabels = [
+        r"$" + f"{c}" + r" \times " + r"10^{" + f"{p}" + r"}$"
+        for c, p in zip(coeff, pow)
+    ]
     return xlabels
 
 

@@ -1,10 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from src.python.utilities import round_to, log_log_fit
+from src.python.utilities.misc_utils import round_to, log_log_fit
 from matplotlib import colormaps as plt_cmap
 import pickle
 import os
-from src.python.utilities import (
+from src.python.utilities.misc_utils import (
     make_output_dir,
     load_npz,
     save_npz,

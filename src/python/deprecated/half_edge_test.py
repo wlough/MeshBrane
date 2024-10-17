@@ -7,7 +7,7 @@ import pickle
 from src.python.half_edge_mesh import HalfEdgeMesh
 from src.python.mesh_viewer import MeshViewer
 from src.python.ply_tools import VertTri2HalfEdgeConverter
-from src.python.utilities import round_to, log_log_fit
+from src.python.utilities.misc_utils import round_to, log_log_fit
 import concurrent.futures
 import multiprocessing as mp
 

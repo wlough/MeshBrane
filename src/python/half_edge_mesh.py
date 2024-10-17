@@ -437,7 +437,7 @@ class HalfEdgeMeshBase:
         """
         return self._h_twin_H[h]
 
-    def h_right_B(self, b):
+    def h_right_b(self, b):
         """get index of a half-edge contained in boundary b
 
         Args:

@@ -2,7 +2,7 @@ from python.half_edge_mesh import HalfEdgeMeshBase
 import numpy as np
 from src.python.global_vars import INT_TYPE, FLOAT_TYPE
 import os
-from src.python.utilities import (
+from src.python.utilities.misc_utils import (
     make_output_dir,
     load_npz,
     save_npz,

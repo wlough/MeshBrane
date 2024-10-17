@@ -2,7 +2,7 @@
 import matplotlib.pyplot as plt
 from matplotlib import colormaps as plt_cmap
 import numpy as np
-from src.python.utilities import log_log_fit, round_to
+from src.python.utilities.misc_utils import log_log_fit, round_to
 import os
 import subprocess
 from sympy import latex

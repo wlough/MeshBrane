@@ -4,7 +4,7 @@ from src.python.half_edge_base_utils import (
     he_samples_to_vf_samples,
     find_h_right_B,
 )
-from src.python.utilities import (
+from src.python.utilities.misc_utils import (
     # make_output_dir,
     # load_npz,
     save_npz,
