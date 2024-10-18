@@ -128,6 +128,31 @@ load_vf_samples_from_ply(const std::string &filepath,
                          const bool preload_into_memory = true,
                          const bool verbose = false);
 
+/**
+ * @brief loads ply file into HalfEdgeMeshData structure.
+ *
+ * @param filepath
+ * @param preload_into_memory
+ * @param verbose
+ * @return HalfEdgeSamples
+ */
+HalfEdgeSamples load_he_samples_from_ply(const std::string &filepath,
+                                         const bool preload_into_memory = true,
+                                         const bool verbose = false);
+
+/**
+ * @brief writes TriMeshData to a .ply file.
+ *
+ * @param xyz_coord_V
+ * @param V_of_F
+ * @param output_directory
+ * @param filename
+ * @param useBinary
+ */
+
+void write_vf_samples_to_ply(Samples3d &xyz_coord_V, Samples3i &V_of_F,
+                             const std::string &ply_path,
+                             const bool use_binary = true);
 ////////////////////////////////////////////
 // mesh converter //////////////////////////
 ////////////////////////////////////////////
@@ -163,6 +188,7 @@ public:
   ////////////
   // Methods /
   ////////////
+  void write_vf_ply(const std::string &ply_path, const bool use_binary = true);
 
 private:
   //   std::string vf_ply_path;
