@@ -1,0 +1,18 @@
+[submodule "external/pybind11"]
+    path = external/pybind11
+    url = https://github.com/pybind/pybind11.git
+
+[submodule "external/eigen"]
+    path = external/eigen
+    url = https://gitlab.com/libeigen/eigen.git
+
+[submodule "extern/KMC"]
+	path = extern/KMC
+	url = https://github.com/lamsoa729/KMC.git
+
+git submodule add https://gitlab.com/libeigen/eigen.git extern/eigen && \
+git submodule add https://github.com/lamsoa729/KMC.git extern/KMC && \
+git submodule add -b nab_xfer git@github.com:wlough/C-GLASS.git extern/C-GLASS && \
+git submodule add https://github.com/ddiakopoulos/tinyply.git extern/tinyply
+
+rm -rf .git/modules/extern/KMC .git/modules/extern/eigen .git/modules/extern/tinyply .git/modules/extern/pybind11 .git/modules/extern/C-GLASS
