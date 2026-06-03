@@ -2,6 +2,8 @@
 
 ![Mitosis timelapse](data/images/time_series_fig.png "Mitosis timelapse")
 
+A library for modeling biological membranes.
+
 ## Installation
 
 ```bash
