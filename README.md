@@ -5,7 +5,7 @@
 ## Installation
 
 ```bash
-git clone --recursive https://github.com/wlough/MeshBrane
+git clone --recursive git@github.com:wlough/MeshBrane.git
 cd MeshBrane
 ./install.sh
 ```
