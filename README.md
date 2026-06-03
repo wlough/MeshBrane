@@ -18,3 +18,9 @@ Installation requires
 
 * [Eigen](https://gitlab.com/libeigen/eigen)
 * [yaml-cpp](https://github.com/jbeder/yaml-cpp)
+
+## Examples
+
+```bash
+build/bin/rigid_spindle_sim data/parameter_files/rigid_spindle_params.yaml
+```
