@@ -29,10 +29,10 @@ namespace meshbrane {
  * @details
  * # Data members
  * ## Naming conventions
- * The core data structure of `MatrixMesh` consists of matrices which describe
- geometric and topological properties of the mesh. Each matrix has a name of the
- form `a_description_Q`, where `a` denotes the type of object associated with
- the elements (`xyz` for position,
+ * The core data structure used by the `MatrixMesh` class consists of matrices
+ that describe geometric and topological properties of the mesh. Each matrix has
+ a name of the form `a_description_Q`, where `a` denotes the type of object
+ associated with the elements (`xyz` for position,
  * `v` for vertex, `e` for edge, `f` for face, `h` for half-edge, or `b` for
  boundary.), `Q` denotes the type of
  * object associated with the indices (`V` for vertex, `E` for edge, `F`
