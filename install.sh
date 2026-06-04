@@ -2,7 +2,7 @@
 
 # ---------------------------------------------------------------
 
-# This script is used to build MeshBrane and install PyBrane.
+# This script is used to build MeshBrane.
 # ---------------------------------------------------------------
 tests=false # -t run tests
 verbose=false # verbose output

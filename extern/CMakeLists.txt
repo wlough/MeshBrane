@@ -6,6 +6,8 @@ include(FetchContent)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/tinyply EXCLUDE_FROM_ALL SYSTEM)
 if(TARGET tinyply)
     message(STATUS "  tinyply found")
+    target_include_directories(tinyply INTERFACE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/tinyply/source>)
     set(tinyply_FOUND TRUE PARENT_SCOPE)
     set(tinyply_TARGETS tinyply PARENT_SCOPE)
     # message(STATUS "  Setting tinyply_TARGETS: ${tinyply_TARGETS}")

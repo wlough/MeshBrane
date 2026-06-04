@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
-project(meshbrane VERSION 0.0.0 LANGUAGES CXX)
+if(APPLE)
+  project(meshbrane VERSION 0.0.0 LANGUAGES C CXX OBJC)
+else()
+  project(meshbrane VERSION 0.0.0 LANGUAGES C CXX)
+endif()
 
 # Require C++20 and standard libraries for coroutines
 set(CMAKE_CXX_STANDARD 20)
