@@ -12,7 +12,7 @@ build_docs=false # -d build docs
 
 show_help() {
     echo "USAGE:"
-    echo "  $0 [-hreigntvcpsd]"
+    echo "  $0 [-htvcd]"
     echo "OPTIONS:"
     echo "  -t      run (t)ests"
     echo "  -v      (v)erbose output"
