@@ -91,6 +91,35 @@ message(STATUS "  MESHBRANE_LINKED_EXTERN: ${MESHBRANE_LINKED_EXTERN}")
 
 ####################################################################
 ####################################################################
+
+
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+set(MESHBRANE_MAKE_MOVIE_SCRIPT
+    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/make_a_movie.py"
+)
+
+find_program(FFMPEG_EXECUTABLE ffmpeg)
+
+if(FFMPEG_EXECUTABLE)
+    message(STATUS "Found ffmpeg: ${FFMPEG_EXECUTABLE}")
+    set(MESHBRANE_HAS_FFMPEG 1)
+    # set(MESHBRANE_FFMPEG_EXECUTABLE "${FFMPEG_EXECUTABLE}")
+else()
+    message(WARNING "ffmpeg not found. Movie generation will be unavailable.")
+    set(MESHBRANE_HAS_FFMPEG 0)
+    # set(MESHBRANE_FFMPEG_EXECUTABLE "")
+endif()
+
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/meshbrane/meshbrane_config.hpp.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/meshbrane/meshbrane_config.hpp"
+    @ONLY
+)
+
+####################################################################
+####################################################################
 add_subdirectory(include)
 add_subdirectory(src)
 
@@ -99,9 +128,12 @@ add_subdirectory(src)
 add_library(meshbrane_objlib OBJECT ${MESHBRANE_SOURCES} ${MESHBRANE_HEADERS})
 
 target_include_directories(
-  meshbrane_objlib PUBLIC
+  meshbrane_objlib
+  PUBLIC
   $<BUILD_INTERFACE:${MESHBRANE_PROJECT_INCLUDE_DIR}>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+  PRIVATE
+  "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
 target_link_libraries(meshbrane_objlib PUBLIC ${MESHBRANE_LINKED_EXTERN})
 

@@ -3,10 +3,14 @@
  */
 
 #include "meshbrane/simulation_base.hpp"
+#include "meshbrane/meshbrane_config.hpp"
+#include "meshbrane/system_utils.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <yaml-cpp/yaml.h>
+
+namespace fs = std::filesystem;
 
 namespace meshbrane {
 
@@ -49,18 +53,18 @@ void SimulationBase::make_output_directory(const std::string &output_dir,
 
   if (!overwrite) {
     for (const auto &sub_dir : sub_dirs) {
-      if (std::filesystem::exists(sub_dir)) {
+      if (fs::exists(sub_dir)) {
         throw std::runtime_error(sub_dir +
                                  " already exists. Choose a different "
                                  "output_dir, or set overwrite=true");
       } else {
-        std::filesystem::create_directories(sub_dir);
+        fs::create_directories(sub_dir);
       }
     }
   } else {
-    std::filesystem::remove_all(output_dir);
+    fs::remove_all(output_dir);
     for (const auto &sub_dir : sub_dirs) {
-      std::filesystem::create_directories(sub_dir);
+      fs::create_directories(sub_dir);
     }
   }
 }
@@ -91,38 +95,25 @@ std::string SimulationBase::get_frame_path() {
 
 void SimulationBase::make_a_movie() {
   std::cout << "Making a movie" << std::endl;
-  std::string command = "./scripts/make_a_movie.sh " + temp_images_dir_ + " " +
-                        visualizations_dir_;
+
+  std::string command = shell_quote(meshbrane::python_executable) + " " +
+                        shell_quote(meshbrane::make_movie_script) + " " +
+                        shell_quote(temp_images_dir_) + " " +
+                        shell_quote(visualizations_dir_);
+
   int result = std::system(command.c_str());
+
   if (result != 0) {
-    std::cerr << "Error: Failed to execute script" << std::endl;
+    throw std::runtime_error("Failed to make movie");
   }
-  // add stuff to log file
+
   std::ofstream log_file(log_path_, std::ios_base::app);
   if (!log_file.is_open()) {
     throw std::runtime_error("Unable to open log file: " + log_path_);
   }
-  log_file << "Made a movie from images in " << temp_images_dir_ << std::endl;
-  log_file << "Movie saved to " << visualizations_dir_ << std::endl;
-  log_file.close();
+
+  log_file << "Made a movie from images in " << temp_images_dir_ << '\n';
+  log_file << "Movie saved to " << visualizations_dir_ << '\n';
 }
-// void SimulationBase::make_a_movie() {
-//   std::cout << "Making a movie" << std::endl;
 
-//   std::string image_dir = temp_images_dir_;
-//   std::string image_prefix = frame_prefix_;
-//   int index_length = frame_index_length_;
-//   std::string image_format = "png";
-
-//   std::string movie_dir = visualizations_dir_;
-//   std::string movie_name = "movie";
-//   std::string movie_format = "mp4";
-
-//   int frame_rate = 20;
-//   // std::string frame_size="1080x720"
-//   std::string video_codec = "libx264";
-//   int video_quality = 25;
-//   std::string pixel_format = "yuv420p";
-
-// }
 } // namespace meshbrane

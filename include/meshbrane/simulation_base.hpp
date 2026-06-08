@@ -5,8 +5,11 @@
  * @brief Base class for simulations
  */
 
+#include <filesystem>
 #include <string>
 #include <yaml-cpp/yaml.h>
+
+namespace fs = std::filesystem;
 
 namespace meshbrane {
 /**
@@ -17,8 +20,6 @@ namespace meshbrane {
 class SimulationBase {
 public:
   YAML::Node parameters_;
-  // HDF5Group raw_data_;
-  // std::vector<HDF5Group> data_vec_;
   std::string output_dir_;
   std::string run_name_;
   std::string input_dir_;
