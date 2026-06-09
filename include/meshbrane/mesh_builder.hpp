@@ -6,6 +6,7 @@
  */
 
 #include "meshbrane/meshbrane_data_types.hpp"
+#include <filesystem>
 #include <fstream>   // std::ifstream
 #include <istream>   // std::istream
 #include <stdexcept> // std::runtime_error
@@ -36,6 +37,7 @@ namespace mesh_io {
  */
 inline std::vector<uint8_t> read_file_binary(const std::string &pathToFile) {
   std::ifstream file(pathToFile, std::ios::binary);
+
   std::vector<uint8_t> fileBufferBytes;
 
   if (file.is_open()) {
@@ -50,6 +52,34 @@ inline std::vector<uint8_t> read_file_binary(const std::string &pathToFile) {
                              pathToFile);
   return fileBufferBytes;
 }
+
+// inline std::vector<std::uint8_t>
+// read_file_binary(const std::filesystem::path &pathToFile) {
+//   std::ifstream file(pathToFile, std::ios::binary | std::ios::ate);
+
+//   if (!file) {
+//     throw std::runtime_error("could not open binary file: " +
+//                              pathToFile.string());
+//   }
+
+//   const std::streamsize sizeBytes = file.tellg();
+
+//   if (sizeBytes < 0) {
+//     throw std::runtime_error("could not determine file size: " +
+//                              pathToFile.string());
+//   }
+
+//   std::vector<std::uint8_t> buffer(static_cast<std::size_t>(sizeBytes));
+
+//   file.seekg(0, std::ios::beg);
+
+//   if (!file.read(reinterpret_cast<char *>(buffer.data()), sizeBytes)) {
+//     throw std::runtime_error("could not read binary file: " +
+//                              pathToFile.string());
+//   }
+
+//   return buffer;
+// }
 
 /**
  * @brief A streambuf that reads from a memory buffer.
@@ -90,25 +120,6 @@ struct memory_stream : virtual memory_buffer, public std::istream {
         std::istream(static_cast<std::streambuf *>(this)) {}
 };
 
-// /**
-//  * @brief A timer.
-//  */
-// class manual_timer {
-//   std::chrono::high_resolution_clock::time_point t0;
-//   double timestamp{0.0};
-
-// public:
-//   void start() { t0 = std::chrono::high_resolution_clock::now(); }
-//   void stop() {
-//     timestamp = std::chrono::duration<double>(
-//                     std::chrono::high_resolution_clock::now() - t0)
-//                     .count() *
-//                 1000.0;
-//   }
-//   const double &get() { return timestamp; }
-// };
-/** @}*/ // end of group utils
-
 ////////////////////////////////////////////
 // half-edge mesh funs /////////////////////
 ////////////////////////////////////////////
@@ -119,28 +130,6 @@ struct memory_stream : virtual memory_buffer, public std::istream {
  * @return Index of twin half-edge.
  */
 int find_halfedge_index_of_twin(const meshbrane::Samples2i &H, const int &h);
-
-// /**
-//  * @brief
-//  *
-//  * @param h_twin_H
-//  *
-//  * @return Samples2i
-//  */
-// Samples2i he_samples_to_edges(const Samplesi &v_origin_H,
-//                               const Samplesi &h_twin_H, Samplesi &V_cycle_E)
-//                               {
-//   std::unordered_set<size_t> Hmin; // keep track of half-edges already
-//   processed
-//                                    // by saving min(h, h_twin(h))
-//   for (int h{0}; h < h_twin_H.size(); h++) {
-//     size_t h_min = std::min(h, h_twin_H[h]);
-//     if (Hmin.find(h_min) == Hmin.end()) {
-//       V_cycle_E.row(Hmin.size()) << v_origin_H[h], v_origin_H[h_twin_H[h]];
-//       Hmin.insert(h_min);
-//     }
-//   }
-// }
 
 /** @addtogroup MeshIO
  *  @{
@@ -156,19 +145,6 @@ meshbrane::HalfEdgeTuple
 vf_samples_to_he_samples(const meshbrane::Samples3d &xyz_coord_V,
                          const meshbrane::Samples3i &V_cycle_F);
 
-/**
- * @brief loads ply file into meshbrane::VertexFaceTuple tuple.
- *
- * @param filepath
- * @param preload_into_memory
- * @param verbose
- * @return meshbrane::VertexFaceTuple
- */
-meshbrane::VertexFaceTuple
-load_vf_samples_from_ply(const std::string &filepath,
-                         const bool preload_into_memory = true,
-                         const bool verbose = false);
-
 VertexFaceTuple
 he_samples_to_vf_samples(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
                          const Samplesi &v_origin_H, const Samplesi &h_next_H,
@@ -182,6 +158,19 @@ he_samples_to_vef_samples(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
                           const Samplesi &h_twin_H, const Samplesi &f_left_H,
                           const Samplesi &h_right_F,
                           const Samplesi &h_negative_B);
+
+/**
+ * @brief loads ply file into meshbrane::VertexFaceTuple tuple.
+ *
+ * @param filepath
+ * @param preload_into_memory
+ * @param verbose
+ * @return meshbrane::VertexFaceTuple
+ */
+meshbrane::VertexFaceTuple
+load_vf_samples_from_ply(const std::string &filepath,
+                         const bool preload_into_memory = true,
+                         const bool verbose = false);
 
 /**
  * @brief loads ply file into `meshbrane::HalfEdgeTuple` structure.
@@ -225,27 +214,6 @@ void write_he_samples_to_ply(
     const meshbrane::Samplesi &h_negative_B, const std::string &ply_path,
     const bool use_binary = true);
 
-EdgeFaceCellTuple cmap_to_efc_tuple(const CombinatorialMapTuple &cm);
-
-/**
- * @brief writes `SimplicialComplexData` to a .ply file.
- *
- * @param sc_data SimplicialComplexData
- * @param ply_path std::string
- * @param use_binary bool
- */
-void write_simplicial_complex_data_to_ply(const SimplicialComplexData &sc_data,
-                                          const std::string &ply_path,
-                                          const bool use_binary = true);
-// void write_simplicial_complex_data_to_ply(const SimplicialComplexData
-// &sc_data,
-//                                           const std::string &ply_path,
-//                                           bool use_binary);
-SimplicialComplexData
-load_simplicial_complex_data_from_ply(const std::string &filepath,
-                                      const bool preload_into_memory = true,
-                                      const bool verbose = false);
-
 ////////////////////////////////////////////
 // mesh converter //////////////////////////
 ////////////////////////////////////////////
@@ -285,13 +253,6 @@ public:
 
   void write_vf_ply(const std::string &ply_path, const bool use_binary = true);
   void write_he_ply(const std::string &ply_path, const bool use_binary = true);
-
-private:
-  //   std::string vf_ply_path;
-  //   tinyply::PlyData vf_ply_data;
-  //   meshbrane::VertexFaceTuple vf_samples;
-  //   tinyply::PlyData he_ply_data;
-  //   meshbrane::HalfEdgeTuple he_samples;
 };
 
 /** @}*/ // end of group MeshIO

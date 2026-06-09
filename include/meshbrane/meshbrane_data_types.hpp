@@ -17,38 +17,30 @@
 
 namespace meshbrane {
 
-using SimplicialSet = std::unordered_set<int>;
-using SimplicialTriple = std::array<SimplicialSet, 3>;
-
 /** @addtogroup MeshBraneDataTypes
  *  @{
  */
-template <size_t dim> using Coords = Eigen::Vector<double, dim>;
-
-/**
- * @brief Coordinates of a single point in 2D space.
- */
-using Coords2d = Eigen::Vector2d;
 
 /**
  * @brief Coordinates of a single point in 3D space or affine coordinates in 2D
  */
 using Vec3d = Eigen::Vector3d;
+
 /**
- * @brief Affine coordinates of a single point in 3D space
+ * @brief Column vector of doubles.
  */
-using Coords4d = Eigen::Vector4d;
+using Samples1d = Eigen::Matrix<double, Eigen::Dynamic, 1>;
+
+/**
+ * @brief N-by-2 matrix of doubles.
+ */
+using Samples2d = Eigen::Matrix<double, Eigen::Dynamic, 2>;
 
 /**
  * @brief N-by-3 matrix of doubles. Represents 3D spatial coordinates of a
  * vertices in a vertex set.
  */
 using Samples3d = Eigen::Matrix<double, Eigen::Dynamic, 3>;
-
-/**
- * @brief N-by-2 matrix of doubles.
- */
-using Samples2d = Eigen::Matrix<double, Eigen::Dynamic, 2>;
 
 /**
  * @brief Column vector of integers. Represents a permutation, a combinatorial
@@ -69,13 +61,10 @@ using Samples3i = Eigen::Matrix<int, Eigen::Dynamic, 3>;
 using Samples4i = Eigen::Matrix<int, Eigen::Dynamic, 4>;
 
 using SamplesXi = Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic>;
-/**
- * @brief N-by-3 matrix of doubles. Represents 3D spatial coordinates of a
- * vertex set.
- */
-using Samples1d = Eigen::Matrix<double, Eigen::Dynamic, 1>;
 
-using DartSamples = Eigen::Matrix<int, Eigen::Dynamic, 7>;
+using SimplicialSet = std::unordered_set<int>;
+using SimplicialTriple = std::array<SimplicialSet, 3>;
+
 ////////////////////////////////////////////
 // Mesh data types
 ////////////////////////////////////////////
@@ -139,85 +128,6 @@ using VertexFaceTuple = std::tuple<Samples3d, Samples3i>;
  *  - V_cycle_F[f] = \f$[v_0, v_1, v_2]\f$ vertex cycle of face f
  */
 using VertexEdgeFaceTuple = std::tuple<Samples3d, Samples2i, Samples3i>;
-
-using VertexEdgeFaceHalfEdgeTuple =
-    std::tuple<Samples3d, Samples2i, Samples3i, Samplesi, Samplesi, Samplesi,
-               Samplesi, Samplesi, Samplesi, Samplesi>;
-
-/**
- * @brief 4-tuple \f$(V, E, F, C)\f$ of matrices containing spatial coordinates
- * of each vertex, the vertex cycle of each edge, the vertex cycle of each face,
- * and the vertex cycle of each cell in a tetrahedral mesh.
- *
- */
-using VertexEdgeFaceCellTuple =
-    std::tuple<Samples3d, Samples2i, Samples3i, Samples4i>;
-
-using EdgeFaceCellTuple = std::tuple<Samples2i, Samples3i, Samples4i>;
-
-/**
- * @brief 12-tuple of matrices containing integer labels used to represent a
- * combinatorial map of 1,2,or 3-dimensional simplicial complex.
- *
- */
-using CombinatorialMapTuple =
-    std::tuple<Samplesi, Samplesi, Samplesi, Samplesi, Samplesi, Samplesi,
-               Samplesi, Samplesi, Samplesi, Samplesi, Samplesi, Samplesi>;
-
-/**
- * @brief A container for the basic numerical data used to represent a
- * simplicial complex.
- *
- * @details Uses convention b = f-Nfaces or b = c-Ncells
- *
- */
-struct SimplicialComplexData {
-  SimplicialComplexData() = default;
-  ~SimplicialComplexData() = default;
-  Samples3d coords_V;
-  Samplesi dart_V;
-  Samples2i vertex_cycle_S1;
-  Samplesi dart_S1;
-  Samples3i vertex_cycle_S2;
-  Samplesi dart_S2;
-  Samples4i vertex_cycle_S3;
-  Samplesi dart_S3;
-  Samplesi dart_B;
-  Samplesi vertex_D;
-  Samplesi simplex1_D;
-  Samplesi simplex2_D;
-  Samplesi simplex3_D;
-  Samplesi dart_ve_D;
-  Samplesi dart_vf_D;
-  Samplesi dart_vc_D;
-  size_t complex_dimension;
-  void reshape(size_t complex_dim, size_t Nverts, size_t Nedges, size_t Nfaces,
-               size_t Ncells, size_t Ndarts, size_t Nboundaries) {
-    complex_dimension = complex_dim;
-
-    coords_V.resize(Nverts, 3);
-    dart_V.resize(Nverts);
-    dart_B.resize(Nboundaries);
-    if (complex_dimension > 0) {
-      vertex_cycle_S1.resize(Nedges, 2);
-      dart_S1.resize(Nedges);
-      simplex1_D.resize(Ndarts);
-      dart_ve_D.resize(Ndarts);
-    }
-    if (complex_dimension > 1) {
-      vertex_cycle_S2.resize(Nfaces, 3);
-      dart_S2.resize(Nfaces);
-      simplex2_D.resize(Ndarts);
-      dart_vf_D.resize(Ndarts);
-    }
-    if (complex_dimension > 2) {
-      vertex_cycle_S3.resize(Ncells, 4);
-      dart_S3.resize(Ncells);
-      simplex3_D.resize(Ndarts);
-      dart_vc_D.resize(Ndarts);
-    }
-  }
-};
 
 ////////////////////////////////////////////
 // Visualization data types
