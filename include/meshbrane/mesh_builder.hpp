@@ -32,53 +32,50 @@ namespace mesh_io {
 /**
  * @brief Read a binary file into a vector of bytes.
  *
- * @param pathToFile
+ * @param path_to_file
  * @return std::vector<uint8_t>
  */
-inline std::vector<uint8_t> read_file_binary(const std::string &pathToFile) {
-  std::ifstream file(pathToFile, std::ios::binary);
+inline std::vector<std::uint8_t>
+read_file_binary(const std::filesystem::path &path_to_file) {
+  std::ifstream file(path_to_file,
+                     std::ios::binary |
+                         std::ios::ate); // open file in binary mode with read
+                                         // position at end of file
+  if (!file) {
+    throw std::runtime_error("could not open binary file: " +
+                             path_to_file.string());
+  }
+  const std::streamsize sizeBytes = file.tellg();
 
-  std::vector<uint8_t> fileBufferBytes;
-
-  if (file.is_open()) {
-    file.seekg(0, std::ios::end);
-    size_t sizeBytes = file.tellg();
-    file.seekg(0, std::ios::beg);
-    fileBufferBytes.resize(sizeBytes);
-    if (file.read((char *)fileBufferBytes.data(), sizeBytes))
-      return fileBufferBytes;
-  } else
-    throw std::runtime_error("could not open binary ifstream to path " +
-                             pathToFile);
-  return fileBufferBytes;
+  if (sizeBytes < 0) {
+    throw std::runtime_error("could not determine file size: " +
+                             path_to_file.string());
+  }
+  std::vector<std::uint8_t> buffer(static_cast<std::size_t>(sizeBytes));
+  file.seekg(0, std::ios::beg); // move read position to begining of file
+  if (!file.read(reinterpret_cast<char *>(buffer.data()), sizeBytes)) {
+    throw std::runtime_error("could not read binary file: " +
+                             path_to_file.string());
+  }
+  return buffer;
 }
 
-// inline std::vector<std::uint8_t>
-// read_file_binary(const std::filesystem::path &pathToFile) {
-//   std::ifstream file(pathToFile, std::ios::binary | std::ios::ate);
+// inline std::vector<uint8_t> read_file_binary(const std::string &pathToFile) {
+//   std::ifstream file(pathToFile, std::ios::binary);
 
-//   if (!file) {
-//     throw std::runtime_error("could not open binary file: " +
-//                              pathToFile.string());
-//   }
+//   std::vector<uint8_t> fileBufferBytes;
 
-//   const std::streamsize sizeBytes = file.tellg();
-
-//   if (sizeBytes < 0) {
-//     throw std::runtime_error("could not determine file size: " +
-//                              pathToFile.string());
-//   }
-
-//   std::vector<std::uint8_t> buffer(static_cast<std::size_t>(sizeBytes));
-
-//   file.seekg(0, std::ios::beg);
-
-//   if (!file.read(reinterpret_cast<char *>(buffer.data()), sizeBytes)) {
-//     throw std::runtime_error("could not read binary file: " +
-//                              pathToFile.string());
-//   }
-
-//   return buffer;
+//   if (file.is_open()) {
+//     file.seekg(0, std::ios::end);
+//     size_t sizeBytes = file.tellg();
+//     file.seekg(0, std::ios::beg);
+//     fileBufferBytes.resize(sizeBytes);
+//     if (file.read((char *)fileBufferBytes.data(), sizeBytes))
+//       return fileBufferBytes;
+//   } else
+//     throw std::runtime_error("could not open binary ifstream to path " +
+//                              pathToFile);
+//   return fileBufferBytes;
 // }
 
 /**
@@ -168,7 +165,7 @@ he_samples_to_vef_samples(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
  * @return meshbrane::VertexFaceTuple
  */
 meshbrane::VertexFaceTuple
-load_vf_samples_from_ply(const std::string &filepath,
+load_vf_samples_from_ply(const std::filesystem::path &filepath,
                          const bool preload_into_memory = true,
                          const bool verbose = false);
 
@@ -181,7 +178,7 @@ load_vf_samples_from_ply(const std::string &filepath,
  * @return meshbrane::HalfEdgeTuple
  */
 meshbrane::HalfEdgeTuple
-load_he_samples_from_ply(const std::string &filepath,
+load_he_samples_from_ply(const std::filesystem::path &filepath,
                          const bool preload_into_memory = true,
                          const bool verbose = false);
 
@@ -195,7 +192,7 @@ load_he_samples_from_ply(const std::string &filepath,
  */
 void write_vf_samples_to_ply(meshbrane::Samples3d &xyz_coord_V,
                              meshbrane::Samples3i &V_cycle_F,
-                             const std::string &ply_path,
+                             const std::filesystem::path &ply_path,
                              const bool use_binary = true);
 
 /**
@@ -211,11 +208,11 @@ void write_he_samples_to_ply(
     const meshbrane::Samplesi &v_origin_H, const meshbrane::Samplesi &h_next_H,
     const meshbrane::Samplesi &h_twin_H, const meshbrane::Samplesi &f_left_H,
     const meshbrane::Samplesi &h_right_F,
-    const meshbrane::Samplesi &h_negative_B, const std::string &ply_path,
-    const bool use_binary = true);
+    const meshbrane::Samplesi &h_negative_B,
+    const std::filesystem::path &ply_path, const bool use_binary = true);
 
 ////////////////////////////////////////////
-// mesh converter //////////////////////////
+// mesh builder //////////////////////////
 ////////////////////////////////////////////
 class MeshBuilder {
 public:
@@ -224,12 +221,12 @@ public:
   /////////////////
   MeshBuilder();
 
-  static MeshBuilder from_vf_ply(const std::string &ply_path,
+  static MeshBuilder from_vf_ply(const std::filesystem::path &ply_path,
                                  bool compute_he_stuff = true);
   static MeshBuilder from_vf_samples(const meshbrane::Samples3d &xyz_coord_V,
                                      const meshbrane::Samples3i &V_cycle_F,
                                      bool compute_he_stuff = true);
-  static MeshBuilder from_he_ply(const std::string &ply_path,
+  static MeshBuilder from_he_ply(const std::filesystem::path &ply_path,
                                  bool compute_vf_stuff = true);
   static MeshBuilder from_he_samples(
       const meshbrane::Samples3d &xyz_coord_V,
@@ -241,9 +238,9 @@ public:
   ///////////////
   // Attributes /
   ///////////////
-  std::string vf_ply_path;
+  std::filesystem::path vf_ply_path;
   meshbrane::VertexFaceTuple vf_samples;
-  std::string he_ply_path;
+  std::filesystem::path he_ply_path;
   meshbrane::HalfEdgeTuple he_samples;
 
   ////////////
@@ -251,8 +248,10 @@ public:
   ////////////
   meshbrane::VertexEdgeFaceTuple get_vef_samples();
 
-  void write_vf_ply(const std::string &ply_path, const bool use_binary = true);
-  void write_he_ply(const std::string &ply_path, const bool use_binary = true);
+  void write_vf_ply(const std::filesystem::path &ply_path,
+                    const bool use_binary = true);
+  void write_he_ply(const std::filesystem::path &ply_path,
+                    const bool use_binary = true);
 };
 
 /** @}*/ // end of group MeshIO

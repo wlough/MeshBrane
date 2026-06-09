@@ -10,6 +10,7 @@
 #include "meshbrane/pretty_pictures.hpp"
 #include "meshbrane/simple_vector_field.hpp"
 #include <Eigen/Sparse>
+#include <filesystem>
 #include <optional> // std::optional
 #include <string>   // std::string
 #include <tuple>    // std::tuple
@@ -203,6 +204,8 @@ public:
   Samplesi h_twin_H_;       //
   ////////////////////////////
 
+  std::filesystem::path ply_path_{""};
+
   /**
    * @brief Set data members from parameters
    *
@@ -358,7 +361,7 @@ public:
   ////////////////////////////////////
   // Cache updaters //////////////////
   ////////////////////////////////////
-  std::string ply_path_{""};
+
   void load_ply();
 
   /**

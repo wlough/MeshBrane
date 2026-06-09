@@ -9,7 +9,7 @@ inline constexpr const char *python_executable = R"(@Python3_EXECUTABLE@)";
 inline constexpr const char *make_movie_script =
     R"(@MESHBRANE_MAKE_MOVIE_SCRIPT@)";
 
-inline constexpr bool has_ffmpeg = @MESHBRANE_HAS_FFMPEG@;
+inline constexpr bool has_ffmpeg = @MESHBRANE_HAS_FFMPEG @;
 
 // inline constexpr const char *ffmpeg_executable =
 //    R"(@MESHBRANE_FFMPEG_EXECUTABLE@)";

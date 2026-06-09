@@ -16,6 +16,8 @@
 #include <unordered_set> // std::unordered_set
 #include <vector>        // std::vector
 
+namespace fs = std::filesystem;
+
 namespace meshbrane {
 
 namespace mesh_io {
@@ -197,7 +199,7 @@ he_samples_to_vef_samples(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
   return {xyz_coord_V, V_cycle_E, V_cycle_F};
 }
 
-VertexFaceTuple load_vf_samples_from_ply(const std::string &filepath,
+VertexFaceTuple load_vf_samples_from_ply(const fs::path &filepath,
                                          const bool preload_into_memory,
                                          const bool verbose) {
   std::streambuf *oldCoutStreamBuf = nullptr;
@@ -231,7 +233,8 @@ VertexFaceTuple load_vf_samples_from_ply(const std::string &filepath,
     }
 
     if (!file_stream || file_stream->fail())
-      throw std::runtime_error("file_stream failed to open " + filepath);
+      throw std::runtime_error("file_stream failed to open " +
+                               filepath.string());
 
     file_stream->seekg(0, std::ios::end);
     const float size_mb = file_stream->tellg() * float(1e-6);
@@ -343,7 +346,7 @@ VertexFaceTuple load_vf_samples_from_ply(const std::string &filepath,
   return std::make_tuple(xyz_coord_V, V_cycle_F);
 }
 
-HalfEdgeTuple load_he_samples_from_ply(const std::string &filepath,
+HalfEdgeTuple load_he_samples_from_ply(const fs::path &filepath,
                                        const bool preload_into_memory,
                                        const bool verbose) {
   std::streambuf *oldCoutStreamBuf = nullptr;
@@ -385,7 +388,8 @@ HalfEdgeTuple load_he_samples_from_ply(const std::string &filepath,
     }
 
     if (!file_stream || file_stream->fail())
-      throw std::runtime_error("file_stream failed to open " + filepath);
+      throw std::runtime_error("file_stream failed to open " +
+                               filepath.string());
 
     file_stream->seekg(0, std::ios::end);
     const float size_mb = file_stream->tellg() * float(1e-6);
@@ -608,23 +612,15 @@ HalfEdgeTuple load_he_samples_from_ply(const std::string &filepath,
                          f_left_H, h_right_F, h_negative_B);
 }
 
-// void write_vf_samples_to_ply(Samples3d &xyz_coord_V,
-// Samples3i &V_cycle_F,
-//                              const std::string &output_directory,
-//                              const std::string &filename,
-//                              const bool useBinary)
 void write_vf_samples_to_ply(Samples3d &xyz_coord_V, Samples3i &V_cycle_F,
-                             const std::string &ply_path,
-                             const bool use_binary) {
-
-  // std::string ply_path = output_directory + "/" + filename;
+                             const fs::path &ply_path, const bool use_binary) {
 
   std::filebuf fb;
   fb.open(ply_path,
           use_binary ? std::ios::out | std::ios::binary : std::ios::out);
   std::ostream outstream(&fb);
   if (outstream.fail())
-    throw std::runtime_error("failed to open " + ply_path);
+    throw std::runtime_error("failed to open " + ply_path.string());
 
   tinyply::PlyFile mesh_file;
 
@@ -661,19 +657,21 @@ void write_vf_samples_to_ply(Samples3d &xyz_coord_V, Samples3i &V_cycle_F,
   mesh_file.write(outstream, use_binary);
 }
 
-void write_he_samples_to_ply(
-    const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
-    const Samplesi &v_origin_H, const Samplesi &h_next_H,
-    const Samplesi &h_twin_H, const Samplesi &f_left_H,
-    const Samplesi &h_right_F, const Samplesi &h_negative_B,
-    const std::string &ply_path, const bool use_binary) {
+void write_he_samples_to_ply(const Samples3d &xyz_coord_V,
+                             const Samplesi &h_out_V,
+                             const Samplesi &v_origin_H,
+                             const Samplesi &h_next_H, const Samplesi &h_twin_H,
+                             const Samplesi &f_left_H,
+                             const Samplesi &h_right_F,
+                             const Samplesi &h_negative_B,
+                             const fs::path &ply_path, const bool use_binary) {
 
   std::filebuf fb;
   fb.open(ply_path,
           use_binary ? std::ios::out | std::ios::binary : std::ios::out);
   std::ostream outstream(&fb);
   if (outstream.fail())
-    throw std::runtime_error("failed to open " + ply_path);
+    throw std::runtime_error("failed to open " + ply_path.string());
 
   tinyply::PlyFile mesh_file;
 
@@ -737,7 +735,7 @@ void write_he_samples_to_ply(
 
 MeshBuilder::MeshBuilder() : he_ply_path("") {}
 
-MeshBuilder MeshBuilder::from_vf_ply(const std::string &ply_path,
+MeshBuilder MeshBuilder::from_vf_ply(const fs::path &ply_path,
                                      bool compute_he_stuff) {
   MeshBuilder mesh_converter;
   mesh_converter.vf_ply_path = ply_path;
@@ -761,7 +759,7 @@ MeshBuilder MeshBuilder::from_vf_samples(const Samples3d &xyz_coord_V,
   }
   return mesh_converter;
 }
-MeshBuilder MeshBuilder::from_he_ply(const std::string &ply_path,
+MeshBuilder MeshBuilder::from_he_ply(const std::filesystem::path &ply_path,
                                      bool compute_vf_stuff) {
   MeshBuilder mesh_converter;
   mesh_converter.he_ply_path = ply_path;
@@ -800,13 +798,13 @@ MeshBuilder MeshBuilder::from_he_samples(
 ////////////
 // Methods /
 ////////////
-void MeshBuilder::write_vf_ply(const std::string &ply_path,
+void MeshBuilder::write_vf_ply(const std::filesystem::path &ply_path,
                                const bool use_binary) {
   write_vf_samples_to_ply(std::get<0>(vf_samples), std::get<1>(vf_samples),
                           ply_path, use_binary);
 }
 
-void MeshBuilder::write_he_ply(const std::string &ply_path,
+void MeshBuilder::write_he_ply(const std::filesystem::path &ply_path,
                                const bool use_binary) {
   write_he_samples_to_ply(
       std::get<0>(he_samples), std::get<1>(he_samples), std::get<2>(he_samples),
