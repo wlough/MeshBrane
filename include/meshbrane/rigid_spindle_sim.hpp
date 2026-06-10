@@ -436,7 +436,6 @@ public:
 class RigidSpindleSim : public SimulationBase {
 public:
   double dt_mean_{0.0};
-  double dt0_{0.01};
   double dt_save_{1.0};
   double kBT_;
   double bulk_viscosity_;

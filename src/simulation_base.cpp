@@ -15,41 +15,53 @@ namespace fs = std::filesystem;
 namespace meshbrane {
 
 SimulationBase::SimulationBase(const std::string &path_to_parameters) {
-  loadParameters(path_to_parameters);
-  run_name_ = parameters_["run_name"].as<std::string>();
-  output_dir_ = parameters_["output_dir"].as<std::string>() + "/" + run_name_;
+  // loadParameters(path_to_parameters);
+  parameters_ = YAML::LoadFile(path_to_parameters);
+  if (parameters_["dt"]) {
+    dt_ = parameters_["dt"].as<double>();
+    dt0_ = dt_;
+  } else {
+    throw std::runtime_error("No dt provided in parameters file");
+  }
+  if (parameters_["dt_frame"]) {
+    dt_frame_ = parameters_["dt_frame"].as<double>();
+  } else {
+    throw std::runtime_error("No dt_frame provided in parameters file");
+  }
+  if (parameters_["T_run"]) {
+    T_run_ = parameters_["T_run"].as<double>();
+  } else {
+    throw std::runtime_error("No T_run provided in parameters file");
+  }
 
-  make_output_directory(output_dir_, true);
-  input_dir_ = output_dir_ + "/input";
-  logs_dir_ = output_dir_ + "/logs";
-  checkpoints_dir_ = output_dir_ + "/checkpoints";
-  raw_data_dir_ = output_dir_ + "/raw_data";
-  processed_data_dir_ = output_dir_ + "/processed_data";
-  visualizations_dir_ = output_dir_ + "/visualizations";
-  temp_images_dir_ = output_dir_ + "/temp_images";
+  if (parameters_["run_name"]) {
+    run_name_ = parameters_["run_name"].as<std::string>();
+  } else {
+    throw std::runtime_error("No run_name provided in parameters file");
+  }
+  if (parameters_["output_dir"]) {
+    output_dir_ = parameters_["output_dir"].as<std::string>() + "/" + run_name_;
+  } else {
+    throw std::runtime_error("No output_dir provided in parameters file");
+  }
+  logs_dir_ = output_dir_ + "/" + "logs";
+  raw_data_dir_ = output_dir_ + "/" + "raw_data";
+  visualizations_dir_ = output_dir_ + "/" + "visualizations";
+  temp_images_dir_ = output_dir_ + "/" + "temp_images";
+  make_output_directory(true);
 
-  input_path_ = input_dir_ + "/" + run_name_ + ".yaml";
-  log_path_ = logs_dir_ + "/" + run_name_ + ".log";
-  checkpoint_path_ = checkpoints_dir_ + "/" + run_name_ + ".pkl";
-  raw_data_path_ = raw_data_dir_ + "/data.h5";
-  processed_data_path = processed_data_dir_ + "/" + run_name_ + ".h5";
+  log_path_ = logs_dir_ + "/" + "sim.log";
 
-  // Configure logging
-  configureLogging();
-  ConfigureData();
+  std::ofstream fout(output_dir_ + "/" + "parameters.yaml");
+  fout << parameters_;
+  fout.close();
+
+  configure_logging();
 }
 
-void SimulationBase::ConfigureData() {
-  // raw_data_ = meshbrane::HDF5Group(raw_data_path_);
-};
-
-void SimulationBase::make_output_directory(const std::string &output_dir,
-                                           bool overwrite) {
-  std::vector<std::string> sub_dirs = {
-      output_dir + "/input",          output_dir + "/logs",
-      output_dir + "/checkpoints",    output_dir + "/raw_data",
-      output_dir + "/processed_data", output_dir + "/visualizations",
-      output_dir + "/temp_images"};
+void SimulationBase::make_output_directory(bool overwrite) {
+  std::vector<std::string> sub_dirs = {logs_dir_, raw_data_dir_,
+                                       visualizations_dir_, temp_images_dir_};
 
   if (!overwrite) {
     for (const auto &sub_dir : sub_dirs) {
@@ -62,14 +74,14 @@ void SimulationBase::make_output_directory(const std::string &output_dir,
       }
     }
   } else {
-    fs::remove_all(output_dir);
+    fs::remove_all(output_dir_);
     for (const auto &sub_dir : sub_dirs) {
       fs::create_directories(sub_dir);
     }
   }
 }
 
-void SimulationBase::configureLogging() {
+void SimulationBase::configure_logging() {
   std::ofstream log_file(log_path_, std::ios_base::app);
   if (!log_file.is_open()) {
     throw std::runtime_error("Unable to open log file: " + log_path_);
@@ -77,11 +89,6 @@ void SimulationBase::configureLogging() {
   log_file << "Initialized simulation with parameters: " << std::endl;
   log_file << parameters_ << std::endl;
   log_file.close();
-}
-
-void SimulationBase::loadParameters(const std::string &file_path) {
-  YAML::Node parameters = YAML::LoadFile(file_path);
-  parameters_ = parameters;
 }
 
 std::string SimulationBase::get_frame_path() {

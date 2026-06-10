@@ -16,15 +16,16 @@ namespace meshbrane {
 RigidSpindleSim::RigidSpindleSim(const std::string &path_to_parameters)
     : SimulationBase(path_to_parameters) {
   printf("RigidSpindleSim::RigidSpindleSim\n");
-  printf("set dt0_\n");
-  dt0_ = parameters_["dt"].as<double>();
-  printf("set dt_frame_\n");
-  dt_frame_ = parameters_["dt_frame"].as<double>();
-  printf("set dt0_\n");
-  dt_save_ = parameters_["dt_save"].as<double>();
+  // moved to base class...
+  // printf("set dt0_\n");
+  // dt0_ = parameters_["dt"].as<double>();
+  // printf("set dt_frame_\n");
+  // dt_frame_ = parameters_["dt_frame"].as<double>();
+  // printf("set T_run_\n");
+  // T_run_ = parameters_["T_run"].as<double>();
   printf("set dt_save_\n");
-  T_run_ = parameters_["T_run"].as<double>();
-  printf("set T_run_\n");
+  dt_save_ = parameters_["dt_save"].as<double>();
+  printf("set kBT_\n");
   kBT_ = parameters_["kBT"].as<double>();
 
   if (parameters_["spindle"]) {
@@ -466,25 +467,8 @@ void RigidSpindleSim::draw_scene() {
 void RigidSpindleSim::run(int argc, char *argv[]) {
   printf("Running RigidSpindleSim::run\n");
   viewer_.iglviewer_.core().is_animating = true;
-  // std::string frame_path = get_frame_path();
-  // viewer_.save_frame(frame_path);
-  // save_frame();
-  // viewer_.iglviewer_.callback_pre_draw =
-  //     [&](igl::opengl::glfw::Viewer &viewer) {
-  //       print_info();
-  //       draw_scene();
-  //       write_outputs();
-  //       if (t_ >= T_run_) {
-  //         viewer_.iglviewer_.core().is_animating = false;
-  //         glfwSetWindowShouldClose(viewer_.iglviewer_.window, GL_TRUE);
-  //         return true;
-  //       }
-  //       timestep();
-  //       return false;
-  //     };
   viewer_.iglviewer_.callback_pre_draw =
       [&](igl::opengl::glfw::Viewer &viewer) {
-        // timestep();
         draw_scene();
         return false;
       };

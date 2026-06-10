@@ -52,12 +52,16 @@ envelope:
   show_edges: false
   draw_wireframe: true
   gaussian_curvature_type: angle_defect
+  # gaussian_curvature_type: laplacian
   laplacian_type: cotan
+  # laplacian_type: adaptive_belkin
   timestep_type: euler_adaptive
-  show_contact_patches: false
+  show_contact_patches: true
   atol: 1e-6
   rtol: 1e-3
-  belkin_dt: 0.1
+  belkin_dt: 0.001
+  belkin_min_ring: 2
+  heat_dt_multiple: 1
   construct_laplacian_matrix: false
   rgba_face: [1.0, 0.7431, 0.0, 1.0]
   rgba_half_edge: [0.5804, 0.0, 0.8275, 1.0]
@@ -82,7 +86,7 @@ spindle:
     xyz_center: [0.0, 0.0, 0.0]
     axis: [0.0, 0.0, 1.0]
     overlap_length: 3e-1
-    length: 4e-1
+    length: 1e0
     radius: 9.5e-2
     motor_force_per_length: 1.5e2
     max_force: 2e2

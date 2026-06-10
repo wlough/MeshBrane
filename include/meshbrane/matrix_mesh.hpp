@@ -204,7 +204,86 @@ public:
   Samplesi h_twin_H_;       //
   ////////////////////////////
 
+  ////////////////////////////////
+  // Stuff from parameters file //
+  ////////////////////////////////
+  YAML::Node parameters_;
+
   std::filesystem::path ply_path_{""};
+
+  bool show_half_edges_{false};
+  bool show_vertices_{false};
+  bool show_edges_{true};
+  bool draw_wireframe_{false};
+  RGBA rgba_vertex_ = RGBA_DICT.at("purple");
+  RGBA rgba_half_edge_ = RGBA_DICT.at("purple");
+  RGBA rgba_face_ = RGBA_DICT.at("yellow");
+  RGBA rgba_edge_ = RGBA_DICT.at("blue");
+  double radius_vertex_{5};
+
+  std::string gaussian_curvature_type_{"angle_defect"}; // laplacian
+  std::string laplacian_type_{"cotan"};                 //"belkin"
+
+  double belkin_dt_{0.001};
+  double heat_dt_multiple_{10.0};
+  double belkin_rtol_{1e-8};
+  double belkin_atol_{1e-8};
+  int belkin_min_ring_{2};
+  bool construct_laplacian_matrix_{false};
+
+  ////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////
+  // to be categorized start /////////////////////////////////////
+  ////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////
+  double heat_dt_{0.001};
+  ////////////////////////////
+  // Cached geometric data ///
+  ////////////////////////////
+  std::vector<Samplesi> V_cycle_B_;
+  Samples3d vec_H_;
+  Samples1d length_E_;
+  Samples1d area_F_;
+  Samples3d normal_F_;
+  Samples3d normal_V_;
+  Samples1d area_V_;
+  double average_edge_length_{0.0};
+  double average_face_area_{0.0};
+  double total_volume_{0.0};
+  // Curvature
+  Samples3d mcvec_V_;
+  Samples1d mean_curvature_V_;
+  Samples1d gaussian_curvature_V_;
+  Samples1d lap_mean_curvature_V_;
+
+  ////////////////////////////
+  // Laplacian data //////////
+  ////////////////////////////
+  // Patch integration_patch_test;
+  Patch integration_patch_;
+
+  Eigen::SparseMatrix<double, Eigen::RowMajor>
+      laplacian_matrix_V_; // row major for insertion efficiency
+  ////////////////////////////
+  // Other data //////////////
+  ////////////////////////////
+  Samples3d force_V_;
+
+  Eigen::Matrix<double, Eigen::Dynamic, 1> radius_V;
+  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_V;
+  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_H;
+  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_F;
+  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_E_;
+
+  std::array<Eigen::Matrix<double, Eigen::Dynamic, 3>, 3>
+      shifted_half_edge_arrows_;
+  SimpleVectorField vector_field_arrows_;
+
+  ////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////
+  // to be categorized end ///////////////////////////////////////
+  ////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////
 
   /**
    * @brief Set data members from parameters
@@ -299,64 +378,6 @@ public:
     init_from_he_mats();
   }
 
-  ////////////////////////////
-  // Cached geometric data ///
-  ////////////////////////////
-  std::vector<Samplesi> V_cycle_B_;
-  Samples3d vec_H_;
-  Samples1d length_E_;
-  Samples1d area_F_;
-  Samples3d normal_F_;
-  Samples3d normal_V_;
-  Samples1d area_V_;
-  double average_edge_length_{0.0};
-  double average_face_area_{0.0};
-  double total_volume_{0.0};
-  // Curvature
-  Samples3d mcvec_V_;
-  Samples1d mean_curvature_V_;
-  Samples1d gaussian_curvature_V_;
-  Samples1d lap_mean_curvature_V_;
-  std::string gaussian_curvature_type_{"angle_defect"}; // laplacian
-
-  ////////////////////////////
-  // Laplacian data //////////
-  ////////////////////////////
-  // Patch integration_patch_test;
-  Patch integration_patch_;
-  std::string laplacian_type_{"cotan"}; //"belkin"
-  double belkin_dt_{0.001};
-  double heat_dt_{0.001};
-  double heat_dt_multiple_{10.0};
-  double belkin_rtol_{1e-8};
-  double belkin_atol_{1e-8};
-  int belkin_min_ring_{2};
-  bool construct_laplacian_matrix_{false};
-  Eigen::SparseMatrix<double, Eigen::RowMajor>
-      laplacian_matrix_V_; // row major for insertion efficiency
-  ////////////////////////////
-  // Other data //////////////
-  ////////////////////////////
-  Samples3d force_V_;
-  YAML::Node parameters_;
-  double radius_vertex_{5};
-  RGBA rgba_vertex_ = RGBA_DICT.at("purple");
-  RGBA rgba_half_edge_ = RGBA_DICT.at("purple");
-  RGBA rgba_face_ = RGBA_DICT.at("yellow");
-  RGBA rgba_edge_ = RGBA_DICT.at("blue");
-
-  Eigen::Matrix<double, Eigen::Dynamic, 1> radius_V;
-  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_V;
-  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_H;
-  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_F;
-  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_E_;
-  bool show_half_edges_{false};
-  bool show_vertices_{false};
-  bool show_edges_{true};
-  bool draw_wireframe_{false};
-  std::array<Eigen::Matrix<double, Eigen::Dynamic, 3>, 3>
-      shifted_half_edge_arrows_;
-  SimpleVectorField vector_field_arrows_;
   void update_vector_field_arrows(Samples3d X, Samples3d U);
   ////////////////////////////////////
   // Cache updaters //////////////////

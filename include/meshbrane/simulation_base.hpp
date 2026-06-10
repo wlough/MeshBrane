@@ -20,41 +20,29 @@ namespace meshbrane {
 class SimulationBase {
 public:
   YAML::Node parameters_;
-  std::string output_dir_;
+
   std::string run_name_;
-  std::string input_dir_;
+
+  std::string output_dir_;
+
   std::string logs_dir_;
-  std::string checkpoints_dir_;
   std::string raw_data_dir_;
-  std::string processed_data_dir_;
   std::string visualizations_dir_;
   std::string temp_images_dir_;
-  std::string input_path_;
+
   std::string log_path_;
-  std::string checkpoint_path_;
-  std::string raw_data_path_;
-  std::string processed_data_path;
 
   int frame_count_ = 0;
   int frame_index_length_ = 6;
   std::string frame_prefix_ = "frame";
-  int sample_count_ = 0;
-  int sample_index_length_ = 6;
-  std::string sample_prefix_ = "sample";
+
   double t_ = 0.0;
   double dt_;
+  double dt0_;
   double dt_frame_;
   double T_run_;
 
   SimulationBase(const std::string &path_to_parameters);
-
-  void ConfigureData();
-  /**
-   * @brief Load yaml
-   *
-   * @param file_path
-   */
-  void loadParameters(const std::string &file_path);
 
   /**
    * @brief Make output directories for logs/checkpoints/temp_images/etc...
@@ -62,8 +50,7 @@ public:
    * @param output_dir
    * @param overwrite
    */
-  static void make_output_directory(const std::string &output_dir,
-                                    bool overwrite = false);
+  void make_output_directory(bool overwrite = false);
 
   /**
    * @brief Make a movie from images in temp_images_dir_
@@ -87,10 +74,9 @@ public:
 
   // virtual void run_sim() = 0;
 
-  void configureLogging();
+  void configure_logging();
 
   std::string get_frame_path();
-  std::string get_sample_path();
 };
 
 } // namespace meshbrane
