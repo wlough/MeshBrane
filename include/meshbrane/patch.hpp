@@ -11,7 +11,7 @@
 #include "meshbrane/simple_generator.hpp"
 
 namespace meshbrane {
-class MatrixMesh;
+class MatrixMesh; // forward declaration
 /**
  * @brief  A submanifold of a HalfEdgeMesh.
  *
@@ -70,6 +70,11 @@ public:
   int f_left_h(int h); //
   int h_next_h(int h); //
   int h_twin_h(int h);
+
+  size_t num_vertices() { return V_.size(); }
+  size_t num_edges() { return E_.size(); }
+  size_t num_faces() { return F_.size(); }
+  size_t num_half_edges() { return H_.size(); }
 
   ///////////////////////////////////////////////////////
   // Generators /////////////////////////////////////////

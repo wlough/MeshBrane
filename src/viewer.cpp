@@ -122,7 +122,7 @@ void Viewer::draw_simple_vector_field(SimpleVectorField &vfield) {
 // };
 
 void Viewer::draw_mesh(MatrixMesh &m) {
-  // iglviewer_.selected_data_index = m.index_;
+
   auto *data = &iglviewer_.data();
   data->set_mesh(m.xyz_coord_V_, m.V_cycle_F_);
   data->set_face_based(true);

@@ -246,7 +246,7 @@ void RigidSpindleSim::record_envelope_data() {
     double z = xyz.dot(Ez);
     Vec3d r_vec = xyz - z * Ez;
     double r = r_vec.norm();
-    zr_coords_V_.row(v) << z, r; // ***
+    zr_coords_V_.row(v) << z, r; // **
     // // get midpoint stuff
     double abs_z = std::abs(z);
     if (abs_z < abs_z_midpt) {
@@ -277,20 +277,16 @@ void RigidSpindleSim::apply_interaction_forces() {
     return;
   }
   //////////////////////////
+  //////////////////////////
+  //////////////////////////
   int Nplus = envelope_.spb_patch_plus_.V_.size();
   int Nminus = envelope_.spb_patch_minus_.V_.size();
   if (Nplus == 0) {
-    // printf("Contact patch1 empty\n");
     find_contact_patch1();
   }
-
   if (Nminus == 0) {
-    // printf("Contact patch2 empty\n");
     find_contact_patch2();
   }
-
-  // double epsilon_NE = envelope_.wca_epsilon_total_;
-
   int Nspb1 = spindle_.spb1_.get_num_vertices();
   int Nspb2 = spindle_.spb2_.get_num_vertices();
   double sigma1 = 0.5 * (spindle_.spb1_.wca_sigma_ + envelope_.wca_sigma_);
@@ -300,14 +296,10 @@ void RigidSpindleSim::apply_interaction_forces() {
     for (int v2{0}; v2 < Nspb1; v2++) {
       Vec3d x2 = spindle_.spb1_.xyz_coord_v(v2);
       Vec3d F = wca_force(x1, x2, epsilon1, sigma1);
-      // printf("F1: %f, %f, %f\n", F[0], F[1], F[2]);
       envelope_.force_V_.row(v1) += F;
       spindle_.spb1_.force_V_.row(v2) -= F;
-      // double F_parallel = F.dot(spindle_.mt_bundle_.get_axis());
-      // spindle_.envelope_force_ += F_parallel;
     }
   }
-
   double sigma2 = 0.5 * (spindle_.spb2_.wca_sigma_ + envelope_.wca_sigma_);
   double epsilon2 = spindle_.spb2_.wca_epsilon_;
   for (int v1 : envelope_.spb_patch_minus_.V_) {
@@ -315,11 +307,38 @@ void RigidSpindleSim::apply_interaction_forces() {
     for (int v2{0}; v2 < Nspb2; v2++) {
       Vec3d x2 = spindle_.spb2_.xyz_coord_v(v2);
       Vec3d F = wca_force(x1, x2, epsilon2, sigma2);
-      // printf("F2: %f, %f, %f\n", F[0], F[1], F[2]);
       envelope_.force_V_.row(v1) += F;
       spindle_.spb2_.force_V_.row(v2) -= F;
     }
   }
+  // ***
+  // int Nspb1 = spindle_.spb1_.get_num_vertices();
+  // int Nspb2 = spindle_.spb2_.get_num_vertices();
+  // double sigma1 = 0.5 * (spindle_.spb1_.wca_sigma_ + envelope_.wca_sigma_);
+  // double epsilon1 = spindle_.spb1_.wca_epsilon_;
+  // for (int v1 = 0; v1 < envelope_.get_num_vertices(); v1++) {
+  //   Vec3d x1 = envelope_.xyz_coord_v(v1);
+  //   for (int v2{0}; v2 < Nspb1; v2++) {
+  //     Vec3d x2 = spindle_.spb1_.xyz_coord_v(v2);
+  //     Vec3d F = wca_force(x1, x2, epsilon1, sigma1);
+  //     envelope_.force_V_.row(v1) += F;
+  //     spindle_.spb1_.force_V_.row(v2) -= F;
+  //   }
+  // }
+  // double sigma2 = 0.5 * (spindle_.spb2_.wca_sigma_ + envelope_.wca_sigma_);
+  // double epsilon2 = spindle_.spb2_.wca_epsilon_;
+  // for (int v1 = 0; v1 < envelope_.get_num_vertices(); v1++) {
+  //   Vec3d x1 = envelope_.xyz_coord_v(v1);
+  //   for (int v2{0}; v2 < Nspb2; v2++) {
+  //     Vec3d x2 = spindle_.spb2_.xyz_coord_v(v2);
+  //     Vec3d F = wca_force(x1, x2, epsilon2, sigma2);
+  //     envelope_.force_V_.row(v1) += F;
+  //     spindle_.spb2_.force_V_.row(v2) -= F;
+  //   }
+  // }
+  //////////////////////////
+  //////////////////////////
+  //////////////////////////
 
   spindle_.spb1_.sum_envelope_force_V();
   spindle_.spb2_.sum_envelope_force_V();
@@ -338,27 +357,12 @@ void RigidSpindleSim::apply_interaction_forces() {
   double z_max = 0.5 * spindle_.mt_bundle_.length_;
   double r_max = spindle_.mt_bundle_.interaction_radius_;
 
-  // Coords2d zr_coords_V(Nv, 2);
-  // envelope_xyz_center_.setZero();
-  // zr_coords_V_.resize(Nv, 2);
-  // double r_midpt;
-  // double abs_z_midpt = std::numeric_limits<double>::max();
-  // int v_midpt;
   for (int v = 0; v < Nv; v++) {
     Vec3d p1 = envelope_.xyz_coord_v(v);
     Vec3d xyz = p1 - o;
     double z = xyz.dot(ez);
     Vec3d r_vec = xyz - z * ez;
     double r = r_vec.norm();
-    // zr_coords_V_.row(v) << z, r; // ***
-    // get midpoint stuff
-    // double abs_z = std::abs(z);
-    // if (abs_z < abs_z_midpt) {
-    //   abs_z_midpt = abs_z;
-    //   r_midpt = r;
-    //   v_midpt = v;
-    // }
-    //
     if (z < z_min || z > z_max || r > r_max) {
       continue;
     }
@@ -371,7 +375,6 @@ void RigidSpindleSim::apply_interaction_forces() {
     Vec3d T = -math::cross(l_vec, F);
     spindle_.mt_bundle_.torque_envelope_ += T;
   }
-  // midpoint_radius_ = r_midpt;
 }
 
 double RigidSpindleSim::dt_max() {
@@ -424,8 +427,8 @@ void RigidSpindleSim::timestep() {
   Vec3d x2 = spindle_.spb2_.xyz_frame_;
   double r2 = 1.25 * spindle_.spb2_.interaction_radius_;
 
-  envelope_.spb_patch_plus_.move_towards_sphere(x1, r1);
-  envelope_.spb_patch_minus_.move_towards_sphere(x2, r2);
+  envelope_.spb_patch_plus_.move_towards_sphere(x1, r1);  // ***
+  envelope_.spb_patch_minus_.move_towards_sphere(x2, r2); // ***
 
   envelope_.update_membrane_visuals();
 }

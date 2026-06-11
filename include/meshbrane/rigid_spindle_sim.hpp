@@ -234,12 +234,6 @@ template <> void TimeSeries<Eigen::Vector3d>::load_file() {
   }
 }
 
-//
-//
-//
-//
-//
-//
 template <> void TimeSeries<Samples1d>::save_file() {
   std::ofstream file(save_path_, std::ios::binary);
   if (!file) {
