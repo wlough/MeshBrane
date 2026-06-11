@@ -14,7 +14,7 @@ namespace fs = std::filesystem;
 
 namespace meshbrane {
 
-SimulationBase::SimulationBase(const std::string &path_to_parameters) {
+SimulationBase::SimulationBase(const fs::path &path_to_parameters) {
   // loadParameters(path_to_parameters);
   parameters_ = YAML::LoadFile(path_to_parameters);
   if (parameters_["dt"]) {
@@ -40,19 +40,20 @@ SimulationBase::SimulationBase(const std::string &path_to_parameters) {
     throw std::runtime_error("No run_name provided in parameters file");
   }
   if (parameters_["output_dir"]) {
-    output_dir_ = parameters_["output_dir"].as<std::string>() + "/" + run_name_;
+    output_dir_ =
+        fs::path(parameters_["output_dir"].as<std::string>()) / run_name_;
   } else {
     throw std::runtime_error("No output_dir provided in parameters file");
   }
-  logs_dir_ = output_dir_ + "/" + "logs";
-  raw_data_dir_ = output_dir_ + "/" + "raw_data";
-  visualizations_dir_ = output_dir_ + "/" + "visualizations";
-  temp_images_dir_ = output_dir_ + "/" + "temp_images";
+  logs_dir_ = output_dir_ / "logs";
+  raw_data_dir_ = output_dir_ / "raw_data";
+  visualizations_dir_ = output_dir_ / "visualizations";
+  temp_images_dir_ = output_dir_ / "temp_images";
   make_output_directory(true);
 
-  log_path_ = logs_dir_ + "/" + "sim.log";
+  log_path_ = logs_dir_ / "sim.log";
 
-  std::ofstream fout(output_dir_ + "/" + "parameters.yaml");
+  std::ofstream fout(output_dir_ / "parameters.yaml");
   fout << parameters_;
   fout.close();
 
@@ -84,20 +85,19 @@ void SimulationBase::make_output_directory(bool overwrite) {
 void SimulationBase::configure_logging() {
   std::ofstream log_file(log_path_, std::ios_base::app);
   if (!log_file.is_open()) {
-    throw std::runtime_error("Unable to open log file: " + log_path_);
+    throw std::runtime_error("Unable to open log file: " + log_path_.string());
   }
   log_file << "Initialized simulation with parameters: " << std::endl;
   log_file << parameters_ << std::endl;
   log_file.close();
 }
 
-std::string SimulationBase::get_frame_path() {
+fs::path SimulationBase::get_frame_path() {
   std::string frame_count_str = std::to_string(frame_count_);
   // pad with zeros so the index is always 6 digits
   frame_count_str =
       std::string(6 - frame_count_str.size(), '0') + frame_count_str;
-  return temp_images_dir_ + "/" + frame_prefix_ + "_" + frame_count_str +
-         ".png";
+  return temp_images_dir_ / (frame_prefix_ + "_" + frame_count_str + ".png");
 }
 
 void SimulationBase::make_a_movie() {
@@ -116,11 +116,12 @@ void SimulationBase::make_a_movie() {
 
   std::ofstream log_file(log_path_, std::ios_base::app);
   if (!log_file.is_open()) {
-    throw std::runtime_error("Unable to open log file: " + log_path_);
+    throw std::runtime_error("Unable to open log file: " + log_path_.string());
   }
 
-  log_file << "Made a movie from images in " << temp_images_dir_ << '\n';
-  log_file << "Movie saved to " << visualizations_dir_ << '\n';
+  log_file << "Made a movie from images in " << temp_images_dir_.string()
+           << '\n';
+  log_file << "Movie saved to " << visualizations_dir_.string() << '\n';
 }
 
 } // namespace meshbrane

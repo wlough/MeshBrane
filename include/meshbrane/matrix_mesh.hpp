@@ -209,7 +209,7 @@ public:
   ////////////////////////////////
   YAML::Node parameters_;
 
-  std::filesystem::path ply_path_{""};
+  std::filesystem::path ply_path_;
 
   bool show_half_edges_{false};
   bool show_vertices_{false};
@@ -294,7 +294,8 @@ public:
   void set_attributes_from_parameters() {
     printf("MatrixMesh::set_attributes_from_parameters\n");
     if (parameters_["ply_path"]) {
-      ply_path_ = parameters_["ply_path"].as<std::string>();
+      ply_path_ =
+          std::filesystem::path(parameters_["ply_path"].as<std::string>());
     }
     if (parameters_["draw_wireframe"]) {
       draw_wireframe_ = parameters_["draw_wireframe"].as<bool>(); // true
@@ -487,18 +488,18 @@ public:
              const Samplesi &h_twin_H, const Samplesi &f_left_H,
              const Samplesi &h_right_F, const Samplesi &h_negative_B);
 
-  MatrixMesh(const std::string &ply_path);
+  MatrixMesh(const std::filesystem::path &ply_path);
   /**
    * @brief Construct a new MatrixMesh object from ply file of half-edge
    * samples.
    * @param ply_path
    * @return MatrixMesh
    */
-  static MatrixMesh from_he_ply(const std::string &ply_path);
+  static MatrixMesh from_he_ply(const std::filesystem::path &ply_path);
   static MatrixMesh from_icosohedron();
   void init_icosohedron();
   static MatrixMesh from_icososphere(int n);
-  void write_he_ply(const std::string &ply_path) const;
+  void write_he_ply(const std::filesystem::path &ply_path) const;
 
   /**
    * @brief Construct a new MatrixMesh object from the vectors in a
@@ -517,8 +518,8 @@ public:
    * @param ply_path
    * @return MatrixMesh
    */
-  static MatrixMesh from_vf_ply(const std::string &ply_path);
-  void write_vf_ply(const std::string &ply_path) const;
+  static MatrixMesh from_vf_ply(const std::filesystem::path &ply_path);
+  void write_vf_ply(const std::filesystem::path &ply_path) const;
 
   ///////////////////////////////////////////////////////
   // Fundamental accessors and properties ///////////////
@@ -823,7 +824,6 @@ public:
   int interactive_plot(int argc, char *argv[]);
   int spinning_plot(int argc, char *argv[]);
   int flipping_plot(int argc, char *argv[]);
-  int save_png(const std::string &png_path);
   int uniform_flip_sweep();
 
   /**

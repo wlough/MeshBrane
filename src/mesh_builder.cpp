@@ -349,6 +349,11 @@ VertexFaceTuple load_vf_samples_from_ply(const fs::path &filepath,
 HalfEdgeTuple load_he_samples_from_ply(const fs::path &filepath,
                                        const bool preload_into_memory,
                                        const bool verbose) {
+
+  if (!fs::exists(filepath)) {
+    throw std::runtime_error("PLY file does not exist: " + filepath.string());
+  }
+
   std::streambuf *oldCoutStreamBuf = nullptr;
   std::ofstream nullStream;
 

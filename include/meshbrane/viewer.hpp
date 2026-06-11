@@ -11,6 +11,7 @@
 #include "meshbrane/rigid_spindle.hpp"
 #include "meshbrane/simple_vector_field.hpp"
 #include <Eigen/Dense>
+#include <filesystem>
 #include <igl/stb/write_image.h>
 #include <yaml-cpp/yaml.h>
 
@@ -73,14 +74,7 @@ struct Viewer {
   // Output /////////////////////
   ///////////////////////////////
 
-  void save_frame(std::string &frame_path);
-
-  //   void make_a_movie(std::string image_dir, std::string image_prefix,
-  //                     int index_length, std::string image_format,
-  //                     std::string movie_dir, std::string movie_name,
-  //                     std::string movie_format, int frame_rate,
-  //                     std::string video_codec, int video_quality,
-  //                     std::string pixel_format);
+  void save_frame(std::filesystem::path &frame_path);
 
   void print_info();
 };

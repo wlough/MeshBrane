@@ -2,6 +2,9 @@
  * @file viewer.cpp
  */
 #include "meshbrane/viewer.hpp"
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 namespace meshbrane {
 
@@ -78,7 +81,9 @@ void Viewer::init() {
   iglviewer_.core().camera_dnear = dnear_; // Near clipping plane
   iglviewer_.core().camera_dfar = dfar_;   // Far clipping plane
   iglviewer_.core().set_rotation_type(
-      igl::opengl::ViewerCore::ROTATION_TYPE_TRACKBALL);
+      igl::opengl::ViewerCore::ROTATION_TYPE_TWO_AXIS_VALUATOR_FIXED_UP);
+  // iglviewer_.core().set_rotation_type(
+  //     igl::opengl::ViewerCore::ROTATION_TYPE_TRACKBALL);
 }
 
 ///////////////////////////////
@@ -408,7 +413,7 @@ void Viewer::draw_mt_bundle_spb_axes(RigidMTBundle &mt_bundle,
 // Output /////////////////////
 ///////////////////////////////
 
-void Viewer::save_frame(std::string &frame_path) {
+void Viewer::save_frame(fs::path &frame_path) {
   // Allocate temporary buffers
   Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(width_,
                                                                  height_);
@@ -425,39 +430,4 @@ void Viewer::save_frame(std::string &frame_path) {
   igl::stb::write_image(frame_path, R, G, B, A);
 }
 
-// void Viewer::make_a_movie(std::string image_dir, std::string image_prefix,
-//                           int index_length, std::string image_format,
-//                           std::string movie_dir, std::string movie_name,
-//                           std::string movie_format, int frame_rate,
-//                           std::string video_codec, int video_quality,
-//                           std::string pixel_format) {
-
-//   //   std::string
-//   //   image_filename="${image_prefix}_%0${index_length}d.${image_format}";
-//   std::string image_filename =
-//       image_prefix + "_%0" + std::to_string(index_length) + "d." +
-//       image_format;
-//   std::string movie_filename = movie_name + "." + movie_format;
-
-//   std::string run_command = "ffmpeg ";
-//   // # overwrite output file without asking if it already exists
-//   run_command += "-y ";
-//   // # frame rate (Hz)
-//   run_command += "-r " + std::to_string(frame_rate) + " ";
-//   // # frame width x height (pixels)
-//   run_command += "-s " + std::to_string(width_) + "x" +
-//                  std::to_string(height_) + " ";
-//   // # input files path and format
-//   run_command += "-i " + image_filename + " ";
-//   // # video codec
-//   run_command += "-vcodec " + video_codec + " ";
-//   // # video quality, lower means better
-//   run_command += "-crf " + std::to_string(video_quality) + " ";
-//   // # pixel format
-//   run_command += "-pix_fmt " + pixel_format + " ";
-//   // # output file
-//   run_command += movie_filename;
-//   printf("Running command: %s\n", run_command.c_str());
-//   int result = std::system(run_command.c_str());
-// }
 } // namespace meshbrane

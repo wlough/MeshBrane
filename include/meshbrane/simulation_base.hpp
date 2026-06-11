@@ -9,8 +9,6 @@
 #include <string>
 #include <yaml-cpp/yaml.h>
 
-namespace fs = std::filesystem;
-
 namespace meshbrane {
 /**
  * @brief Base class for simulations. Makes output directory and loads parameter
@@ -22,15 +20,14 @@ public:
   YAML::Node parameters_;
 
   std::string run_name_;
+  std::filesystem::path output_dir_;
 
-  std::string output_dir_;
+  std::filesystem::path logs_dir_;
+  std::filesystem::path raw_data_dir_;
+  std::filesystem::path visualizations_dir_;
+  std::filesystem::path temp_images_dir_;
 
-  std::string logs_dir_;
-  std::string raw_data_dir_;
-  std::string visualizations_dir_;
-  std::string temp_images_dir_;
-
-  std::string log_path_;
+  std::filesystem::path log_path_;
 
   int frame_count_ = 0;
   int frame_index_length_ = 6;
@@ -42,12 +39,11 @@ public:
   double dt_frame_;
   double T_run_;
 
-  SimulationBase(const std::string &path_to_parameters);
+  SimulationBase(const std::filesystem::path &path_to_parameters);
 
   /**
    * @brief Make output directories for logs/checkpoints/temp_images/etc...
    *
-   * @param output_dir
    * @param overwrite
    */
   void make_output_directory(bool overwrite = false);
@@ -76,7 +72,7 @@ public:
 
   void configure_logging();
 
-  std::string get_frame_path();
+  std::filesystem::path get_frame_path();
 };
 
 } // namespace meshbrane

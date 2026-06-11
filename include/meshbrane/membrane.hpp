@@ -12,6 +12,7 @@
 #include "meshbrane/simple_vector_field.hpp"
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
+#include <filesystem>
 #include <iostream>
 #include <yaml-cpp/yaml.h>
 
@@ -123,7 +124,7 @@ public:
     name_ = name;
   }
   Membrane(MatrixMesh &mesh) : MatrixMesh(mesh) {}
-  Membrane(const std::string &ply_path) : MatrixMesh(ply_path) {}
+  Membrane(const std::filesystem::path &ply_path) : MatrixMesh(ply_path) {}
   Membrane(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
            const Samplesi &v_origin_H, const Samplesi &h_next_H,
            const Samplesi &h_twin_H, const Samplesi &f_left_H,
@@ -330,7 +331,7 @@ public:
     apply_volume_force_V();
   }
 
-  void save_state(const std::string &filename) const;
+  void save_state(const std::filesystem::path &filename) const;
 
   ///////////////////////////////////////////////////////
   // Membrane physics ///////////////////////////////////

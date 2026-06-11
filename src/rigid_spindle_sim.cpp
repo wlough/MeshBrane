@@ -10,10 +10,13 @@
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
 #include <cmath>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 namespace meshbrane {
 
-RigidSpindleSim::RigidSpindleSim(const std::string &path_to_parameters)
+RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
     : SimulationBase(path_to_parameters) {
   printf("RigidSpindleSim::RigidSpindleSim\n");
   // moved to base class...
@@ -434,7 +437,7 @@ void RigidSpindleSim::timestep() {
 }
 
 void RigidSpindleSim::save_frame() {
-  std::string frame_path = get_frame_path();
+  fs::path frame_path = get_frame_path();
   viewer_.save_frame(frame_path);
   frame_count_++;
 }
@@ -496,16 +499,16 @@ void RigidSpindleSim::run(int argc, char *argv[]) {
   make_a_movie();
 }
 
-std::string RigidSpindleSim::get_envelope_ply_path() {
+fs::path RigidSpindleSim::get_envelope_ply_path() {
   std::string frame_count_str = std::to_string(frame_count_);
   // pad with zeros so the index is always 6 digits
   frame_count_str =
       std::string(6 - frame_count_str.size(), '0') + frame_count_str;
-  return raw_data_dir_ + "/" + "envelope" + "_" + frame_count_str + ".ply";
+  return raw_data_dir_ / ("envelope_" + frame_count_str + ".ply");
 }
 
 void RigidSpindleSim::write_outputs() {
-  std::string frame_path = get_frame_path();
+  fs::path frame_path = get_frame_path();
   viewer_.save_frame(frame_path);
 
   double t0 = data_.t_.first();
@@ -515,7 +518,7 @@ void RigidSpindleSim::write_outputs() {
     data_.append_file();
   }
 
-  // std::string ply_path = get_envelope_ply_path();
+  // fs::path ply_path = get_envelope_ply_path();
   // envelope_.write_he_ply(ply_path);
 
   frame_count_++;

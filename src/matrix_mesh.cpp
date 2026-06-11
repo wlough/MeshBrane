@@ -11,8 +11,11 @@
 #include <Eigen/Sparse>
 #include <cmath> // For M_PI and std::acos
 #include <coroutine>
+#include <filesystem>
 #include <iostream>
 #include <unordered_set> // std::unordered_set
+
+namespace fs = std::filesystem;
 
 namespace meshbrane {
 void MatrixMesh::set_parameters() {
@@ -22,7 +25,7 @@ void MatrixMesh::set_parameters() {
   // MatrixMesh data ////////////////////////////////////
   ///////////////////////////////////////////////////////
   if (parameters_["ply_path"]) {
-    ply_path_ = parameters_["ply_path"].as<std::string>();
+    ply_path_ = fs::path(parameters_["ply_path"].as<std::string>());
   }
   if (parameters_["draw_wireframe"]) {
     draw_wireframe_ = parameters_["draw_wireframe"].as<bool>();
@@ -542,7 +545,7 @@ MatrixMesh::MatrixMesh(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
   //   populate_vertices();
 }
 
-MatrixMesh::MatrixMesh(const std::string &ply_path) {
+MatrixMesh::MatrixMesh(const fs::path &ply_path) {
   // HalfEdgeTuple het = mesh_io::load_he_samples_from_ply(ply_path);
   // mesh_io::MeshBuilder mc = mesh_io::MeshBuilder::from_he_ply(ply_path,
   // false);
@@ -564,7 +567,7 @@ MatrixMesh::MatrixMesh(const std::string &ply_path) {
  * @param ply_path
  * @return MatrixMesh
  */
-MatrixMesh MatrixMesh::from_he_ply(const std::string &ply_path) {
+MatrixMesh MatrixMesh::from_he_ply(const fs::path &ply_path) {
   mesh_io::MeshBuilder mc = mesh_io::MeshBuilder::from_he_ply(ply_path, false);
   auto [xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H,
         h_right_F, h_negative_B] = mc.he_samples;
@@ -577,7 +580,7 @@ MatrixMesh MatrixMesh::from_he_ply(const std::string &ply_path) {
  *
  * @param ply_path
  */
-void MatrixMesh::write_he_ply(const std::string &ply_path) const {
+void MatrixMesh::write_he_ply(const fs::path &ply_path) const {
   // printf("Saving ply file %s\n", ply_path.c_str());
   meshbrane::mesh_io::write_he_samples_to_ply(
       xyz_coord_V_, h_out_V_, v_origin_H_, h_next_H_, h_twin_H_, f_left_H_,
@@ -602,7 +605,7 @@ MatrixMesh MatrixMesh::from_vf_samples(const Samples3d &xyz_coord_V,
                     f_left_H, h_right_F, h_negative_B);
 }
 
-MatrixMesh MatrixMesh::from_vf_ply(const std::string &ply_path) {
+MatrixMesh MatrixMesh::from_vf_ply(const fs::path &ply_path) {
   mesh_io::MeshBuilder mc = mesh_io::MeshBuilder::from_vf_ply(ply_path, true);
   auto [xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H,
         h_right_F, h_negative_B] = mc.he_samples;

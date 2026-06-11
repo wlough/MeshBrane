@@ -9,6 +9,7 @@
 #include "meshbrane/matrix_mesh.hpp"
 #include "meshbrane/meshbrane_object.hpp"
 #include "meshbrane_data_types.hpp"
+#include <filesystem>
 #include <yaml-cpp/yaml.h>
 
 namespace meshbrane {
@@ -23,7 +24,7 @@ public:
   RigidMesh() = default;
   ~RigidMesh() = default;
   RigidMesh(MatrixMesh &mesh) : MatrixMesh(mesh) {}
-  RigidMesh(const std::string &ply_path) : MatrixMesh(ply_path) {}
+  RigidMesh(const std::filesystem::path &ply_path) : MatrixMesh(ply_path) {}
   RigidMesh(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
             const Samplesi &v_origin_H, const Samplesi &h_next_H,
             const Samplesi &h_twin_H, const Samplesi &f_left_H,

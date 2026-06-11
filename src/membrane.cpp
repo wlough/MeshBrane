@@ -5,6 +5,9 @@
 #include "meshbrane/kmc.hpp"
 #include "meshbrane/tethering_force.hpp"
 #include <cmath> // For std::acos and std::sqrt
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 namespace meshbrane {
 
@@ -801,7 +804,7 @@ void Membrane::evolve_until(double t_end, double dt0) {
   }
 }
 
-void Membrane::save_state(const std::string &filename) const {
+void Membrane::save_state(const fs::path &filename) const {
   //
   //
   //

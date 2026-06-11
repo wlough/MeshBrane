@@ -20,10 +20,10 @@ namespace meshbrane {
 template <typename T> class TimeSeries {
 public:
   TimeSeries() = default;
-  TimeSeries(const std::string &save_path) : save_path_(save_path) {}
+  TimeSeries(const std::filesystem::path &save_path) : save_path_(save_path) {}
   void add_sample(const T &sample) { samples_.push_back(sample); }
   std::vector<T> samples_;
-  std::string save_path_;
+  std::filesystem::path save_path_;
   T first() { return samples_.front(); }
   T last() { return samples_.back(); }
   void save_file() {
@@ -343,29 +343,28 @@ public:
   TimeSeries<double> spb_antipodality_;
 
   RigidSpindleSimData() = default;
-  RigidSpindleSimData(const std::string &data_dir) {
-    t_ = TimeSeries<double>(data_dir + "/t.dat");
-    length_ = TimeSeries<double>(data_dir + "/mt_bundle_length.dat");
-    length_dot_ = TimeSeries<double>(data_dir + "/mt_bundle_length_dot.dat");
-    overlap_length_ = TimeSeries<double>(data_dir + "/mt_overlap_length.dat");
+  RigidSpindleSimData(const std::filesystem::path &data_dir) {
+    t_ = TimeSeries<double>(data_dir / "t.dat");
+    length_ = TimeSeries<double>(data_dir / "mt_bundle_length.dat");
+    length_dot_ = TimeSeries<double>(data_dir / "mt_bundle_length_dot.dat");
+    overlap_length_ = TimeSeries<double>(data_dir / "mt_overlap_length.dat");
     overlap_length_dot_ =
-        TimeSeries<double>(data_dir + "/mt_overlap_length_dot.dat");
-    extensile_force_ = TimeSeries<double>(data_dir + "/extensile_force.dat");
-    compressive_force_ =
-        TimeSeries<double>(data_dir + "/compressive_force.dat");
+        TimeSeries<double>(data_dir / "mt_overlap_length_dot.dat");
+    extensile_force_ = TimeSeries<double>(data_dir / "extensile_force.dat");
+    compressive_force_ = TimeSeries<double>(data_dir / "compressive_force.dat");
     envelope_compressive_force_ =
-        TimeSeries<double>(data_dir + "/envelope_compressive_force.dat");
+        TimeSeries<double>(data_dir / "envelope_compressive_force.dat");
     midpoint_radius_ =
-        TimeSeries<double>(data_dir + "/envelope_midpoint_radius.dat");
-    zr_coords_V_ = TimeSeries<Samples2d>(data_dir + "/envelope_zr_coords.dat");
-    mt_xyz_center_ = TimeSeries<Vec3d>(data_dir + "/mt_xyz_center.dat");
+        TimeSeries<double>(data_dir / "envelope_midpoint_radius.dat");
+    zr_coords_V_ = TimeSeries<Samples2d>(data_dir / "envelope_zr_coords.dat");
+    mt_xyz_center_ = TimeSeries<Vec3d>(data_dir / "mt_xyz_center.dat");
     // mt_rotation_matrix_center_ =
-    //     TimeSeries<Samples2d>(data_dir + "/mt_rotation_matrix_center.dat");
+    //     TimeSeries<Samples2d>(data_dir / "mt_rotation_matrix_center.dat");
     envelope_xyz_center_ =
-        TimeSeries<Vec3d>(data_dir + "/envelope_xyz_center.dat");
+        TimeSeries<Vec3d>(data_dir / "envelope_xyz_center.dat");
     envelope_moments_ =
-        TimeSeries<Samples1d>(data_dir + "/envelope_moments.dat");
-    spb_antipodality_ = TimeSeries<double>(data_dir + "/spb_antipodality.dat");
+        TimeSeries<Samples1d>(data_dir / "envelope_moments.dat");
+    spb_antipodality_ = TimeSeries<double>(data_dir / "spb_antipodality.dat");
   }
   void save_file() {
     t_.save_file();
@@ -419,7 +418,7 @@ public:
     envelope_moments_.samples_.clear();
   }
 
-  void make_output_directory(const std::string &output_dir) {
+  void make_output_directory(const std::filesystem::path &output_dir) {
     // create the directory if it doesn't exist
     if (!std::filesystem::exists(output_dir)) {
       std::filesystem::create_directories(output_dir);
@@ -480,7 +479,7 @@ public:
   Viewer viewer_;
   bool spindle_force_on_{true};
 
-  RigidSpindleSim(const std::string &path_to_parameters);
+  RigidSpindleSim(const std::filesystem::path &path_to_parameters);
 
   // void set_parameters() override;
   // void initialize_sim() override;
@@ -493,7 +492,7 @@ public:
   void save_frame();
   void write_outputs();
   void save_enevelope_state();
-  std::string get_envelope_ply_path();
+  std::filesystem::path get_envelope_ply_path();
 
   void find_contact_patch1();
   void find_contact_patch2();
