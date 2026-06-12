@@ -55,12 +55,6 @@ public:
   void make_a_movie();
 
   // /**
-  //  * @brief Set additional parameters not set by SimulationBase
-  //  *
-  //  */
-  // virtual void set_parameters() = 0;
-
-  // /**
   //  * @brief Initialize objects in the simulation
   //  *
   //  */

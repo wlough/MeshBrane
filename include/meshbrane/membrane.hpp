@@ -113,7 +113,7 @@ public:
   ~Membrane() = default;
   Membrane(const YAML::Node &parameters) {
     parameters_ = parameters;
-    set_parameters();
+    set_attributes_from_parameters();
     init();
   }
   Membrane(YAML::Node *sim_parameters, std::string name) {
@@ -162,7 +162,6 @@ public:
   //   node_drag_coefficient_ = 6.0 * M_PI * mu * Rv;
   // }
 
-  // void set_parameters() override;
   void set_attributes_from_parameters() {
     MatrixMesh::set_attributes_from_parameters();
     ///////////////////////////////////////////////////////
@@ -293,8 +292,7 @@ public:
       local_drag_coefficient_ = 1.5 * bulk_viscosity_; // * 1/R but R=1
     }
   }
-  // void set_global_sim_parameters();
-  void sync_with_sim_parameters();
+
   void init();
   /**
    * @brief Update target edge length, area, and volume for constraint forces.

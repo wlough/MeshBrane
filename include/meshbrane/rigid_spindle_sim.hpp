@@ -481,8 +481,6 @@ public:
 
   RigidSpindleSim(const std::filesystem::path &path_to_parameters);
 
-  // void set_parameters() override;
-  // void initialize_sim() override;
   double dt_max();
   void timestep();
   void evolve_until(double t_end);

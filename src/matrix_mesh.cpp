@@ -18,70 +18,6 @@
 namespace fs = std::filesystem;
 
 namespace meshbrane {
-void MatrixMesh::set_parameters() {
-  // printf("MatrixMesh::set_parameters\n");
-
-  ///////////////////////////////////////////////////////
-  // MatrixMesh data ////////////////////////////////////
-  ///////////////////////////////////////////////////////
-  if (parameters_["ply_path"]) {
-    ply_path_ = fs::path(parameters_["ply_path"].as<std::string>());
-  }
-  if (parameters_["draw_wireframe"]) {
-    draw_wireframe_ = parameters_["draw_wireframe"].as<bool>();
-  }
-  if (parameters_["show_half_edges"]) {
-    show_half_edges_ = parameters_["show_half_edges"].as<bool>(); // true
-  }
-  if (parameters_["show_vertices"]) {
-    show_vertices_ = parameters_["show_vertices"].as<bool>(); // true
-  }
-  if (parameters_["show_edges"]) {
-    show_edges_ = parameters_["show_edges"].as<bool>(); // true
-  }
-  if (parameters_["rgba_face"]) {
-    rgba_face_ = Eigen::Map<Eigen::Vector4d>(
-        parameters_["rgba_face"].as<std::vector<double>>().data());
-  }
-  if (parameters_["rgba_edge"]) {
-    rgba_edge_ = Eigen::Map<Eigen::Vector4d>(
-        parameters_["rgba_edge"].as<std::vector<double>>().data());
-  }
-  if (parameters_["rgba_vertex"]) {
-    rgba_vertex_ = Eigen::Map<Eigen::Vector4d>(
-        parameters_["rgba_vertex"].as<std::vector<double>>().data());
-  }
-  if (parameters_["rgba_half_edge"]) {
-    rgba_half_edge_ = Eigen::Map<Eigen::Vector4d>(
-        parameters_["rgba_half_edge"].as<std::vector<double>>().data());
-  }
-  if (parameters_["laplacian_type"]) {
-    laplacian_type_ = parameters_["laplacian_type"].as<std::string>();
-  }
-  if (parameters_["atol"]) {
-    belkin_atol_ = parameters_["atol"].as<double>();
-  }
-  if (parameters_["rtol"]) {
-    belkin_rtol_ = parameters_["rtol"].as<double>();
-  }
-  if (parameters_["belkin_dt"]) {
-    belkin_dt_ = parameters_["belkin_dt"].as<double>();
-  }
-  if (parameters_["belkin_min_ring"]) {
-    belkin_min_ring_ = parameters_["belkin_min_ring"].as<int>();
-  }
-  if (parameters_["heat_dt_multiple"]) {
-    heat_dt_multiple_ = parameters_["heat_dt_multiple"].as<double>();
-  }
-  if (parameters_["construct_laplacian_matrix"]) {
-    construct_laplacian_matrix_ =
-        parameters_["construct_laplacian_matrix"].as<bool>();
-  }
-  if (parameters_["gaussian_curvature_type"]) {
-    gaussian_curvature_type_ =
-        parameters_["gaussian_curvature_type"].as<std::string>();
-  }
-}
 
 /////////////////////////
 // Convergence testing //
@@ -493,15 +429,15 @@ void MatrixMesh::update_mesh_geometric_data() {
   update_mesh_volume();
 }
 
-void MatrixMesh::update_mesh() {
-  // update_simplices_from_he();
-  // update_boundary_cycles();
-  update_mesh_geometric_data_E();
-  update_mesh_geometric_data_F();
-  update_mesh_geometric_data_V();
-  update_mesh_volume();
-  // update_mesh_visuals();
-}
+// void MatrixMesh::update_mesh() {
+//   // update_simplices_from_he();
+//   // update_boundary_cycles();
+//   update_mesh_geometric_data_E();
+//   update_mesh_geometric_data_F();
+//   update_mesh_geometric_data_V();
+//   update_mesh_volume();
+//   // update_mesh_visuals();
+// }
 
 void MatrixMesh::init_mesh() {
   load_ply();
@@ -843,7 +779,12 @@ Samplesi MatrixMesh::F_incident_b(int b) const {
 // Combinatorial maps /////////////////////////////////
 ///////////////////////////////////////////////////////
 
-Vec3d MatrixMesh::xyz_coord_v(int v) const { return xyz_coord_V_.row(v); }
+Vec3d MatrixMesh::xyz_coord_v(int v) const {
+  if (v < 0 || v >= xyz_coord_V_.rows()) {
+    throw std::out_of_range("xyz_coord_v: Vertex index out of range");
+  }
+  return xyz_coord_V_.row(v);
+}
 
 Samples3d MatrixMesh::xyz_coord_v(const Samplesi &indices) const {
   Samples3d result(indices.size(), 3);
@@ -853,7 +794,12 @@ Samples3d MatrixMesh::xyz_coord_v(const Samplesi &indices) const {
   return result;
 }
 
-int MatrixMesh::h_out_v(int v) const { return h_out_V_(v); }
+int MatrixMesh::h_out_v(int v) const {
+  if (v < 0 || v >= h_out_V_.size()) {
+    throw std::out_of_range("h_out_v: Vertex index out of range");
+  }
+  return h_out_V_(v);
+}
 
 Samplesi MatrixMesh::h_out_v(const Samplesi &indices) const {
   Samplesi result(indices.size());
@@ -863,7 +809,12 @@ Samplesi MatrixMesh::h_out_v(const Samplesi &indices) const {
   return result;
 }
 
-int MatrixMesh::v_origin_h(int h) const { return v_origin_H_(h); }
+int MatrixMesh::v_origin_h(int h) const {
+  if (h < 0 || h >= v_origin_H_.size()) {
+    throw std::out_of_range("v_origin_h: Half-edge index out of range");
+  }
+  return v_origin_H_(h);
+}
 
 Samplesi MatrixMesh::v_origin_h(const Samplesi &indices) const {
   Samplesi result(indices.size());
@@ -873,7 +824,12 @@ Samplesi MatrixMesh::v_origin_h(const Samplesi &indices) const {
   return result;
 }
 
-int MatrixMesh::h_next_h(int h) const { return h_next_H_(h); }
+int MatrixMesh::h_next_h(int h) const {
+  if (h < 0 || h >= h_next_H_.size()) {
+    throw std::out_of_range("h_next_h: Half-edge index out of range");
+  }
+  return h_next_H_(h);
+}
 
 Samplesi MatrixMesh::h_next_h(const Samplesi &indices) const {
   Samplesi result(indices.size());
@@ -883,7 +839,12 @@ Samplesi MatrixMesh::h_next_h(const Samplesi &indices) const {
   return result;
 }
 
-int MatrixMesh::h_twin_h(int h) const { return h_twin_H_(h); }
+int MatrixMesh::h_twin_h(int h) const {
+  if (h < 0 || h >= h_twin_H_.size()) {
+    throw std::out_of_range("h_twin_h: Half-edge index out of range");
+  }
+  return h_twin_H_(h);
+}
 
 Samplesi MatrixMesh::h_twin_h(const Samplesi &indices) const {
   Samplesi result(indices.size());
@@ -893,7 +854,12 @@ Samplesi MatrixMesh::h_twin_h(const Samplesi &indices) const {
   return result;
 }
 
-int MatrixMesh::f_left_h(int h) const { return f_left_H_(h); }
+int MatrixMesh::f_left_h(int h) const {
+  if (h < 0 || h >= f_left_H_.size()) {
+    throw std::out_of_range("f_left_h: Half-edge index out of range");
+  }
+  return f_left_H_(h);
+}
 
 Samplesi MatrixMesh::f_left_h(const Samplesi &indices) const {
   Samplesi result(indices.size());
@@ -903,7 +869,12 @@ Samplesi MatrixMesh::f_left_h(const Samplesi &indices) const {
   return result;
 }
 
-int MatrixMesh::h_right_f(int f) const { return h_right_F_(f); }
+int MatrixMesh::h_right_f(int f) const {
+  if (f < 0 || f >= h_right_F_.size()) {
+    throw std::out_of_range("h_right_f: Face index out of range");
+  }
+  return h_right_F_(f);
+}
 
 Samplesi MatrixMesh::h_right_f(const Samplesi &indices) const {
   Samplesi result(indices.size());
@@ -913,7 +884,12 @@ Samplesi MatrixMesh::h_right_f(const Samplesi &indices) const {
   return result;
 }
 
-int MatrixMesh::h_negative_b(int b) const { return h_negative_B_(b); }
+int MatrixMesh::h_negative_b(int b) const {
+  if (b < 0 || b >= h_negative_B_.size()) {
+    throw std::out_of_range("h_negative_b: Boundary index out of range");
+  }
+  return h_negative_B_(b);
+}
 
 Samplesi MatrixMesh::h_negative_b(const Samplesi &indices) const {
   Samplesi result(indices.size());
@@ -923,12 +899,26 @@ Samplesi MatrixMesh::h_negative_b(const Samplesi &indices) const {
   return result;
 }
 
+int MatrixMesh::h_directed_e(int e) const {
+  if (e < 0 || e >= h_directed_E_.size()) {
+    throw std::out_of_range("h_directed_e: Edge index out of range");
+  }
+  return h_directed_E_(e);
+}
+
 Samplesi MatrixMesh::h_directed_e(const Samplesi &indices) const {
   Samplesi result(indices.size());
   for (int i = 0; i < indices.size(); ++i) {
     result(i) = h_directed_E_(indices(i));
   }
   return result;
+}
+
+int MatrixMesh::e_undirected_h(int h) const {
+  if (h < 0 || h >= e_undirected_H_.size()) {
+    throw std::out_of_range("e_undirected_h: Half-edge index out of range");
+  }
+  return e_undirected_H_(h);
 }
 
 Samplesi MatrixMesh::e_undirected_h(const Samplesi &indices) const {
@@ -1876,13 +1866,23 @@ void MatrixMesh::update_gaussian_curvature_laplacian() {
 
 void MatrixMesh::update_gaussian_curvature() {
   // printf("MatrixMesh::update_gaussian_curvature\n");
-  if (gaussian_curvature_type_ == "angle_defect") {
+  // if (gaussian_curvature_type_ == "angle_defect") {
+  //   update_gaussian_curvature_angle_defect();
+  // } else if (gaussian_curvature_type_ == "laplacian") {
+  //   update_gaussian_curvature_laplacian();
+  // } else {
+  //   throw std::runtime_error("Invalid gaussian_curvature_type_");
+  // }
+  switch (gaussian_curvature_type_) {
+  case GaussianCurvatureType::ANGLE_DEFECT:
     update_gaussian_curvature_angle_defect();
-  } else if (gaussian_curvature_type_ == "laplacian") {
+    return;
+  case GaussianCurvatureType::LAPLACIAN:
     update_gaussian_curvature_laplacian();
-  } else {
-    throw std::runtime_error("Invalid gaussian_curvature_type_");
+    return;
   }
+  throw std::runtime_error(
+      "update_gaussian_curvature: Unknown gaussian curvature type");
 }
 
 //////////////////////
@@ -2341,24 +2341,44 @@ template Samples1d MatrixMesh::adaptive_guckenberger_laplacian(Samples1d &phi);
 template Samples3d MatrixMesh::adaptive_guckenberger_laplacian(Samples3d &phi);
 
 template <typename Samples> Samples MatrixMesh::heat_laplacian(Samples &phi) {
-  // printf("MatrixMesh::heat_laplacian\n");
+  printf("MatrixMesh::heat_laplacian\n");
   auto num_vertices = get_num_vertices();
-  auto num_quad = dimensionless_quad_weight_Q_.size();
   Eigen::MatrixXd lap_phi(phi);
   lap_phi.setZero();
   for (int ix{0}; ix < num_vertices; ix++) {
     Vec3d x = xyz_coord_V_.row(ix);
     heat_dt_ = heat_dt_multiple_ * area_V_[ix];
+    check_he_matrices();
+    printf("MatrixMesh::heat_laplacian reset_integration_patch\n");
     reset_integration_patch();
+    check_he_matrices();
+    printf("MatrixMesh::heat_laplacian 0\n");
+    ////////////////////////////////////////////////
+    MatrixMesh *base = static_cast<MatrixMesh *>(this);
+
+    std::cout << "before add_vertex\n";
+    std::cout << "  MatrixMesh*        = " << base << '\n';
+    std::cout << "  &h_out_V_          = " << &base->h_out_V_ << '\n';
+    std::cout << "  h_out_V_.data()    = " << base->h_out_V_.data() << '\n';
+    std::cout << "  h_out_V_ rows/cols = " << base->h_out_V_.rows() << " "
+              << base->h_out_V_.cols() << '\n';
+    std::cout << "  h_out_V_(0,0)      = " << base->h_out_V_(0, 0) << '\n';
+
+    /////////////////////////////////////////////////
     integration_patch_.add_vertex(ix);
+    printf("MatrixMesh::heat_laplacian 1\n");
     double delta = std::numeric_limits<double>::infinity();
     double mag = 0;
+    printf("MatrixMesh::heat_laplacian 2\n");
     while (delta >= belkin_atol_ + belkin_rtol_ * mag) {
       Eigen::RowVectorXd lap_phi0 = lap_phi.row(ix);
+      printf("MatrixMesh::heat_laplacian 3\n");
       integration_patch_.expand_by_one_ring();
+      printf("MatrixMesh::heat_laplacian 4\n");
       for (int iy : integration_patch_.newV_) {
         Vec3d y = xyz_coord_v(iy);
         double A = area_V_[iy];
+        printf("MatrixMesh::heat_laplacian 5\n");
         lap_phi.row(ix) += (A / heat_dt_) * heat_parametrix2d(x, y, heat_dt_) *
                            (phi.row(iy) - phi.row(ix));
       }
@@ -2447,80 +2467,118 @@ Samples1d MatrixMesh::laplacian(Samples1d &Q) {
   if (construct_laplacian_matrix_) {
     return apply_laplacian_matrix(Q);
   }
-  if (laplacian_type_ == "cotan") {
+  // if (laplacian_type_ == "cotan") {
+  //   return cotan_laplacian(Q);
+  // }
+  // if (laplacian_type_ == "guckenberger") {
+  //   return guckenberger_laplacian(Q);
+  // }
+  // if (laplacian_type_ == "adaptive_guckenberger") {
+  //   return adaptive_guckenberger_laplacian(Q);
+  // }
+  // if (laplacian_type_ == "belkin") {
+  //   return belkin_laplacian(Q);
+  // }
+  // if (laplacian_type_ == "adaptive_belkin") {
+  //   return adaptive_belkin_laplacian(Q);
+  // }
+  // if (laplacian_type_ == "higher_order_quad_heat") {
+  //   return higher_order_quad_heat_laplacian(Q);
+  // }
+  // if (laplacian_type_ == "heat") {
+  //   return heat_laplacian(Q);
+  // } else {
+  //   throw std::runtime_error("Unknown laplacian type");
+  // }
+  switch (laplacian_type_) {
+  case LaplacianType::COTAN:
     return cotan_laplacian(Q);
-  }
-  if (laplacian_type_ == "guckenberger") {
+  case LaplacianType::GUCKENBERGER:
     return guckenberger_laplacian(Q);
-  }
-  if (laplacian_type_ == "adaptive_guckenberger") {
-    return adaptive_guckenberger_laplacian(Q);
-  }
-  if (laplacian_type_ == "belkin") {
+  case LaplacianType::BELKIN:
     return belkin_laplacian(Q);
-  }
-  if (laplacian_type_ == "adaptive_belkin") {
-    return adaptive_belkin_laplacian(Q);
-  }
-  if (laplacian_type_ == "higher_order_quad_heat") {
-    return higher_order_quad_heat_laplacian(Q);
-  }
-  if (laplacian_type_ == "heat") {
+  case LaplacianType::HEAT:
     return heat_laplacian(Q);
-  } else {
-    throw std::runtime_error("Unknown laplacian type");
   }
+  throw std::runtime_error("Unknown laplacian type");
 }
 
 Samples3d MatrixMesh::laplacian(Samples3d &Q) {
   if (construct_laplacian_matrix_) {
     return apply_laplacian_matrix(Q);
   }
-  if (laplacian_type_ == "cotan") {
+  // if (laplacian_type_ == "cotan") {
+  //   return cotan_laplacian(Q);
+  // }
+  // if (laplacian_type_ == "guckenberger") {
+  //   return guckenberger_laplacian(Q);
+  // }
+  // if (laplacian_type_ == "adaptive_guckenberger") {
+  //   return adaptive_guckenberger_laplacian(Q);
+  // }
+  // if (laplacian_type_ == "belkin") {
+  //   return belkin_laplacian(Q);
+  // }
+  // if (laplacian_type_ == "adaptive_belkin") {
+  //   return adaptive_belkin_laplacian(Q);
+  // }
+  // if (laplacian_type_ == "higher_order_quad_heat") {
+  //   return higher_order_quad_heat_laplacian(Q);
+  // }
+  // if (laplacian_type_ == "heat") {
+  //   return heat_laplacian(Q);
+  // } else {
+  //   throw std::runtime_error("Unknown laplacian type");
+  // }
+  switch (laplacian_type_) {
+  case LaplacianType::COTAN:
     return cotan_laplacian(Q);
-  }
-  if (laplacian_type_ == "guckenberger") {
+  case LaplacianType::GUCKENBERGER:
     return guckenberger_laplacian(Q);
-  }
-  if (laplacian_type_ == "adaptive_guckenberger") {
-    return adaptive_guckenberger_laplacian(Q);
-  }
-  if (laplacian_type_ == "belkin") {
+  case LaplacianType::BELKIN:
     return belkin_laplacian(Q);
-  }
-  if (laplacian_type_ == "adaptive_belkin") {
-    return adaptive_belkin_laplacian(Q);
-  }
-  if (laplacian_type_ == "higher_order_quad_heat") {
-    return higher_order_quad_heat_laplacian(Q);
-  }
-  if (laplacian_type_ == "heat") {
+  case LaplacianType::HEAT:
     return heat_laplacian(Q);
-  } else {
-    throw std::runtime_error("Unknown laplacian type");
   }
+  throw std::runtime_error("Unknown laplacian type");
 }
 
 void MatrixMesh::update_laplacian_matrix() {
   if (!construct_laplacian_matrix_) {
     return;
   }
-  if (laplacian_type_ == "cotan") {
+  // if (laplacian_type_ == "cotan") {
+  //   update_laplacian_matrix_cotan();
+  //   return;
+  // }
+  // if (laplacian_type_ == "belkin") {
+  //   update_laplacian_matrix_belkin();
+  //   return;
+  // }
+  // if (laplacian_type_ == "adaptive_belkin") {
+  //   update_laplacian_matrix_adaptive_belkin();
+  //   return;
+  // }
+  // if (laplacian_type_ == "heat") {
+  //   update_laplacian_matrix_heat();
+  //   return;
+  // }
+
+  switch (laplacian_type_) {
+  case LaplacianType::COTAN:
     update_laplacian_matrix_cotan();
     return;
-  }
-  if (laplacian_type_ == "belkin") {
+  case LaplacianType::BELKIN:
     update_laplacian_matrix_belkin();
     return;
-  }
-  if (laplacian_type_ == "adaptive_belkin") {
-    update_laplacian_matrix_adaptive_belkin();
-    return;
-  }
-  if (laplacian_type_ == "heat") {
+  case LaplacianType::GUCKENBERGER:
+    std::runtime_error(
+        "update_laplacian_matrix: Laplacian type GUCKENBERGER not implemented");
+  case LaplacianType::HEAT:
     update_laplacian_matrix_heat();
     return;
   }
+  throw std::runtime_error("update_laplacian_matrix: Unknown laplacian type");
 }
 
 void MatrixMesh::update_laplacian_matrix_heat() {
@@ -2670,7 +2728,7 @@ void MatrixMesh::update_laplacian_matrix_belkin() {
         double wij = Ay * heat_parametrix2d(x, y, belkin_dt_) / belkin_dt_;
         // laplacian_matrix_V_.insert(ix, iy) = wij;
         wii -= wij;
-        laplacian_matrix_V(ix, iy) = wij;
+        laplacian_matrix_V(ix, iy) += wij;
       }
     }
     // laplacian_matrix_V_.insert(ix, ix) = wii;

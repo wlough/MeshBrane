@@ -34,10 +34,6 @@ public:
   // void init_sphere(Vec3d &xyz, double radius, int num_refinements = 0);
   void update_coords_from_frame();
   void sum_force_V();
-  void set_parameters() {
-    // printf("RigidMesh::set_parameters\n");
-    MatrixMesh::set_parameters();
-  }
   void set_attributes_from_parameters() {
     printf("RigidMesh::set_attributes_from_parameters\n");
     MatrixMesh::set_attributes_from_parameters();
@@ -105,16 +101,6 @@ public:
   void update_state_variables(double dt);
   Vec3d get_linear_fluctuations(double dt);
   Vec3d get_rotational_fluctuations(double dt);
-  /////////////////////////////////////////////
-  // void init_sphere(Vec3d &xyz, double radius, int num_refinements = 0);
-  // void init_spb(Vec3d &center);
-  // SphericalSPB(const YAML::Node &parameters) : parameters_(parameters) {
-  //   set_parameters();
-  // }
-
-  // void set_parameters();
-  // void set_global_sim_parameters();
-  // void time_step(double dt);
 };
 
 class RigidMTBundle : public MatrixMesh {
@@ -283,7 +269,6 @@ public:
   // void apply_forces_to_spbs();
   // void init_spherical_spbs();
 
-  // void set_parameters();
   // void set_global_sim_parameters();
   // void time_step(double dt);
 

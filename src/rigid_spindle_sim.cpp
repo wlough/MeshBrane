@@ -64,8 +64,42 @@ RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
   printf("Zeroed envelope forces\n");
   apply_interaction_forces();
   printf("Applied interaction forces\n");
+  ////////////////////////////////////
+  // size_t Nh = envelope_.get_num_half_edges();
+  // std::cout << "Nh=" << Nh << '\n';
+  // for (size_t h = 0; h < Nh; h++) {
+  //   int ht = envelope_.h_twin_h(h);
+  //   int hn = envelope_.h_next_h(h);
+
+  //   if (ht < 0 || ht >= Nh) {
+  //     std::cout << "h=" << h << '\n';
+  //     std::cout << "ht=" << ht << '\n';
+  //     throw std::out_of_range("twin index out of range");
+  //   }
+  //   if (hn < 0 || hn >= Nh) {
+  //     std::cout << "h=" << h << '\n';
+  //     std::cout << "hn=" << hn << '\n';
+  //     throw std::out_of_range("next index out of range");
+  //   }
+  // }
+
+  // size_t Nv = envelope_.get_num_vertices();
+  // std::cout << "Nv=" << Nv << '\n';
+  // for (size_t v = 0; v < Nv; v++) {
+  //   int h_out = envelope_.h_out_v(v);
+  //   if (h_out < 0 || h_out >= Nh) {
+  //     std::cout << "v=" << v << '\n';
+  //     std::cout << "h_out=" << h_out << '\n';
+  //     throw std::out_of_range("h_out index out of range");
+  //   }
+  // }
+  envelope_.check_he_matrices();
+
+  ////////////////////////////////////
   envelope_.update_cached_data();
+  printf("Updated envelope cached data\n");
   envelope_.apply_internal_forces();
+  printf("Applied envelope internal forces\n");
   spindle_.apply_internal_forces();
   printf("Applied internal spindle forces\n");
   spindle_.compute_velocities();

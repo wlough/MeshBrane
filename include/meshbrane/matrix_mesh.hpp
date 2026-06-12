@@ -11,6 +11,7 @@
 #include "meshbrane/simple_vector_field.hpp"
 #include <Eigen/Sparse>
 #include <filesystem>
+#include <iostream>
 #include <optional> // std::optional
 #include <string>   // std::string
 #include <tuple>    // std::tuple
@@ -204,6 +205,118 @@ public:
   Samplesi h_twin_H_;       //
   ////////////////////////////
 
+  void check_he_matrices() const {
+    printf("MatrixMesh::check_he_matrices\n");
+    int Nv = get_num_vertices();
+    int Ne = get_num_edges();
+    int Nf = get_num_faces();
+    int Nh = get_num_half_edges();
+    int Nb = get_num_boundaries();
+
+    for (int v = 0; v < Nv; v++) {
+      int h_out = h_out_V_(v);
+      if (h_out < 0 || h_out >= Nh) {
+        std::cout << "v=" << v << '\n';
+        std::cout << "h_out=" << h_out << '\n';
+        throw std::out_of_range("h_out_V_[v]: Half-edge index out of range");
+      }
+    }
+    for (int e = 0; e < Ne; e++) {
+      int h_directed = h_directed_E_[e];
+      if (h_directed < 0 || h_directed >= Nh) {
+        std::cout << "e=" << e << '\n';
+        std::cout << "h_directed=" << h_directed << '\n';
+        throw std::out_of_range(
+            "h_directed_E_[e]: Half-edge index out of range");
+      }
+    }
+    for (int f = 0; f < Nf; f++) {
+      int h_right = h_right_F_[f];
+      if (h_right < 0 || h_right >= Nh) {
+        std::cout << "f=" << f << '\n';
+        std::cout << "h_right=" << h_right << '\n';
+        throw std::out_of_range("h_right_F_[f]: Half-edge index out of range");
+      }
+    }
+    for (int b = 0; b < Nb; b++) {
+      int h_negative = h_negative_B_[b];
+      if (h_negative < 0 || h_negative >= Nh) {
+        std::cout << "b=" << b << '\n';
+        std::cout << "h_negative=" << h_negative << '\n';
+        throw std::out_of_range(
+            "h_negative_B_[b]: Half-edge index out of range");
+      }
+    }
+    for (int h = 0; h < Nh; h++) {
+      int v_origin = v_origin_H_[h];
+      if (v_origin < 0 || v_origin >= Nv) {
+        std::cout << "h=" << h << '\n';
+        std::cout << "v_origin=" << v_origin << '\n';
+        throw std::out_of_range("v_origin_H_[h]: Vertex index out of range");
+      }
+      int e_undirected = e_undirected_H_[h];
+      if (e_undirected < 0 || e_undirected >= Ne) {
+        std::cout << "h=" << h << '\n';
+        std::cout << "e_undirected=" << e_undirected << '\n';
+        throw std::out_of_range("e_undirected_H_[h]: Edge index out of range");
+      }
+      int f_left = f_left_H_[h];
+      if (f_left < -Nb || f_left >= Nf) {
+        std::cout << "h=" << h << '\n';
+        std::cout << "f_left=" << f_left << '\n';
+        throw std::out_of_range("f_left_H_[h]: Face index out of range");
+      }
+      int h_next = h_next_H_[h];
+      if (h_next < 0 || h_next >= Nh) {
+        std::cout << "h=" << h << '\n';
+        std::cout << "h_next=" << h_next << '\n';
+        throw std::out_of_range("h_next_H_[h]: Half-edge index out of range");
+      }
+      int h_twin = h_twin_H_[h];
+      if (h_twin < 0 || h_twin >= Nh) {
+        std::cout << "h=" << h << '\n';
+        std::cout << "h_twin=" << h_twin << '\n';
+        throw std::out_of_range("h_twin_H_[h]: Half-edge index out of range");
+      }
+    }
+  }
+
+  enum class LaplacianType { COTAN, BELKIN, GUCKENBERGER, HEAT };
+  enum class GaussianCurvatureType { ANGLE_DEFECT, LAPLACIAN };
+
+  LaplacianType
+  laplacian_type_from_string(const std::string &laplacian_type) const {
+    if (laplacian_type == "cotan") {
+      return LaplacianType::COTAN;
+    } else if (laplacian_type == "belkin") {
+      return LaplacianType::BELKIN;
+    } else if (laplacian_type == "guckenberger") {
+      return LaplacianType::GUCKENBERGER;
+    } else if (laplacian_type == "heat") {
+      return LaplacianType::HEAT;
+    } else {
+      throw std::runtime_error(
+          "laplacian_type_from_string: Unknown laplacian type");
+    }
+  }
+
+  GaussianCurvatureType gaussian_curvature_type_from_string(
+      const std::string &gaussian_curvature_type) const {
+    if (gaussian_curvature_type == "angle_defect") {
+      return GaussianCurvatureType::ANGLE_DEFECT;
+    } else if (gaussian_curvature_type == "laplacian") {
+      return GaussianCurvatureType::LAPLACIAN;
+    } else {
+      throw std::runtime_error("gaussian_curvature_type_from_string: Unknown "
+                               "gaussian curvature type");
+    }
+  }
+
+  LaplacianType laplacian_type_{LaplacianType::COTAN};
+
+  GaussianCurvatureType gaussian_curvature_type_{
+      GaussianCurvatureType::ANGLE_DEFECT};
+
   ////////////////////////////////
   // Stuff from parameters file //
   ////////////////////////////////
@@ -220,9 +333,6 @@ public:
   RGBA rgba_face_ = RGBA_DICT.at("yellow");
   RGBA rgba_edge_ = RGBA_DICT.at("blue");
   double radius_vertex_{5};
-
-  std::string gaussian_curvature_type_{"angle_defect"}; // laplacian
-  std::string laplacian_type_{"cotan"};                 //"belkin"
 
   double belkin_dt_{0.001};
   double heat_dt_multiple_{10.0};
@@ -285,12 +395,6 @@ public:
   ////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////
 
-  /**
-   * @brief Set data members from parameters
-   *
-   */
-  virtual void set_parameters();
-
   void set_attributes_from_parameters() {
     printf("MatrixMesh::set_attributes_from_parameters\n");
     if (parameters_["ply_path"]) {
@@ -329,7 +433,8 @@ public:
       radius_vertex_ = parameters_["radius_vertex"].as<double>();
     }
     if (parameters_["laplacian_type"]) {
-      laplacian_type_ = parameters_["laplacian_type"].as<std::string>();
+      laplacian_type_ = laplacian_type_from_string(
+          parameters_["laplacian_type"].as<std::string>());
     }
     if (parameters_["atol"]) {
       belkin_atol_ = parameters_["atol"].as<double>();
@@ -351,8 +456,8 @@ public:
           parameters_["construct_laplacian_matrix"].as<bool>();
     }
     if (parameters_["gaussian_curvature_type"]) {
-      gaussian_curvature_type_ =
-          parameters_["gaussian_curvature_type"].as<std::string>();
+      gaussian_curvature_type_ = gaussian_curvature_type_from_string(
+          parameters_["gaussian_curvature_type"].as<std::string>());
     }
   }
 
@@ -444,7 +549,7 @@ public:
   void update_mesh_volume();
   void update_mesh_geometric_data();
 
-  void update_mesh();
+  // void update_mesh();
   /**
    * @brief Initialize mesh data from half-edge matrices, set visual defaults,
    *
@@ -630,6 +735,7 @@ public:
   ///////////////////////////////////////////////////////
   // Combinatorial maps /////////////////////////////////
   ///////////////////////////////////////////////////////
+
   Vec3d xyz_coord_v(int v) const;
   Samples3d xyz_coord_v(const Samplesi &indices) const;
   int h_out_v(int v) const;
@@ -646,9 +752,9 @@ public:
   Samplesi h_right_f(const Samplesi &indices) const;
   int h_negative_b(int b) const;
   Samplesi h_negative_b(const Samplesi &indices) const;
-  int h_directed_e(int e) const { return h_directed_E_(e); }
+  int h_directed_e(int e) const;
   Samplesi h_directed_e(const Samplesi &indices) const;
-  int e_undirected_h(int h) const { return e_undirected_H_(h); }
+  int e_undirected_h(int h) const;
   Samplesi e_undirected_h(const Samplesi &indices) const;
   // Derived combinatorial maps
   int h_in_v(int v) const;

@@ -14,159 +14,6 @@ namespace meshbrane {
 ///////////////////////////////////////////////////////
 // initialization /////////////////////////////////////
 ///////////////////////////////////////////////////////
-// void Membrane::set_parameters() {
-//   printf("Membrane::set_parameters\n");
-//   MatrixMesh::set_parameters();
-//   ///////////////////////////////////////////////////////
-//   ///////////////////////////////////////////////////////
-//   ///////////////////////////////////////////////////////
-//   if (parameters_["timestep_type"]) {
-//     timestep_type_ = parameters_["timestep_type"].as<std::string>();
-//   }
-//   // Bending force
-//   if (parameters_["bending_modulus"]) {
-//     bending_modulus_ = parameters_["bending_modulus"].as<double>();
-//   }
-//   if (parameters_["spontaneous_curvature"]) {
-//     spontaneous_curvature_ =
-//     parameters_["spontaneous_curvature"].as<double>();
-//   }
-//   if (parameters_["splay_modulus"]) {
-//     splay_modulus_ = parameters_["splay_modulus"].as<double>();
-//   }
-//   ///////////////////////////////////////////////////////
-//   // Tether force
-//   if (parameters_["dimensionless_tether_repulsive_singularity"]) {
-//     dimensionless_tether_repulsive_singularity_ =
-//         parameters_["dimensionless_tether_repulsive_singularity"].as<double>();
-//   }
-//   if (parameters_["dimensionless_tether_repulsive_onset"]) {
-//     dimensionless_tether_repulsive_onset_ =
-//         parameters_["dimensionless_tether_repulsive_onset"].as<double>();
-//   }
-//   if (parameters_["dimensionless_tether_attractive_onset"]) {
-//     dimensionless_tether_attractive_onset_ =
-//         parameters_["dimensionless_tether_attractive_onset"].as<double>();
-//   }
-//   if (parameters_["dimensionless_tether_attractive_singularity"]) {
-//     dimensionless_tether_attractive_singularity_ =
-//         parameters_["dimensionless_tether_attractive_singularity"].as<double>();
-//   }
-//   if (parameters_["tether_stiffness"]) {
-//     tether_stiffness_ = parameters_["tether_stiffness"].as<double>();
-//   }
-//   // Area conservation force
-//   if (parameters_["area_stiffness"]) {
-//     area_stiffness_ = parameters_["area_stiffness"].as<double>();
-//   }
-//   if (parameters_["fix_target_face_area"]) {
-//     fix_target_face_area_ = parameters_["fix_target_face_area"].as<bool>();
-//   }
-//   // Volume conservation force
-//   if (parameters_["fix_target_volume"]) {
-//     fix_target_volume_ = parameters_["fix_target_volume"].as<bool>();
-//   }
-//   if (parameters_["volume_stiffness"]) {
-//     volume_stiffness_ = parameters_["volume_stiffness"].as<double>();
-//   }
-//   if (parameters_["node_drag_coefficient"]) {
-//     node_drag_coefficient_ =
-//     parameters_["node_drag_coefficient"].as<double>();
-//   }
-//   ///////////////////////////////////////////////////////
-//   if (parameters_["vector_field_scale"]) {
-//     vector_field_scale_ = parameters_["vector_field_scale"].as<double>();
-//   }
-//   if (parameters_["show_force_field"]) {
-//     show_force_field_ = parameters_["show_force_field"].as<bool>();
-//   }
-//   if (parameters_["show_mcvec_field"]) {
-//     show_mcvec_field_ = parameters_["show_mcvec_field"].as<bool>();
-//   }
-//   if (parameters_["enable_flipping"]) {
-//     enable_flipping_ = parameters_["enable_flipping"].as<bool>();
-//   }
-//   if (parameters_["enable_fluctuations"]) {
-//     enable_fluctuations_ = parameters_["enable_fluctuations"].as<bool>();
-//   }
-//   if (parameters_["dt_flip"]) {
-//     dt_flip_ = parameters_["dt_flip"].as<double>();
-//   }
-//   if (parameters_["flipping_probability"]) {
-//     flipping_probability_ = parameters_["flipping_probability"].as<double>();
-//   }
-//   ///////////////////////////////////////////////////////
-//   if (parameters_["show_contact_patches"]) {
-//     show_contact_patches_ = parameters_["show_contact_patches"].as<bool>();
-//   }
-//   if (parameters_["pressure_type"]) {
-//     pressure_type_ = parameters_["pressure_type"].as<std::string>();
-//   }
-//   if (parameters_["use_surface_tension_constant"]) {
-//     use_surface_tension_constant_ =
-//         parameters_["use_surface_tension_constant"].as<bool>();
-//   }
-//   if (parameters_["use_surface_tension_penalty_local"]) {
-//     use_surface_tension_penalty_local_ =
-//         parameters_["use_surface_tension_penalty_local"].as<bool>();
-//   }
-//   if (parameters_["surface_tension_constant"]) {
-//     surface_tension_constant_ =
-//         parameters_["surface_tension_constant"].as<double>();
-//   } else if (use_surface_tension_constant_) {
-//     printf(
-//         "Warning: use_surface_tension_constant_ = true but no constant value
-//         " "found\n");
-//   }
-//   if (parameters_["wca_sigma"]) {
-//     wca_sigma_ = parameters_["wca_sigma"].as<double>();
-//     // 0.1*r_cutoff=0.1*2^(1/6)*sigma
-//     dx_max_ = 0.1122462048309373 * wca_sigma_;
-//   }
-//   if (parameters_["use_local_drag_coefficient"]) {
-//     use_local_drag_coefficient_ =
-//         parameters_["use_local_drag_coefficient"].as<bool>();
-//   }
-//   throw std::runtime_error("called Membrane::set_parameters");
-// }
-
-// void Membrane::set_global_sim_parameters() {
-//   if ((*sim_parameters_)["kBT"]) {
-//     kBT_ = (*sim_parameters_)["kBT"].as<double>();
-//   }
-//   if ((*sim_parameters_)["dt"]) {
-//     dt0_ = (*sim_parameters_)["dt"].as<double>();
-//   }
-//   // if ((*sim_parameters_)["bulk_viscosity"]) {
-//   //   double mu = (*sim_parameters_)["bulk_viscosity"].as<double>();
-//   //   double A = initial_area_;
-//   //   int num_vertices = get_num_vertices();
-//   //   double Av = A / num_vertices;
-//   //   double Rv = std::sqrt(Av / M_PI);
-//   //   node_drag_coefficient_ = 6.0 * M_PI * mu * Rv;
-//   // }
-// }
-
-void Membrane::sync_with_sim_parameters() {
-  printf("Membrane::sync_with_sim_parameters\n");
-  if ((*sim_parameters_)[name_]) {
-    parameters_ = (*sim_parameters_)[name_];
-  } else {
-    // throw runtime error
-    throw std::runtime_error("Fatal error: no parameters found for Membrane");
-  }
-  // else if ((*sim_parameters_)["envelope"]) {
-  //   parameters_ = (*sim_parameters_)["envelope"];
-  // }
-
-  if ((*sim_parameters_)["kBT"]) {
-    kBT_ = (*sim_parameters_)["kBT"].as<double>();
-  }
-  if ((*sim_parameters_)["dt"]) {
-    dt0_ = (*sim_parameters_)["dt"].as<double>();
-  }
-  set_parameters();
-}
 
 void Membrane::update_geotargets() {
   // printf("*********************Setting target_edge_length_ = %.10f\n",
@@ -305,13 +152,27 @@ void Membrane::update_internal_forces() {
 }
 
 void Membrane::update_cached_data() {
+  check_he_matrices();
+  printf("Membrane::update_cached_data\n");
   update_mesh_geometric_data();
+  check_he_matrices();
+  printf("Membrane::update_cached_data - update_mesh_geometric_data\n");
   update_geotargets();
+  check_he_matrices();
+  printf("Membrane::update_cached_data - update_geotargets\n");
 
   update_laplacian_matrix();
-  update_mean_curvature();
+  check_he_matrices(); // this is fine up to here
+  printf("Membrane::update_cached_data - update_laplacian_matrix\n");
+  update_mean_curvature(); // add_vertex in patch.cpp causes a problem here
+  check_he_matrices();
+  printf("Membrane::update_cached_data - update_mean_curvature\n");
   update_gaussian_curvature();
+  check_he_matrices();
+  printf("Membrane::update_cached_data - update_gaussian_curvature\n");
   update_surface_tension_and_pressure();
+  printf(
+      "Membrane::update_cached_data - update_surface_tension_and_pressure\n");
   // update_internal_forces();
 }
 

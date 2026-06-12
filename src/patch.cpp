@@ -5,6 +5,7 @@
 #include "meshbrane/patch.hpp"
 #include "meshbrane/geometric_predicates.hpp"
 #include "meshbrane/matrix_mesh.hpp"
+#include <iostream>
 
 namespace meshbrane {
 
@@ -254,15 +255,35 @@ void Patch::uncolor_faces() {
 //////////////////////////////////////////
 
 void Patch::add_vertex(int v0) {
-  // printf("Patch::add_vertex\n");
+  printf("Patch::add_vertex\n");
+  std::cout << "supermesh_.name_=" << supermesh_->name_ << '\n';
+  std::cout << "inside Patch::add_vertex\n";
+  std::cout << "  supermesh_         = " << supermesh_ << '\n';
+  std::cout << "  &h_out_V_          = " << &supermesh_->h_out_V_ << '\n';
+  std::cout << "  h_out_V_.data()    = " << supermesh_->h_out_V_.data() << '\n';
+  std::cout << "  h_out_V_ rows/cols = " << supermesh_->h_out_V_.rows() << " "
+            << supermesh_->h_out_V_.cols() << '\n';
+  std::cout << "  h_out_V_(0,0)      = " << supermesh_->h_out_V_(0, 0) << '\n';
+  supermesh_->check_he_matrices(); // fails here... but is fine when called just
+                                   // outside this function
   V_.insert(v0);
+  printf("Patch::add_vertex 0\n");
   bdryV_.insert(v0);
+  printf("Patch::add_vertex 1\n");
+  supermesh_->check_he_matrices();
   for (int h : supermesh_->generate_H_out_v_clockwise(v0)) {
+    // printf("Patch::add_vertex 2 --- h=%d\n", h);
+    std::cout << "Patch::add_vertex 2 h=" << h << '\n';
+    printf("Patch::add_vertex 2 --- h_max=%zu\n",
+           supermesh_->get_num_half_edges());
     if (supermesh_->some_negative_boundary_contains_h(h)) {
       continue;
     }
+    printf("Patch::add_vertex 3\n");
     int f = supermesh_->f_left_h(h);
+    printf("Patch::add_vertex 4\n");
     frontierF_.insert(f);
+    printf("Patch::add_vertex 5\n");
   }
 }
 
