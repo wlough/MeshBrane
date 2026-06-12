@@ -111,26 +111,42 @@ public:
 
   Membrane() = default;
   ~Membrane() = default;
-  Membrane(const YAML::Node &parameters) {
-    parameters_ = parameters;
-    set_attributes_from_parameters();
-    init();
-  }
+  // Membrane(const YAML::Node &parameters) {
+  //   throw std::runtime_error("Membrane(const YAML::Node &parameters)");
+  //   parameters_ = parameters;
+  //   set_attributes_from_parameters();
+  //   // init();
+  // }
   Membrane(YAML::Node *sim_parameters, std::string name) {
     sim_parameters_ = sim_parameters;
     parameters_ = (*sim_parameters_)[name];
     set_attributes_from_parameters();
     init_from_ply();
     name_ = name;
+    integration_patch_ = Patch(this);
+    spb_patch_plus_ = Patch(this);
+    spb_patch_minus_ = Patch(this);
   }
-  Membrane(MatrixMesh &mesh) : MatrixMesh(mesh) {}
-  Membrane(const std::filesystem::path &ply_path) : MatrixMesh(ply_path) {}
+
+  Membrane(MatrixMesh &mesh) : MatrixMesh(mesh) {
+    throw std::runtime_error("Membrane(MatrixMesh &mesh)");
+  }
+  Membrane(const std::filesystem::path &ply_path) : MatrixMesh(ply_path) {
+    throw std::runtime_error("Membrane(const std::filesystem::path &ply_path)");
+  }
   Membrane(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
            const Samplesi &v_origin_H, const Samplesi &h_next_H,
            const Samplesi &h_twin_H, const Samplesi &f_left_H,
            const Samplesi &h_right_F, const Samplesi &h_negative_B)
       : MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
-                   f_left_H, h_right_F, h_negative_B) {}
+                   f_left_H, h_right_F, h_negative_B) {
+
+    throw std::runtime_error(
+        "Membrane(const Samples3d &xyz_coord_V, const Samplesi &h_out_V, const "
+        "Samplesi &v_origin_H, const Samplesi &h_next_H, const Samplesi "
+        "&h_twin_H, const Samplesi &f_left_H, const Samplesi &h_right_F, const "
+        "Samplesi &h_negative_B)");
+  }
 
   ///////////////////////////////////////////////////////
   // Prototyping ////////////////////////////////////////
@@ -293,7 +309,6 @@ public:
     }
   }
 
-  void init();
   /**
    * @brief Update target edge length, area, and volume for constraint forces.
    *

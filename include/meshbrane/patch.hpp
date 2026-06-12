@@ -12,6 +12,17 @@
 
 namespace meshbrane {
 class MatrixMesh; // forward declaration
+
+class SubComplex : public MeshBraneObject {
+public:
+  MatrixMesh *supermesh_{nullptr};
+  SimplicialSet F_;
+  SubComplex() = default;
+  ~SubComplex() = default;
+  SubComplex(MatrixMesh *supermesh, SimplicialSet F)
+      : supermesh_(supermesh), F_(F) {};
+};
+
 /**
  * @brief  A submanifold of a HalfEdgeMesh.
  *
@@ -49,6 +60,7 @@ public:
   //////////////////////////////////////////
   Patch() = default;
   ~Patch() = default;
+  Patch(MatrixMesh *supermesh) : supermesh_(supermesh) {};
   Patch(MatrixMesh *supermesh, SimplicialSet V, SimplicialSet E,
         SimplicialSet F, SimplicialSet H)
       : supermesh_(supermesh), V_(V), E_(E), F_(F), H_(H) {};

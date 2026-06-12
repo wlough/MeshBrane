@@ -29,6 +29,25 @@ namespace mesh_io {
 /** @addtogroup utils
  *  @{
  */
+
+// inline std::vector<uint8_t> read_file_binary(const std::string &pathToFile) {
+//   std::ifstream file(pathToFile, std::ios::binary);
+
+//   std::vector<uint8_t> fileBufferBytes;
+
+//   if (file.is_open()) {
+//     file.seekg(0, std::ios::end);
+//     size_t sizeBytes = file.tellg();
+//     file.seekg(0, std::ios::beg);
+//     fileBufferBytes.resize(sizeBytes);
+//     if (file.read((char *)fileBufferBytes.data(), sizeBytes))
+//       return fileBufferBytes;
+//   } else
+//     throw std::runtime_error("could not open binary ifstream to path " +
+//                              pathToFile);
+//   return fileBufferBytes;
+// }
+
 /**
  * @brief Read a binary file into a vector of bytes.
  *
@@ -59,24 +78,6 @@ read_file_binary(const std::filesystem::path &path_to_file) {
   }
   return buffer;
 }
-
-// inline std::vector<uint8_t> read_file_binary(const std::string &pathToFile) {
-//   std::ifstream file(pathToFile, std::ios::binary);
-
-//   std::vector<uint8_t> fileBufferBytes;
-
-//   if (file.is_open()) {
-//     file.seekg(0, std::ios::end);
-//     size_t sizeBytes = file.tellg();
-//     file.seekg(0, std::ios::beg);
-//     fileBufferBytes.resize(sizeBytes);
-//     if (file.read((char *)fileBufferBytes.data(), sizeBytes))
-//       return fileBufferBytes;
-//   } else
-//     throw std::runtime_error("could not open binary ifstream to path " +
-//                              pathToFile);
-//   return fileBufferBytes;
-// }
 
 /**
  * @brief A streambuf that reads from a memory buffer.

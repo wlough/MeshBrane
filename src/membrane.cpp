@@ -28,57 +28,12 @@ void Membrane::update_geotargets() {
   }
 }
 
-void Membrane::init() {
-  // if (sim_parameters_ == nullptr) {
-  //   printf("No parameters found for Membrane\n");
-  // } else {
-  //   printf("Initializing Membrane with parameters:\n");
-  //   // std::cout << (*sim_parameters_)[name_] << std::endl;
-  //   std::cout << parameters_ << std::endl;
-  // }
+// void Membrane::init() {
 
-  init_mesh();
-  initial_area_ = average_face_area_ * get_num_faces();
-  initial_volume_ = total_volume_;
-  target_face_area_ = average_face_area_;
-  target_volume_ = total_volume_;
-  update_geotargets();
-
-  mcvec_V_.resize(get_num_vertices(), 3);
-  mcvec_V_.setZero();
-
-  force_V_.resize(get_num_vertices(), 3);
-  force_V_.setZero();
-
-  contact_force_V_.resize(get_num_vertices(), 3);
-  contact_force_V_.setZero();
-
-  external_force_V_.resize(get_num_vertices(), 3);
-  external_force_V_.setZero();
-
-  internal_force_V_.resize(get_num_vertices(), 3);
-  internal_force_V_.setZero();
-
-  // update_pressure_soft_penalty();
-  // update_surface_tension_soft_penalty();
-  update_surface_tension_and_pressure();
-
-  // // randng_
-  // force_V_.resize(get_num_vertices(), 3);
-  // force_V_.setZero();
-  if (enable_flipping_) {
-    t_flip_ = dt_flip_; // time to next flip
-  } else {
-    t_flip_ = std::numeric_limits<double>::infinity();
-  }
-
-  // integration patch initialization
-  integration_patch_.supermesh_ = this;
-  integration_patch_.rgba_face_ = RGBA_DICT.at("meshbrane_orange");
-
-  heat_dt_ = initial_area_ / get_num_vertices();
-  // belkin_dt_ = heat_dt_;
-}
+//   throw std::runtime_error(
+//       "Membrane::init() is not implemented yet. Use init_from_ply()
+//       instead.");
+// }
 
 void Membrane::init_from_ply() {
   // if (sim_parameters_ == nullptr) {
@@ -152,27 +107,13 @@ void Membrane::update_internal_forces() {
 }
 
 void Membrane::update_cached_data() {
-  check_he_matrices();
-  printf("Membrane::update_cached_data\n");
   update_mesh_geometric_data();
-  check_he_matrices();
-  printf("Membrane::update_cached_data - update_mesh_geometric_data\n");
   update_geotargets();
-  check_he_matrices();
-  printf("Membrane::update_cached_data - update_geotargets\n");
 
   update_laplacian_matrix();
-  check_he_matrices(); // this is fine up to here
-  printf("Membrane::update_cached_data - update_laplacian_matrix\n");
   update_mean_curvature(); // add_vertex in patch.cpp causes a problem here
-  check_he_matrices();
-  printf("Membrane::update_cached_data - update_mean_curvature\n");
   update_gaussian_curvature();
-  check_he_matrices();
-  printf("Membrane::update_cached_data - update_gaussian_curvature\n");
   update_surface_tension_and_pressure();
-  printf(
-      "Membrane::update_cached_data - update_surface_tension_and_pressure\n");
   // update_internal_forces();
 }
 

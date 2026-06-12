@@ -2341,44 +2341,36 @@ template Samples1d MatrixMesh::adaptive_guckenberger_laplacian(Samples1d &phi);
 template Samples3d MatrixMesh::adaptive_guckenberger_laplacian(Samples3d &phi);
 
 template <typename Samples> Samples MatrixMesh::heat_laplacian(Samples &phi) {
-  printf("MatrixMesh::heat_laplacian\n");
+  // printf("MatrixMesh::heat_laplacian\n");
   auto num_vertices = get_num_vertices();
   Eigen::MatrixXd lap_phi(phi);
   lap_phi.setZero();
   for (int ix{0}; ix < num_vertices; ix++) {
     Vec3d x = xyz_coord_V_.row(ix);
     heat_dt_ = heat_dt_multiple_ * area_V_[ix];
-    check_he_matrices();
-    printf("MatrixMesh::heat_laplacian reset_integration_patch\n");
+    integration_patch_ = Patch::from_seed_vertex(this, 0);
     reset_integration_patch();
-    check_he_matrices();
-    printf("MatrixMesh::heat_laplacian 0\n");
     ////////////////////////////////////////////////
-    MatrixMesh *base = static_cast<MatrixMesh *>(this);
+    // MatrixMesh *base = static_cast<MatrixMesh *>(this);
 
-    std::cout << "before add_vertex\n";
-    std::cout << "  MatrixMesh*        = " << base << '\n';
-    std::cout << "  &h_out_V_          = " << &base->h_out_V_ << '\n';
-    std::cout << "  h_out_V_.data()    = " << base->h_out_V_.data() << '\n';
-    std::cout << "  h_out_V_ rows/cols = " << base->h_out_V_.rows() << " "
-              << base->h_out_V_.cols() << '\n';
-    std::cout << "  h_out_V_(0,0)      = " << base->h_out_V_(0, 0) << '\n';
+    // std::cout << "before add_vertex\n";
+    // std::cout << "  MatrixMesh*        = " << base << '\n';
+    // std::cout << "  &h_out_V_          = " << &base->h_out_V_ << '\n';
+    // std::cout << "  h_out_V_.data()    = " << base->h_out_V_.data() << '\n';
+    // std::cout << "  h_out_V_ rows/cols = " << base->h_out_V_.rows() << " "
+    //           << base->h_out_V_.cols() << '\n';
+    // std::cout << "  h_out_V_(0,0)      = " << base->h_out_V_(0, 0) << '\n';
 
     /////////////////////////////////////////////////
     integration_patch_.add_vertex(ix);
-    printf("MatrixMesh::heat_laplacian 1\n");
     double delta = std::numeric_limits<double>::infinity();
     double mag = 0;
-    printf("MatrixMesh::heat_laplacian 2\n");
     while (delta >= belkin_atol_ + belkin_rtol_ * mag) {
       Eigen::RowVectorXd lap_phi0 = lap_phi.row(ix);
-      printf("MatrixMesh::heat_laplacian 3\n");
       integration_patch_.expand_by_one_ring();
-      printf("MatrixMesh::heat_laplacian 4\n");
       for (int iy : integration_patch_.newV_) {
         Vec3d y = xyz_coord_v(iy);
         double A = area_V_[iy];
-        printf("MatrixMesh::heat_laplacian 5\n");
         lap_phi.row(ix) += (A / heat_dt_) * heat_parametrix2d(x, y, heat_dt_) *
                            (phi.row(iy) - phi.row(ix));
       }

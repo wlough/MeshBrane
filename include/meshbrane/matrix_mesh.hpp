@@ -205,6 +205,9 @@ public:
   Samplesi h_twin_H_;       //
   ////////////////////////////
 
+  // void set_attributes_from_yaml_node(const YAML::Node &node) override;
+  // void init() override;
+
   void check_he_matrices() const {
     printf("MatrixMesh::check_he_matrices\n");
     int Nv = get_num_vertices();
@@ -482,6 +485,7 @@ public:
   void init_from_ply() {
     load_ply();
     init_from_he_mats();
+    integration_patch_ = Patch(this);
   }
 
   void update_vector_field_arrows(Samples3d X, Samples3d U);
@@ -549,31 +553,29 @@ public:
   void update_mesh_volume();
   void update_mesh_geometric_data();
 
-  // void update_mesh();
   /**
    * @brief Initialize mesh data from half-edge matrices, set visual defaults,
    *
    */
   void init_mesh();
+
   ///////////////////////////////////////////////////////
   // Constructors and Mesh I/O //////////////////////////
   ///////////////////////////////////////////////////////
 
+  MatrixMesh(const YAML::Node &parameters) {
+    parameters_ = parameters;
+    set_attributes_from_parameters();
+    if (ply_path_.empty()) {
+      throw std::runtime_error(
+          "MatrixMesh constructor: ply_path is required in parameters");
+    }
+    init_from_ply();
+  }
+
   MatrixMesh() = default;
   ~MatrixMesh() = default;
-  // /**
-  //  * @brief Construct a new MatrixMesh object from the vectors/matrices in
-  //  * `meshbrane::MatrixMeshData`.
-  //  *
-  //  * @param data
-  //  * @return MatrixMesh
-  //  */
-  // MatrixMesh(const MatrixMeshState &data)
-  //     : xyz_coord_V_(data.xyz_coord_V), V_cycle_E_(data.V_cycle_E),
-  //       V_cycle_F_(data.V_cycle_F), h_out_V_(data.h_out_V),
-  //       v_origin_H_(data.v_origin_H), h_next_H_(data.h_next_H),
-  //       h_twin_H_(data.h_twin_H), f_left_H_(data.f_left_H),
-  //       h_right_F_(data.h_right_F), h_negative_B_(data.h_negative_B) {}
+
   /**
    * @brief Construct a new MatrixMesh object from the vectors in a
    * `meshbrane::MatrixMeshSamples` tuple.

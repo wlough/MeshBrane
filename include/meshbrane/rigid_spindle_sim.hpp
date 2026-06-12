@@ -36,18 +36,7 @@ public:
     file.write(reinterpret_cast<const char *>(samples_.data()),
                size * sizeof(T));
   }
-  // void append_file() {
-  //   std::ofstream file(save_path_, std::ios::binary | std::ios::app);
-  //   if (!file) {
-  //     throw std::runtime_error("Could not open file for appending");
-  //   }
-  //   size_t size = samples_.size();
-  //   file.write(reinterpret_cast<const char *>(&size), sizeof(size));
-  //   file.write(reinterpret_cast<const char *>(samples_.data()), size *
-  //   sizeof(T));
 
-  //   samples_.clear(); // Clear the data after appending
-  // }
   void append_file() {
     // Open the file in read-write mode
     std::fstream file(save_path_,
@@ -322,6 +311,16 @@ template <> void TimeSeries<Samples1d>::load_file() {
     samples_.push_back(std::move(v));
   }
 }
+
+struct TimeSeriesSpec {
+  // path to save the time series data, e.g. "data/t.dat" for time samples
+  std::filesystem::path save_path;
+  // dtype of the time series data, e.g. "double" for time samples
+  std::string dtype;
+  // shape of the time series data, e.g. (1,) for time samples, (3,) for
+  // mt_xyz_center, (n,2) for zr_coords_V
+  std::vector<int64_t> sample_shape;
+};
 
 class RigidSpindleSimData {
 public:
