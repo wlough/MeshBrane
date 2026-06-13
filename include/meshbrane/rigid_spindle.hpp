@@ -103,10 +103,12 @@ public:
   Vec3d get_rotational_fluctuations(double dt);
 };
 
-class RigidMTBundle : public MatrixMesh {
+class RigidMTBundle : public MeshBraneObject {
+  // class RigidMTBundle : public MatrixMesh {
 public:
   YAML::Node *sim_parameters_{nullptr};
   YAML::Node parameters_;
+  std::string name_;
   ////////////////////////////
   // state variables /////////
   ////////////////////////////
@@ -177,6 +179,8 @@ public:
   /////////////////
   // methods //////
   /////////////////
+  void set_attributes_from_yaml_node(const YAML::Node &node) override;
+  void init(const YAML::Node &node) override;
   RigidMTBundle() = default;
   ~RigidMTBundle() = default;
   Vec3d get_axis() { return rotation_matrix_center_.col(2); }
@@ -238,6 +242,9 @@ public:
   ///////////////////////////
   // Methods ////////////////
   ///////////////////////////
+  void set_attributes_from_yaml_node(const YAML::Node &node) override;
+  void init(const YAML::Node &node) override;
+
   RigidSpindle() = default;
   ~RigidSpindle() = default;
   RigidSpindle(YAML::Node *sim_parameters, std::string name) {

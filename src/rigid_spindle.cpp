@@ -165,6 +165,73 @@ void SphericalSPB::update_state_variables(double dt) {
 ///////////////////////////////////////////////////////////
 //// RigidMTBundle ////////////////////////////////////////
 ///////////////////////////////////////////////////////////
+
+void RigidMTBundle::set_attributes_from_yaml_node(const YAML::Node &node) {
+  // set object specific parameters
+  if (node["radius"]) {
+    radius_ = node["radius"].as<double>();
+  }
+  if (node["v_grow"]) {
+    v_grow_ = node["v_grow"].as<double>();
+  }
+  if (node["max_length"]) {
+    max_length_ = node["max_length"].as<double>();
+  }
+  if (node["max_force"]) {
+    max_force_ = node["max_force"].as<double>();
+  }
+  if (node["motor_force_per_length"]) {
+    motor_force_per_length_ = node["motor_force_per_length"].as<double>();
+  }
+  if (node["wca_epsilon"]) {
+    wca_epsilon_ = node["wca_epsilon"].as<double>();
+  }
+  if (node["wca_sigma"]) {
+    wca_sigma_ = node["wca_sigma"].as<double>();
+  }
+  if (node["overlap_length"]) {
+    overlap_length_ = node["overlap_length"].as<double>();
+  }
+  if (node["length"]) {
+    length_ = node["length"].as<double>();
+  }
+  if (node["xyz_center"]) {
+    std::vector<double> xyz_center =
+        node["xyz_center"].as<std::vector<double>>();
+    xyz_center_ = Vec3d(xyz_center.data());
+  }
+  if (node["axis"]) {
+    std::vector<double> axis = node["axis"].as<std::vector<double>>();
+    axis_ = Vec3d(axis.data());
+    // axis_ = axis_ / math::L2norm(axis_);
+    axis_.normalize();
+  }
+  if (node["enable_fluctuations"]) {
+    enable_fluctuations_ = node["enable_fluctuations"].as<bool>();
+  }
+
+  double wca_r_cutoff = std::pow(2.0, 1.0 / 6.0) * wca_sigma_;
+  interaction_radius_ = radius_ + wca_r_cutoff;
+
+  // visualization
+  if (node["num_mts"]) {
+    num_mts_ = node["num_mts"].as<int>();
+  }
+  if (node["rgb_mt1"]) {
+    std::vector<double> rgb = node["rgb_mt1"].as<std::vector<double>>();
+    rgb_mt1_ = Vec3d(rgb.data());
+  }
+  if (node["rgb_mt2"]) {
+    std::vector<double> rgb = node["rgb_mt2"].as<std::vector<double>>();
+    rgb_mt2_ = Vec3d(rgb.data());
+  }
+}
+
+void RigidMTBundle::init(const YAML::Node &node) {
+  set_attributes_from_yaml_node(node);
+  init_state();
+}
+
 void RigidMTBundle::set_attributes_from_parameters() {
   // set object specific parameters
   if (parameters_["radius"]) {
@@ -407,6 +474,43 @@ void RigidMTBundle::update_state_variables(double dt) {
 //////////////////////////////////////////////////////////
 // RigidSpindle //////////////////////////////////////////
 //////////////////////////////////////////////////////////
+
+void RigidSpindle::set_attributes_from_yaml_node(const YAML::Node &node) {
+  // set object specific parameters
+  if (node["mt_spb_stretch_stiffness"]) {
+    mt_spb_stretch_stiffness_ = node["mt_spb_stretch_stiffness"].as<double>();
+  }
+  if (node["mt_spb_rotation_stiffness"]) {
+    mt_spb_rotation_stiffness_ = node["mt_spb_rotation_stiffness"].as<double>();
+  }
+  if (node["draw_axes"]) {
+    draw_axes_ = node["draw_axes"].as<bool>();
+  }
+
+  // set component attributes from parameters
+  spb1_.set_attributes_from_yaml_node(node["spb1"]);
+  spb2_.set_attributes_from_yaml_node(node["spb2"]);
+  mt_bundle_.set_attributes_from_yaml_node(node["mt_bundle"]);
+
+  if (node["symmetric"]) {
+    bool symmetric = node["symmetric"].as<bool>();
+    if (symmetric) {
+      spb2_.contact_radius_ = spb1_.contact_radius_;
+    }
+  }
+}
+
+void RigidSpindle::init(const YAML::Node &node) {
+  set_attributes_from_yaml_node(node);
+
+  mt_bundle_.init_state();
+  Eigen::Matrix3d R = mt_bundle_.rotation_matrix_center_;
+  Vec3d xyz1 = mt_bundle_.get_xyz1();
+  Vec3d xyz2 = mt_bundle_.get_xyz2();
+  spb1_.init_state(xyz1, R);
+  spb2_.init_state(xyz2, R);
+}
+
 void RigidSpindle::set_attributes_from_parameters() {
   // set object specific parameters
   if (parameters_["mt_spb_stretch_stiffness"]) {

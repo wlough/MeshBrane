@@ -14,6 +14,180 @@ namespace meshbrane {
 ///////////////////////////////////////////////////////
 // initialization /////////////////////////////////////
 ///////////////////////////////////////////////////////
+void Membrane::set_attributes_from_yaml_node(const YAML::Node &node) {
+  MatrixMesh::set_attributes_from_yaml_node(node);
+
+  if (node["timestep_type"]) {
+    timestep_type_ = node["timestep_type"].as<std::string>();
+  }
+  // Bending force
+  if (node["bending_modulus"]) {
+    bending_modulus_ = node["bending_modulus"].as<double>();
+  }
+  if (node["spontaneous_curvature"]) {
+    spontaneous_curvature_ = node["spontaneous_curvature"].as<double>();
+  }
+  if (node["splay_modulus"]) {
+    splay_modulus_ = node["splay_modulus"].as<double>();
+  }
+  ///////////////////////////////////////////////////////
+  // Tether force
+  if (node["dimensionless_tether_repulsive_singularity"]) {
+    dimensionless_tether_repulsive_singularity_ =
+        node["dimensionless_tether_repulsive_singularity"].as<double>();
+  }
+  if (node["dimensionless_tether_repulsive_onset"]) {
+    dimensionless_tether_repulsive_onset_ =
+        node["dimensionless_tether_repulsive_onset"].as<double>();
+  }
+  if (node["dimensionless_tether_attractive_onset"]) {
+    dimensionless_tether_attractive_onset_ =
+        node["dimensionless_tether_attractive_onset"].as<double>();
+  }
+  if (node["dimensionless_tether_attractive_singularity"]) {
+    dimensionless_tether_attractive_singularity_ =
+        node["dimensionless_tether_attractive_singularity"].as<double>();
+  }
+  if (node["tether_stiffness"]) {
+    tether_stiffness_ = node["tether_stiffness"].as<double>();
+  }
+  // Area conservation force
+  if (node["area_stiffness"]) {
+    area_stiffness_ = node["area_stiffness"].as<double>();
+  }
+  if (node["fix_target_face_area"]) {
+    fix_target_face_area_ = node["fix_target_face_area"].as<bool>();
+  }
+  // Volume conservation force
+  if (node["fix_target_volume"]) {
+    fix_target_volume_ = node["fix_target_volume"].as<bool>();
+  }
+  if (node["volume_stiffness"]) {
+    volume_stiffness_ = node["volume_stiffness"].as<double>();
+  }
+  if (node["node_drag_coefficient"]) {
+    node_drag_coefficient_ = node["node_drag_coefficient"].as<double>();
+  }
+  ///////////////////////////////////////////////////////
+  if (node["vector_field_scale"]) {
+    vector_field_scale_ = node["vector_field_scale"].as<double>();
+  }
+  if (node["show_force_field"]) {
+    show_force_field_ = node["show_force_field"].as<bool>();
+  }
+  if (node["show_mcvec_field"]) {
+    show_mcvec_field_ = node["show_mcvec_field"].as<bool>();
+  }
+  if (node["enable_flipping"]) {
+    enable_flipping_ = node["enable_flipping"].as<bool>();
+  }
+  if (node["enable_fluctuations"]) {
+    enable_fluctuations_ = node["enable_fluctuations"].as<bool>();
+  }
+  if (node["dt_flip"]) {
+    dt_flip_ = node["dt_flip"].as<double>();
+  }
+  if (node["flipping_probability"]) {
+    flipping_probability_ = node["flipping_probability"].as<double>();
+  }
+  ///////////////////////////////////////////////////////
+  if (node["show_contact_patches"]) {
+    show_contact_patches_ = node["show_contact_patches"].as<bool>();
+  }
+  if (node["pressure_type"]) {
+    pressure_type_ = node["pressure_type"].as<std::string>();
+  }
+  if (node["use_surface_tension_constant"]) {
+    use_surface_tension_constant_ =
+        node["use_surface_tension_constant"].as<bool>();
+  }
+  if (node["use_surface_tension_penalty_local"]) {
+    use_surface_tension_penalty_local_ =
+        node["use_surface_tension_penalty_local"].as<bool>();
+  }
+  if (node["surface_tension_constant"]) {
+    surface_tension_constant_ = node["surface_tension_constant"].as<double>();
+  } else if (use_surface_tension_constant_) {
+    printf(
+        "Warning: use_surface_tension_constant_ = true but no constant value "
+        "found\n");
+  }
+  if (node["wca_sigma"]) {
+    wca_sigma_ = node["wca_sigma"].as<double>();
+    // 0.1*r_cutoff=0.1*2^(1/6)*sigma
+    dx_max_ = 0.1122462048309373 * wca_sigma_;
+  }
+  if (node["wca_epsilon"]) {
+    wca_epsilon_total_ = node["wca_epsilon"].as<double>();
+  }
+  // set global parameters
+  if ((*sim_parameters_)["kBT"]) {
+    kBT_ = (*sim_parameters_)["kBT"].as<double>();
+  }
+  if ((*sim_parameters_)["dt"]) {
+    dt0_ = (*sim_parameters_)["dt"].as<double>();
+  }
+  if ((*sim_parameters_)["bulk_viscosity"]) {
+    bulk_viscosity_ = (*sim_parameters_)["bulk_viscosity"].as<double>();
+  }
+  if (node["use_local_drag_coefficient"]) {
+    use_local_drag_coefficient_ = node["use_local_drag_coefficient"].as<bool>();
+    // local_drag_coefficient_ = 4 * M_PI * bulk_viscosity_;
+    local_drag_coefficient_ = 1.5 * bulk_viscosity_; // * 1/R but R=1
+  }
+}
+
+void Membrane::init_membrane_from_attributes() {
+
+  initial_area_ = average_face_area_ * get_num_faces();
+  initial_volume_ = total_volume_;
+  target_face_area_ = average_face_area_;
+  target_volume_ = total_volume_;
+  update_geotargets();
+
+  mcvec_V_.resize(get_num_vertices(), 3);
+  mcvec_V_.setZero();
+
+  force_V_.resize(get_num_vertices(), 3);
+  force_V_.setZero();
+
+  contact_force_V_.resize(get_num_vertices(), 3);
+  contact_force_V_.setZero();
+
+  external_force_V_.resize(get_num_vertices(), 3);
+  external_force_V_.setZero();
+
+  internal_force_V_.resize(get_num_vertices(), 3);
+  internal_force_V_.setZero();
+
+  // update_pressure_soft_penalty();
+  // update_surface_tension_soft_penalty();
+  update_surface_tension_and_pressure();
+
+  // // randng_
+  // force_V_.resize(get_num_vertices(), 3);
+  // force_V_.setZero();
+  if (enable_flipping_) {
+    t_flip_ = dt_flip_; // time to next flip
+  } else {
+    t_flip_ = std::numeric_limits<double>::infinity();
+  }
+
+  // integration patch initialization
+  integration_patch_.supermesh_ = this;
+  integration_patch_.rgba_face_ = RGBA_DICT.at("meshbrane_orange");
+
+  heat_dt_ = initial_area_ / get_num_vertices();
+
+  spb_patch_plus_.supermesh_ = this;
+  spb_patch_minus_.supermesh_ = this;
+}
+
+void Membrane::init(const YAML::Node &node) {
+  set_attributes_from_yaml_node(node);
+  init_matrixmesh_from_attributes();
+  init_membrane_from_attributes();
+}
 
 void Membrane::update_geotargets() {
   // printf("*********************Setting target_edge_length_ = %.10f\n",

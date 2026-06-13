@@ -18,7 +18,8 @@ namespace meshbrane {
  * @brief Simple vector field for visualization with libigl.
  *
  */
-struct SimpleVectorField : public MeshBraneObject {
+struct SimpleVectorField {
+  // struct SimpleVectorField : public MeshBraneObject {
   bool has_been_updated_{false};
   SimpleVectorField() = default;
   SimpleVectorField(Eigen::Matrix<double, Eigen::Dynamic, 3> P0,

@@ -205,8 +205,10 @@ public:
   Samplesi h_twin_H_;       //
   ////////////////////////////
 
-  // void set_attributes_from_yaml_node(const YAML::Node &node) override;
-  // void init() override;
+  void set_attributes_from_yaml_node(const YAML::Node &node) override;
+  void init(const YAML::Node &node) override;
+
+  void init_matrixmesh_from_attributes();
 
   void check_he_matrices() const {
     printf("MatrixMesh::check_he_matrices\n");

@@ -19,6 +19,83 @@ namespace fs = std::filesystem;
 
 namespace meshbrane {
 
+void MatrixMesh::set_attributes_from_yaml_node(const YAML::Node &node) {
+  if (node["ply_path"]) {
+    ply_path_ = std::filesystem::path(node["ply_path"].as<std::string>());
+  }
+  if (node["draw_wireframe"]) {
+    draw_wireframe_ = node["draw_wireframe"].as<bool>(); // true
+  }
+  if (node["show_half_edges"]) {
+    show_half_edges_ = node["show_half_edges"].as<bool>(); // true
+  }
+  if (node["show_vertices"]) {
+    show_vertices_ = node["show_vertices"].as<bool>(); // true
+  }
+  if (node["show_edges"]) {
+    show_edges_ = node["show_edges"].as<bool>(); // true
+  }
+  if (node["rgba_face"]) {
+    rgba_face_ = Eigen::Map<Eigen::Vector4d>(
+        node["rgba_face"].as<std::vector<double>>().data());
+  }
+  if (node["rgba_edge"]) {
+    rgba_edge_ = Eigen::Map<Eigen::Vector4d>(
+        node["rgba_edge"].as<std::vector<double>>().data());
+  }
+  if (node["rgba_vertex"]) {
+    rgba_vertex_ = Eigen::Map<Eigen::Vector4d>(
+        node["rgba_vertex"].as<std::vector<double>>().data());
+  }
+  if (node["rgba_half_edge"]) {
+    rgba_half_edge_ = Eigen::Map<Eigen::Vector4d>(
+        node["rgba_half_edge"].as<std::vector<double>>().data());
+  }
+  if (node["radius_vertex"]) {
+    radius_vertex_ = node["radius_vertex"].as<double>();
+  }
+  if (node["laplacian_type"]) {
+    laplacian_type_ =
+        laplacian_type_from_string(node["laplacian_type"].as<std::string>());
+  }
+  if (node["atol"]) {
+    belkin_atol_ = node["atol"].as<double>();
+  }
+  if (node["rtol"]) {
+    belkin_rtol_ = node["rtol"].as<double>();
+  }
+  if (node["belkin_dt"]) {
+    belkin_dt_ = node["belkin_dt"].as<double>();
+  }
+  if (node["belkin_min_ring"]) {
+    belkin_min_ring_ = node["belkin_min_ring"].as<int>();
+  }
+  if (node["heat_dt_multiple"]) {
+    heat_dt_multiple_ = node["heat_dt_multiple"].as<double>();
+  }
+  if (node["construct_laplacian_matrix"]) {
+    construct_laplacian_matrix_ = node["construct_laplacian_matrix"].as<bool>();
+  }
+  if (node["gaussian_curvature_type"]) {
+    gaussian_curvature_type_ = gaussian_curvature_type_from_string(
+        node["gaussian_curvature_type"].as<std::string>());
+  }
+}
+
+void MatrixMesh::init_matrixmesh_from_attributes() {
+  if (ply_path_.empty()) {
+    throw std::invalid_argument(
+        "ply_path is required to initialize MatrixMesh");
+  }
+  load_ply();
+  init_from_he_mats();
+  integration_patch_.supermesh_ = this;
+}
+
+void MatrixMesh::init(const YAML::Node &node) {
+  set_attributes_from_yaml_node(node);
+  init_matrixmesh_from_attributes();
+}
 /////////////////////////
 // Convergence testing //
 /////////////////////////

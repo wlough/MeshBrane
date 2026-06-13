@@ -13,15 +13,15 @@
 namespace meshbrane {
 class MatrixMesh; // forward declaration
 
-class SubComplex : public MeshBraneObject {
-public:
-  MatrixMesh *supermesh_{nullptr};
-  SimplicialSet F_;
-  SubComplex() = default;
-  ~SubComplex() = default;
-  SubComplex(MatrixMesh *supermesh, SimplicialSet F)
-      : supermesh_(supermesh), F_(F) {};
-};
+// class SubComplex : public MeshBraneObject {
+// public:
+//   MatrixMesh *supermesh_{nullptr};
+//   SimplicialSet F_;
+//   SubComplex() = default;
+//   ~SubComplex() = default;
+//   SubComplex(MatrixMesh *supermesh, SimplicialSet F)
+//       : supermesh_(supermesh), F_(F) {};
+// };
 
 /**
  * @brief  A submanifold of a HalfEdgeMesh.
@@ -33,7 +33,8 @@ public:
  *  @param H (set): set of half-edges in the patch
  *
  */
-class Patch : public MeshBraneObject {
+class Patch {
+  // class Patch : public MeshBraneObject {
 public:
   MatrixMesh *supermesh_{nullptr};
   SimplicialSet V_;
@@ -58,6 +59,8 @@ public:
   //////////////////////////////////////////
   // Initialization ////////////////////////
   //////////////////////////////////////////
+  void set_supermesh(MatrixMesh &mesh) { supermesh_ = &mesh; }
+
   Patch() = default;
   ~Patch() = default;
   Patch(MatrixMesh *supermesh) : supermesh_(supermesh) {};

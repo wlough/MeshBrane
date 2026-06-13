@@ -109,6 +109,10 @@ public:
   // Initialization /////////////////////////////////////
   ///////////////////////////////////////////////////////
 
+  void set_attributes_from_yaml_node(const YAML::Node &node) override;
+  void init(const YAML::Node &node) override;
+  void init_membrane_from_attributes();
+
   Membrane() = default;
   ~Membrane() = default;
   // Membrane(const YAML::Node &parameters) {
