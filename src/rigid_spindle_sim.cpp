@@ -60,9 +60,9 @@ RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
   // compute stuff for first time series sample
   spindle_.zero_forces();
   printf("Zeroed spindle forces\n");
-  envelope_.zero_forces();
+  envelope_.clear_interactions();
   printf("Zeroed envelope forces\n");
-  apply_interaction_forces();
+  apply_pair_interactions();
   printf("Applied interaction forces\n");
   ////////////////////////////////////
   // size_t Nh = envelope_.get_num_half_edges();
@@ -98,7 +98,7 @@ RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
   ////////////////////////////////////
   envelope_.update_cached_data();
   printf("Updated envelope cached data\n");
-  envelope_.apply_internal_forces();
+  envelope_.apply_internal_interactions();
   printf("Applied envelope internal forces\n");
   spindle_.apply_internal_forces();
   printf("Applied internal spindle forces\n");
@@ -113,6 +113,8 @@ RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
   data_.clear();
 }
 
+// Core methods
+
 void RigidSpindleSim::print_info() {
   // printf("RigidSpindleSim::print_info\n");
 
@@ -126,6 +128,143 @@ void RigidSpindleSim::print_info() {
   spindle_.print_info();
   // viewer_.print_info();
 }
+
+void RigidSpindleSim::apply_pair_interactions() {
+  // printf("RigidSpindleSim::apply_pair_interactions\n");
+  // spindle_.envelope_force_ = 0.0;
+  ///////////////////////////
+  if (!spindle_force_on_) {
+    return;
+  }
+  //////////////////////////
+  //////////////////////////
+  //////////////////////////
+  int Nplus = envelope_.spb_patch_plus_.V_.size();
+  int Nminus = envelope_.spb_patch_minus_.V_.size();
+  if (Nplus == 0) {
+    find_contact_patch1();
+  }
+  if (Nminus == 0) {
+    find_contact_patch2();
+  }
+  int Nspb1 = spindle_.spb1_.get_num_vertices();
+  int Nspb2 = spindle_.spb2_.get_num_vertices();
+  double sigma1 = 0.5 * (spindle_.spb1_.wca_sigma_ + envelope_.wca_sigma_);
+  double epsilon1 = spindle_.spb1_.wca_epsilon_;
+  for (int v1 : envelope_.spb_patch_plus_.V_) {
+    Vec3d x1 = envelope_.xyz_coord_v(v1);
+    for (int v2{0}; v2 < Nspb1; v2++) {
+      Vec3d x2 = spindle_.spb1_.xyz_coord_v(v2);
+      Vec3d F = wca_force(x1, x2, epsilon1, sigma1);
+      envelope_.force_V_.row(v1) += F;
+      spindle_.spb1_.force_V_.row(v2) -= F;
+    }
+  }
+  double sigma2 = 0.5 * (spindle_.spb2_.wca_sigma_ + envelope_.wca_sigma_);
+  double epsilon2 = spindle_.spb2_.wca_epsilon_;
+  for (int v1 : envelope_.spb_patch_minus_.V_) {
+    Vec3d x1 = envelope_.xyz_coord_v(v1);
+    for (int v2{0}; v2 < Nspb2; v2++) {
+      Vec3d x2 = spindle_.spb2_.xyz_coord_v(v2);
+      Vec3d F = wca_force(x1, x2, epsilon2, sigma2);
+      envelope_.force_V_.row(v1) += F;
+      spindle_.spb2_.force_V_.row(v2) -= F;
+    }
+  }
+  // ***
+  // int Nspb1 = spindle_.spb1_.get_num_vertices();
+  // int Nspb2 = spindle_.spb2_.get_num_vertices();
+  // double sigma1 = 0.5 * (spindle_.spb1_.wca_sigma_ + envelope_.wca_sigma_);
+  // double epsilon1 = spindle_.spb1_.wca_epsilon_;
+  // for (int v1 = 0; v1 < envelope_.get_num_vertices(); v1++) {
+  //   Vec3d x1 = envelope_.xyz_coord_v(v1);
+  //   for (int v2{0}; v2 < Nspb1; v2++) {
+  //     Vec3d x2 = spindle_.spb1_.xyz_coord_v(v2);
+  //     Vec3d F = wca_force(x1, x2, epsilon1, sigma1);
+  //     envelope_.force_V_.row(v1) += F;
+  //     spindle_.spb1_.force_V_.row(v2) -= F;
+  //   }
+  // }
+  // double sigma2 = 0.5 * (spindle_.spb2_.wca_sigma_ + envelope_.wca_sigma_);
+  // double epsilon2 = spindle_.spb2_.wca_epsilon_;
+  // for (int v1 = 0; v1 < envelope_.get_num_vertices(); v1++) {
+  //   Vec3d x1 = envelope_.xyz_coord_v(v1);
+  //   for (int v2{0}; v2 < Nspb2; v2++) {
+  //     Vec3d x2 = spindle_.spb2_.xyz_coord_v(v2);
+  //     Vec3d F = wca_force(x1, x2, epsilon2, sigma2);
+  //     envelope_.force_V_.row(v1) += F;
+  //     spindle_.spb2_.force_V_.row(v2) -= F;
+  //   }
+  // }
+  //////////////////////////
+  //////////////////////////
+  //////////////////////////
+
+  spindle_.spb1_.sum_envelope_force_V();
+  spindle_.spb2_.sum_envelope_force_V();
+
+  ///////////////////////////////////////////////
+  ///////////////////////////////////////////////
+  ///////////////////////////////////////////////
+  double sigma = 0.5 * (spindle_.mt_bundle_.wca_sigma_ + envelope_.wca_sigma_);
+  double epsilon = spindle_.mt_bundle_.wca_epsilon_;
+  int Nv = envelope_.get_num_vertices();
+  Vec3d o = spindle_.mt_bundle_.xyz_center_;
+  Vec3d ex = spindle_.mt_bundle_.rotation_matrix_center_.col(0);
+  Vec3d ey = spindle_.mt_bundle_.rotation_matrix_center_.col(1);
+  Vec3d ez = spindle_.mt_bundle_.rotation_matrix_center_.col(2);
+  double z_min = -0.5 * spindle_.mt_bundle_.length_;
+  double z_max = 0.5 * spindle_.mt_bundle_.length_;
+  double r_max = spindle_.mt_bundle_.interaction_radius_;
+
+  for (int v = 0; v < Nv; v++) {
+    Vec3d p1 = envelope_.xyz_coord_v(v);
+    Vec3d xyz = p1 - o;
+    double z = xyz.dot(ez);
+    Vec3d r_vec = xyz - z * ez;
+    double r = r_vec.norm();
+    if (z < z_min || z > z_max || r > r_max) {
+      continue;
+    }
+    Vec3d r_unit = r_vec / r;
+    Vec3d p2 = o + z * ez + spindle_.mt_bundle_.radius_ * r_unit;
+    Vec3d F = wca_force(p1, p2, epsilon, sigma);
+    envelope_.force_V_.row(v) += F;
+    spindle_.mt_bundle_.force_envelope_ -= F;
+    Vec3d l_vec = p2 - o;
+    Vec3d T = -math::cross(l_vec, F);
+    spindle_.mt_bundle_.torque_envelope_ += T;
+  }
+}
+
+void RigidSpindleSim::apply_internal_interactions() {
+  envelope_.apply_internal_interactions();
+  spindle_.apply_internal_forces();
+  spindle_.compute_velocities();
+}
+
+void RigidSpindleSim::clear_interactions() {
+  spindle_.zero_forces();
+  envelope_.clear_interactions();
+}
+
+void RigidSpindleSim::update_cached_data() {
+  //
+  envelope_.update_cached_data();
+}
+
+void RigidSpindleSim::apply_thermal_fluctuations(double dt) {
+  //
+  envelope_.apply_thermal_fluctuations(dt, kBT_, rng_);
+  // spindle_.apply_thermal_fluctuations(dt, kBT_, rng_);
+}
+
+void RigidSpindleSim::update_state_variables(double dt) {
+  spindle_.update_state_variables(dt_);
+  envelope_.update_state_variables(dt_);
+}
+
+// Helpers
 
 void RigidSpindleSim::find_contact_patch1() {
   Vec3d p = spindle_.spb1_.xyz_frame_; // point on spindle axis
@@ -306,114 +445,6 @@ void RigidSpindleSim::record_envelope_data() {
 
 void RigidSpindleSim::record_spindle_data() {}
 
-void RigidSpindleSim::apply_interaction_forces() {
-  // printf("RigidSpindleSim::apply_interaction_forces\n");
-  // spindle_.envelope_force_ = 0.0;
-  ///////////////////////////
-  if (!spindle_force_on_) {
-    return;
-  }
-  //////////////////////////
-  //////////////////////////
-  //////////////////////////
-  int Nplus = envelope_.spb_patch_plus_.V_.size();
-  int Nminus = envelope_.spb_patch_minus_.V_.size();
-  if (Nplus == 0) {
-    find_contact_patch1();
-  }
-  if (Nminus == 0) {
-    find_contact_patch2();
-  }
-  int Nspb1 = spindle_.spb1_.get_num_vertices();
-  int Nspb2 = spindle_.spb2_.get_num_vertices();
-  double sigma1 = 0.5 * (spindle_.spb1_.wca_sigma_ + envelope_.wca_sigma_);
-  double epsilon1 = spindle_.spb1_.wca_epsilon_;
-  for (int v1 : envelope_.spb_patch_plus_.V_) {
-    Vec3d x1 = envelope_.xyz_coord_v(v1);
-    for (int v2{0}; v2 < Nspb1; v2++) {
-      Vec3d x2 = spindle_.spb1_.xyz_coord_v(v2);
-      Vec3d F = wca_force(x1, x2, epsilon1, sigma1);
-      envelope_.force_V_.row(v1) += F;
-      spindle_.spb1_.force_V_.row(v2) -= F;
-    }
-  }
-  double sigma2 = 0.5 * (spindle_.spb2_.wca_sigma_ + envelope_.wca_sigma_);
-  double epsilon2 = spindle_.spb2_.wca_epsilon_;
-  for (int v1 : envelope_.spb_patch_minus_.V_) {
-    Vec3d x1 = envelope_.xyz_coord_v(v1);
-    for (int v2{0}; v2 < Nspb2; v2++) {
-      Vec3d x2 = spindle_.spb2_.xyz_coord_v(v2);
-      Vec3d F = wca_force(x1, x2, epsilon2, sigma2);
-      envelope_.force_V_.row(v1) += F;
-      spindle_.spb2_.force_V_.row(v2) -= F;
-    }
-  }
-  // ***
-  // int Nspb1 = spindle_.spb1_.get_num_vertices();
-  // int Nspb2 = spindle_.spb2_.get_num_vertices();
-  // double sigma1 = 0.5 * (spindle_.spb1_.wca_sigma_ + envelope_.wca_sigma_);
-  // double epsilon1 = spindle_.spb1_.wca_epsilon_;
-  // for (int v1 = 0; v1 < envelope_.get_num_vertices(); v1++) {
-  //   Vec3d x1 = envelope_.xyz_coord_v(v1);
-  //   for (int v2{0}; v2 < Nspb1; v2++) {
-  //     Vec3d x2 = spindle_.spb1_.xyz_coord_v(v2);
-  //     Vec3d F = wca_force(x1, x2, epsilon1, sigma1);
-  //     envelope_.force_V_.row(v1) += F;
-  //     spindle_.spb1_.force_V_.row(v2) -= F;
-  //   }
-  // }
-  // double sigma2 = 0.5 * (spindle_.spb2_.wca_sigma_ + envelope_.wca_sigma_);
-  // double epsilon2 = spindle_.spb2_.wca_epsilon_;
-  // for (int v1 = 0; v1 < envelope_.get_num_vertices(); v1++) {
-  //   Vec3d x1 = envelope_.xyz_coord_v(v1);
-  //   for (int v2{0}; v2 < Nspb2; v2++) {
-  //     Vec3d x2 = spindle_.spb2_.xyz_coord_v(v2);
-  //     Vec3d F = wca_force(x1, x2, epsilon2, sigma2);
-  //     envelope_.force_V_.row(v1) += F;
-  //     spindle_.spb2_.force_V_.row(v2) -= F;
-  //   }
-  // }
-  //////////////////////////
-  //////////////////////////
-  //////////////////////////
-
-  spindle_.spb1_.sum_envelope_force_V();
-  spindle_.spb2_.sum_envelope_force_V();
-
-  ///////////////////////////////////////////////
-  ///////////////////////////////////////////////
-  ///////////////////////////////////////////////
-  double sigma = 0.5 * (spindle_.mt_bundle_.wca_sigma_ + envelope_.wca_sigma_);
-  double epsilon = spindle_.mt_bundle_.wca_epsilon_;
-  int Nv = envelope_.get_num_vertices();
-  Vec3d o = spindle_.mt_bundle_.xyz_center_;
-  Vec3d ex = spindle_.mt_bundle_.rotation_matrix_center_.col(0);
-  Vec3d ey = spindle_.mt_bundle_.rotation_matrix_center_.col(1);
-  Vec3d ez = spindle_.mt_bundle_.rotation_matrix_center_.col(2);
-  double z_min = -0.5 * spindle_.mt_bundle_.length_;
-  double z_max = 0.5 * spindle_.mt_bundle_.length_;
-  double r_max = spindle_.mt_bundle_.interaction_radius_;
-
-  for (int v = 0; v < Nv; v++) {
-    Vec3d p1 = envelope_.xyz_coord_v(v);
-    Vec3d xyz = p1 - o;
-    double z = xyz.dot(ez);
-    Vec3d r_vec = xyz - z * ez;
-    double r = r_vec.norm();
-    if (z < z_min || z > z_max || r > r_max) {
-      continue;
-    }
-    Vec3d r_unit = r_vec / r;
-    Vec3d p2 = o + z * ez + spindle_.mt_bundle_.radius_ * r_unit;
-    Vec3d F = wca_force(p1, p2, epsilon, sigma);
-    envelope_.force_V_.row(v) += F;
-    spindle_.mt_bundle_.force_envelope_ -= F;
-    Vec3d l_vec = p2 - o;
-    Vec3d T = -math::cross(l_vec, F);
-    spindle_.mt_bundle_.torque_envelope_ += T;
-  }
-}
-
 double RigidSpindleSim::dt_max() {
   // printf("RigidSpindleSim::dt_max\n");
   double dt_max = dt0_;
@@ -428,23 +459,18 @@ void RigidSpindleSim::evolve_until(double t_end) {
   dt_mean_ = 0.0;
   envelope_.total_edge_flips_ = 0;
   while (t_ < t_end) {
-    spindle_.zero_forces();
-    envelope_.zero_forces();
-
-    apply_interaction_forces();
-
-    envelope_.update_cached_data();
-    envelope_.apply_internal_forces();
-
-    spindle_.apply_internal_forces();
-    spindle_.compute_velocities();
+    clear_interactions();
+    update_cached_data();
+    apply_pair_interactions();
+    apply_internal_interactions();
 
     dt_ = dt_max();
     double dt_end = t_end - t_;
     dt_ = std::min(dt_, dt_end);
 
-    spindle_.update_state_variables(dt_);
-    envelope_.time_step(dt_);
+    apply_thermal_fluctuations(dt_);
+
+    update_state_variables(dt_);
     t_ += dt_;
 
     dt_mean_ += dt_;
@@ -454,7 +480,7 @@ void RigidSpindleSim::evolve_until(double t_end) {
   dt_mean_ /= step;
 }
 
-void RigidSpindleSim::timestep() {
+void RigidSpindleSim::evolve_until_next_frame() {
   // printf("RigidSpindleSim::timestep\n");
   evolve_until(t_ + dt_frame_);
 
@@ -522,13 +548,10 @@ void RigidSpindleSim::run(int argc, char *argv[]) {
           return true;
         }
 
-        timestep();
+        evolve_until_next_frame();
         add_data_samples();
         return false;
       };
-  // show viewer
-
-  // viewer_.iglviewer_.launch();
   viewer_.iglviewer_.launch(false, run_name_, viewer_.width_, viewer_.height_);
   make_a_movie();
 }

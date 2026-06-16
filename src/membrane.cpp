@@ -11,272 +11,33 @@ namespace fs = std::filesystem;
 
 namespace meshbrane {
 
-///////////////////////////////////////////////////////
-// initialization /////////////////////////////////////
-///////////////////////////////////////////////////////
-void Membrane::set_attributes_from_yaml_node(const YAML::Node &node) {
-  MatrixMesh::set_attributes_from_yaml_node(node);
-
-  if (node["timestep_type"]) {
-    timestep_type_ = node["timestep_type"].as<std::string>();
-  }
-  // Bending force
-  if (node["bending_modulus"]) {
-    bending_modulus_ = node["bending_modulus"].as<double>();
-  }
-  if (node["spontaneous_curvature"]) {
-    spontaneous_curvature_ = node["spontaneous_curvature"].as<double>();
-  }
-  if (node["splay_modulus"]) {
-    splay_modulus_ = node["splay_modulus"].as<double>();
-  }
-  ///////////////////////////////////////////////////////
-  // Tether force
-  if (node["dimensionless_tether_repulsive_singularity"]) {
-    dimensionless_tether_repulsive_singularity_ =
-        node["dimensionless_tether_repulsive_singularity"].as<double>();
-  }
-  if (node["dimensionless_tether_repulsive_onset"]) {
-    dimensionless_tether_repulsive_onset_ =
-        node["dimensionless_tether_repulsive_onset"].as<double>();
-  }
-  if (node["dimensionless_tether_attractive_onset"]) {
-    dimensionless_tether_attractive_onset_ =
-        node["dimensionless_tether_attractive_onset"].as<double>();
-  }
-  if (node["dimensionless_tether_attractive_singularity"]) {
-    dimensionless_tether_attractive_singularity_ =
-        node["dimensionless_tether_attractive_singularity"].as<double>();
-  }
-  if (node["tether_stiffness"]) {
-    tether_stiffness_ = node["tether_stiffness"].as<double>();
-  }
-  // Area conservation force
-  if (node["area_stiffness"]) {
-    area_stiffness_ = node["area_stiffness"].as<double>();
-  }
-  if (node["fix_target_face_area"]) {
-    fix_target_face_area_ = node["fix_target_face_area"].as<bool>();
-  }
-  // Volume conservation force
-  if (node["fix_target_volume"]) {
-    fix_target_volume_ = node["fix_target_volume"].as<bool>();
-  }
-  if (node["volume_stiffness"]) {
-    volume_stiffness_ = node["volume_stiffness"].as<double>();
-  }
-  if (node["node_drag_coefficient"]) {
-    node_drag_coefficient_ = node["node_drag_coefficient"].as<double>();
-  }
-  ///////////////////////////////////////////////////////
-  if (node["vector_field_scale"]) {
-    vector_field_scale_ = node["vector_field_scale"].as<double>();
-  }
-  if (node["show_force_field"]) {
-    show_force_field_ = node["show_force_field"].as<bool>();
-  }
-  if (node["show_mcvec_field"]) {
-    show_mcvec_field_ = node["show_mcvec_field"].as<bool>();
-  }
-  if (node["enable_flipping"]) {
-    enable_flipping_ = node["enable_flipping"].as<bool>();
-  }
-  if (node["enable_fluctuations"]) {
-    enable_fluctuations_ = node["enable_fluctuations"].as<bool>();
-  }
-  if (node["dt_flip"]) {
-    dt_flip_ = node["dt_flip"].as<double>();
-  }
-  if (node["flipping_probability"]) {
-    flipping_probability_ = node["flipping_probability"].as<double>();
-  }
-  ///////////////////////////////////////////////////////
-  if (node["show_contact_patches"]) {
-    show_contact_patches_ = node["show_contact_patches"].as<bool>();
-  }
-  if (node["pressure_type"]) {
-    pressure_type_ = node["pressure_type"].as<std::string>();
-  }
-  if (node["use_surface_tension_constant"]) {
-    use_surface_tension_constant_ =
-        node["use_surface_tension_constant"].as<bool>();
-  }
-  if (node["use_surface_tension_penalty_local"]) {
-    use_surface_tension_penalty_local_ =
-        node["use_surface_tension_penalty_local"].as<bool>();
-  }
-  if (node["surface_tension_constant"]) {
-    surface_tension_constant_ = node["surface_tension_constant"].as<double>();
-  } else if (use_surface_tension_constant_) {
-    printf(
-        "Warning: use_surface_tension_constant_ = true but no constant value "
-        "found\n");
-  }
-  if (node["wca_sigma"]) {
-    wca_sigma_ = node["wca_sigma"].as<double>();
-    // 0.1*r_cutoff=0.1*2^(1/6)*sigma
-    dx_max_ = 0.1122462048309373 * wca_sigma_;
-  }
-  if (node["wca_epsilon"]) {
-    wca_epsilon_total_ = node["wca_epsilon"].as<double>();
-  }
-  // set global parameters
-  if ((*sim_parameters_)["kBT"]) {
-    kBT_ = (*sim_parameters_)["kBT"].as<double>();
-  }
-  if ((*sim_parameters_)["dt"]) {
-    dt0_ = (*sim_parameters_)["dt"].as<double>();
-  }
-  if ((*sim_parameters_)["bulk_viscosity"]) {
-    bulk_viscosity_ = (*sim_parameters_)["bulk_viscosity"].as<double>();
-  }
-  if (node["use_local_drag_coefficient"]) {
-    use_local_drag_coefficient_ = node["use_local_drag_coefficient"].as<bool>();
-    // local_drag_coefficient_ = 4 * M_PI * bulk_viscosity_;
-    local_drag_coefficient_ = 1.5 * bulk_viscosity_; // * 1/R but R=1
-  }
+////////////////////////////////////////
+// stuff that actually gets used
+void Membrane::apply_internal_interactions() {
+  apply_tether_force_V();
+  apply_bending_force_V();
+  apply_area_force_V();
+  apply_volume_force_V();
 }
 
-void Membrane::init_membrane_from_attributes() {
-
-  initial_area_ = average_face_area_ * get_num_faces();
-  initial_volume_ = total_volume_;
-  target_face_area_ = average_face_area_;
-  target_volume_ = total_volume_;
-  update_geotargets();
-
-  mcvec_V_.resize(get_num_vertices(), 3);
-  mcvec_V_.setZero();
-
+void Membrane::clear_interactions() {
   force_V_.resize(get_num_vertices(), 3);
   force_V_.setZero();
-
-  contact_force_V_.resize(get_num_vertices(), 3);
-  contact_force_V_.setZero();
-
-  external_force_V_.resize(get_num_vertices(), 3);
-  external_force_V_.setZero();
-
-  internal_force_V_.resize(get_num_vertices(), 3);
-  internal_force_V_.setZero();
-
-  // update_pressure_soft_penalty();
-  // update_surface_tension_soft_penalty();
-  update_surface_tension_and_pressure();
-
-  // // randng_
-  // force_V_.resize(get_num_vertices(), 3);
-  // force_V_.setZero();
-  if (enable_flipping_) {
-    t_flip_ = dt_flip_; // time to next flip
-  } else {
-    t_flip_ = std::numeric_limits<double>::infinity();
-  }
-
-  // integration patch initialization
-  integration_patch_.supermesh_ = this;
-  integration_patch_.rgba_face_ = RGBA_DICT.at("meshbrane_orange");
-
-  heat_dt_ = initial_area_ / get_num_vertices();
-
-  spb_patch_plus_.supermesh_ = this;
-  spb_patch_minus_.supermesh_ = this;
 }
 
-void Membrane::init(const YAML::Node &node) {
-  set_attributes_from_yaml_node(node);
-  init_matrixmesh_from_attributes();
-  init_membrane_from_attributes();
-}
-
-void Membrane::update_geotargets() {
-  // printf("*********************Setting target_edge_length_ = %.10f\n",
-  //        average_edge_length_);
-  target_edge_length_ = average_edge_length_;
-  if (!fix_target_face_area_) {
-    // printf("Setting target_face_area_ = %.10f\n", average_face_area_);
-    target_face_area_ = average_face_area_;
+void Membrane::apply_thermal_fluctuations(double dt, double kBT,
+                                          kmc::RandomNumberGenerator &rng) {
+  if (!enable_fluctuations_) {
+    return;
   }
-  if (!fix_target_volume_) {
-    target_volume_ = total_volume_;
-  }
-}
-
-// void Membrane::init() {
-
-//   throw std::runtime_error(
-//       "Membrane::init() is not implemented yet. Use init_from_ply()
-//       instead.");
-// }
-
-void Membrane::init_from_ply() {
-  // if (sim_parameters_ == nullptr) {
-  //   printf("No parameters found for Membrane\n");
-  // } else {
-  //   printf("Initializing Membrane with parameters:\n");
-  //   // std::cout << (*sim_parameters_)[name_] << std::endl;
-  //   std::cout << parameters_ << std::endl;
-  // }
-
-  // init_mesh();
-  MatrixMesh::init_from_ply();
-  initial_area_ = average_face_area_ * get_num_faces();
-  initial_volume_ = total_volume_;
-  target_face_area_ = average_face_area_;
-  target_volume_ = total_volume_;
-  update_geotargets();
-
-  mcvec_V_.resize(get_num_vertices(), 3);
-  mcvec_V_.setZero();
-
-  force_V_.resize(get_num_vertices(), 3);
-  force_V_.setZero();
-
-  contact_force_V_.resize(get_num_vertices(), 3);
-  contact_force_V_.setZero();
-
-  external_force_V_.resize(get_num_vertices(), 3);
-  external_force_V_.setZero();
-
-  internal_force_V_.resize(get_num_vertices(), 3);
-  internal_force_V_.setZero();
-
-  // update_pressure_soft_penalty();
-  // update_surface_tension_soft_penalty();
-  update_surface_tension_and_pressure();
-
-  // // randng_
-  // force_V_.resize(get_num_vertices(), 3);
-  // force_V_.setZero();
-  if (enable_flipping_) {
-    t_flip_ = dt_flip_; // time to next flip
-  } else {
-    t_flip_ = std::numeric_limits<double>::infinity();
-  }
-
-  // integration patch initialization
-  integration_patch_.supermesh_ = this;
-  integration_patch_.rgba_face_ = RGBA_DICT.at("meshbrane_orange");
-
-  heat_dt_ = initial_area_ / get_num_vertices();
-  // belkin_dt_ = heat_dt_;
-
-  // set_node_drag_coefficient_from_bulk_viscosity();
-  // printf("*****************************************************************"
-  //        "*******************************************node_drag_coefficient_"
-  //        " = %.10f\n",
-  //        node_drag_coefficient_);
-}
-
-void Membrane::update_internal_forces() {
-  int num_vertices = get_num_vertices();
-  internal_force_V_.resize(num_vertices, 3);
-  internal_force_V_.setZero();
-  for (int v = 0; v < num_vertices; v++) {
-    internal_force_V_.row(v) += get_volume_force_v(v);
-    internal_force_V_.row(v) += get_tether_force_v(v);
-    internal_force_V_.row(v) += get_area_force_v(v);
-    internal_force_V_.row(v) += get_bending_force_v(v);
+  size_t Nv = get_num_vertices();
+  for (int v = 0; v < Nv; v++) {
+    // Vec3d force;
+    for (int i = 0; i < 3; i++) {
+      force_V_(v, i) +=
+          std::sqrt(2 * kBT * area_V_[v] * local_drag_coefficient_ / dt) *
+          rng.standard_normal();
+    }
   }
 }
 
@@ -291,16 +52,70 @@ void Membrane::update_cached_data() {
   // update_internal_forces();
 }
 
-void Membrane::update_membrane() {
-  // printf("***************************Updating membrane\n");
-  update_mesh_geometric_data();
-  update_geotargets();
+void Membrane::update_state_variables(double dt) {
 
-  update_laplacian_matrix();
-  update_mean_curvature();
-  update_gaussian_curvature();
-  update_surface_tension_and_pressure();
-  apply_forces();
+  if (use_local_drag_coefficient_) {
+    for (int v = 0; v < get_num_vertices(); v++) {
+      double drag_coefficient = local_drag_coefficient_ * area_V_[v];
+      xyz_coord_V_.row(v) += dt * force_V_.row(v) / drag_coefficient;
+    }
+  } else {
+    for (int v = 0; v < get_num_vertices(); v++) {
+      xyz_coord_V_.row(v) += dt * force_V_.row(v) / node_drag_coefficient_;
+    }
+  }
+
+  // apply_fluctuations_V(dt);
+  num_flips_ = 0;
+  if (t_flip_ <= t_) {
+    // num_flips_ = monte_flip_sweep();
+    update_mesh_geometric_data();
+    update_geotargets();
+    num_flips_ = flip_sweep();
+    // printf("num_flips = %d\n", num_flips_);
+    t_flip_ = t_flip_ + dt_flip_;
+  }
+
+  t_ += dt;
+  dt_ = dt;
+}
+
+double Membrane::dt_max() const {
+  if (use_local_drag_coefficient_) {
+    double dx_max = std::min(0.1 * target_edge_length_, dx_max_);
+    double fmax = 0.0;
+    for (int v = 0; v < get_num_vertices(); v++) {
+      fmax = std::max(fmax, math::L2norm(force_V_.row(v) / area_V_[v]));
+    }
+    return dx_max * local_drag_coefficient_ / fmax;
+  }
+  double dx_max = std::min(0.1 * target_edge_length_, dx_max_);
+  double Fmax = 0.0;
+  for (int v = 0; v < get_num_vertices(); v++) {
+    Fmax = std::max(Fmax, math::L2norm(force_V_.row(v)));
+  }
+  return dx_max * node_drag_coefficient_ / Fmax;
+}
+
+void Membrane::print_info() {
+  double A = area_F_.sum();
+  double A0 = initial_area_;
+  double V = total_volume_;
+  double V0 = initial_volume_;
+  double P = pressure_;
+  std::cout << "  " << name_ << std::endl;
+  printf("    (A-A0)/A0=%.10f\n", (A - A0) / A0);
+  printf("    (V-V0)/V0=%.10f\n", (V - V0) / V0);
+  printf("    pressure=%.10f\n", pressure_);
+  printf("    surface tension mean=%.10f\n", surface_tension_F_.mean());
+  printf("    surface tension max=%.10f\n", surface_tension_F_.maxCoeff());
+  printf("    surface tension min=%.10f\n", surface_tension_F_.minCoeff());
+  // printf("    num_flips: %d\n", num_flips_);
+  printf("    num_flips: %d\n", total_edge_flips_);
+  // printf("    num_flips/num_edges: %.10f\n",
+  //        static_cast<double>(num_flips_) /
+  //            static_cast<double>(get_num_edges()));
+  // printf("  dt=%.20f\n", dt_);
 }
 
 void Membrane::update_membrane_visuals() {
@@ -318,6 +133,357 @@ void Membrane::update_membrane_visuals() {
       spb_patch_minus_.color_edges();
     }
   }
+}
+
+///////////////////////////////////////////////////////
+// initialization /////////////////////////////////////
+///////////////////////////////////////////////////////
+void Membrane::set_attributes_from_parameters() {
+  MatrixMesh::set_attributes_from_parameters();
+  ///////////////////////////////////////////////////////
+  ///////////////////////////////////////////////////////
+  ///////////////////////////////////////////////////////
+  if (parameters_["timestep_type"]) {
+    timestep_type_ = parameters_["timestep_type"].as<std::string>();
+  }
+  // Bending force
+  if (parameters_["bending_modulus"]) {
+    bending_modulus_ = parameters_["bending_modulus"].as<double>();
+  }
+  if (parameters_["spontaneous_curvature"]) {
+    spontaneous_curvature_ = parameters_["spontaneous_curvature"].as<double>();
+  }
+  if (parameters_["splay_modulus"]) {
+    splay_modulus_ = parameters_["splay_modulus"].as<double>();
+  }
+  ///////////////////////////////////////////////////////
+  // Tether force
+  if (parameters_["dimensionless_tether_repulsive_singularity"]) {
+    dimensionless_tether_repulsive_singularity_ =
+        parameters_["dimensionless_tether_repulsive_singularity"].as<double>();
+  }
+  if (parameters_["dimensionless_tether_repulsive_onset"]) {
+    dimensionless_tether_repulsive_onset_ =
+        parameters_["dimensionless_tether_repulsive_onset"].as<double>();
+  }
+  if (parameters_["dimensionless_tether_attractive_onset"]) {
+    dimensionless_tether_attractive_onset_ =
+        parameters_["dimensionless_tether_attractive_onset"].as<double>();
+  }
+  if (parameters_["dimensionless_tether_attractive_singularity"]) {
+    dimensionless_tether_attractive_singularity_ =
+        parameters_["dimensionless_tether_attractive_singularity"].as<double>();
+  }
+  if (parameters_["tether_stiffness"]) {
+    tether_stiffness_ = parameters_["tether_stiffness"].as<double>();
+  }
+  // Area conservation force
+  if (parameters_["area_stiffness"]) {
+    area_stiffness_ = parameters_["area_stiffness"].as<double>();
+  }
+  if (parameters_["fix_target_face_area"]) {
+    fix_target_face_area_ = parameters_["fix_target_face_area"].as<bool>();
+  }
+  // Volume conservation force
+  if (parameters_["fix_target_volume"]) {
+    fix_target_volume_ = parameters_["fix_target_volume"].as<bool>();
+  }
+  if (parameters_["volume_stiffness"]) {
+    volume_stiffness_ = parameters_["volume_stiffness"].as<double>();
+  }
+  if (parameters_["node_drag_coefficient"]) {
+    node_drag_coefficient_ = parameters_["node_drag_coefficient"].as<double>();
+  }
+  ///////////////////////////////////////////////////////
+  if (parameters_["vector_field_scale"]) {
+    vector_field_scale_ = parameters_["vector_field_scale"].as<double>();
+  }
+  if (parameters_["show_force_field"]) {
+    show_force_field_ = parameters_["show_force_field"].as<bool>();
+  }
+  if (parameters_["show_mcvec_field"]) {
+    show_mcvec_field_ = parameters_["show_mcvec_field"].as<bool>();
+  }
+  if (parameters_["enable_flipping"]) {
+    enable_flipping_ = parameters_["enable_flipping"].as<bool>();
+  }
+  if (parameters_["enable_fluctuations"]) {
+    enable_fluctuations_ = parameters_["enable_fluctuations"].as<bool>();
+  }
+  if (parameters_["dt_flip"]) {
+    dt_flip_ = parameters_["dt_flip"].as<double>();
+  }
+  if (parameters_["flipping_probability"]) {
+    flipping_probability_ = parameters_["flipping_probability"].as<double>();
+  }
+  ///////////////////////////////////////////////////////
+  if (parameters_["show_contact_patches"]) {
+    show_contact_patches_ = parameters_["show_contact_patches"].as<bool>();
+  }
+  if (parameters_["pressure_type"]) {
+    pressure_type_ = parameters_["pressure_type"].as<std::string>();
+  }
+  if (parameters_["use_surface_tension_constant"]) {
+    use_surface_tension_constant_ =
+        parameters_["use_surface_tension_constant"].as<bool>();
+  }
+  if (parameters_["use_surface_tension_penalty_local"]) {
+    use_surface_tension_penalty_local_ =
+        parameters_["use_surface_tension_penalty_local"].as<bool>();
+  }
+  if (parameters_["surface_tension_constant"]) {
+    surface_tension_constant_ =
+        parameters_["surface_tension_constant"].as<double>();
+  } else if (use_surface_tension_constant_) {
+    printf(
+        "Warning: use_surface_tension_constant_ = true but no constant value "
+        "found\n");
+  }
+  if (parameters_["wca_sigma"]) {
+    wca_sigma_ = parameters_["wca_sigma"].as<double>();
+    // 0.1*r_cutoff=0.1*2^(1/6)*sigma
+    dx_max_ = 0.1122462048309373 * wca_sigma_;
+  }
+  if (parameters_["wca_epsilon"]) {
+    wca_epsilon_total_ = parameters_["wca_epsilon"].as<double>();
+  }
+  // set global parameters
+  if ((*sim_parameters_)["kBT"]) {
+    kBT_ = (*sim_parameters_)["kBT"].as<double>();
+  }
+  if ((*sim_parameters_)["dt"]) {
+    dt0_ = (*sim_parameters_)["dt"].as<double>();
+  }
+  if ((*sim_parameters_)["bulk_viscosity"]) {
+    bulk_viscosity_ = (*sim_parameters_)["bulk_viscosity"].as<double>();
+  }
+  if (parameters_["use_local_drag_coefficient"]) {
+    use_local_drag_coefficient_ =
+        parameters_["use_local_drag_coefficient"].as<bool>();
+    // local_drag_coefficient_ = 4 * M_PI * bulk_viscosity_;
+    local_drag_coefficient_ = 1.5 * bulk_viscosity_; // * 1/R but R=1
+  }
+}
+
+// void Membrane::set_attributes_from_yaml_node(const YAML::Node &node) {
+//   MatrixMesh::set_attributes_from_yaml_node(node);
+
+//   if (node["timestep_type"]) {
+//     timestep_type_ = node["timestep_type"].as<std::string>();
+//   }
+//   // Bending force
+//   if (node["bending_modulus"]) {
+//     bending_modulus_ = node["bending_modulus"].as<double>();
+//   }
+//   if (node["spontaneous_curvature"]) {
+//     spontaneous_curvature_ = node["spontaneous_curvature"].as<double>();
+//   }
+//   if (node["splay_modulus"]) {
+//     splay_modulus_ = node["splay_modulus"].as<double>();
+//   }
+//   ///////////////////////////////////////////////////////
+//   // Tether force
+//   if (node["dimensionless_tether_repulsive_singularity"]) {
+//     dimensionless_tether_repulsive_singularity_ =
+//         node["dimensionless_tether_repulsive_singularity"].as<double>();
+//   }
+//   if (node["dimensionless_tether_repulsive_onset"]) {
+//     dimensionless_tether_repulsive_onset_ =
+//         node["dimensionless_tether_repulsive_onset"].as<double>();
+//   }
+//   if (node["dimensionless_tether_attractive_onset"]) {
+//     dimensionless_tether_attractive_onset_ =
+//         node["dimensionless_tether_attractive_onset"].as<double>();
+//   }
+//   if (node["dimensionless_tether_attractive_singularity"]) {
+//     dimensionless_tether_attractive_singularity_ =
+//         node["dimensionless_tether_attractive_singularity"].as<double>();
+//   }
+//   if (node["tether_stiffness"]) {
+//     tether_stiffness_ = node["tether_stiffness"].as<double>();
+//   }
+//   // Area conservation force
+//   if (node["area_stiffness"]) {
+//     area_stiffness_ = node["area_stiffness"].as<double>();
+//   }
+//   if (node["fix_target_face_area"]) {
+//     fix_target_face_area_ = node["fix_target_face_area"].as<bool>();
+//   }
+//   // Volume conservation force
+//   if (node["fix_target_volume"]) {
+//     fix_target_volume_ = node["fix_target_volume"].as<bool>();
+//   }
+//   if (node["volume_stiffness"]) {
+//     volume_stiffness_ = node["volume_stiffness"].as<double>();
+//   }
+//   if (node["node_drag_coefficient"]) {
+//     node_drag_coefficient_ = node["node_drag_coefficient"].as<double>();
+//   }
+//   ///////////////////////////////////////////////////////
+//   if (node["vector_field_scale"]) {
+//     vector_field_scale_ = node["vector_field_scale"].as<double>();
+//   }
+//   if (node["show_force_field"]) {
+//     show_force_field_ = node["show_force_field"].as<bool>();
+//   }
+//   if (node["show_mcvec_field"]) {
+//     show_mcvec_field_ = node["show_mcvec_field"].as<bool>();
+//   }
+//   if (node["enable_flipping"]) {
+//     enable_flipping_ = node["enable_flipping"].as<bool>();
+//   }
+//   if (node["enable_fluctuations"]) {
+//     enable_fluctuations_ = node["enable_fluctuations"].as<bool>();
+//   }
+//   if (node["dt_flip"]) {
+//     dt_flip_ = node["dt_flip"].as<double>();
+//   }
+//   if (node["flipping_probability"]) {
+//     flipping_probability_ = node["flipping_probability"].as<double>();
+//   }
+//   ///////////////////////////////////////////////////////
+//   if (node["show_contact_patches"]) {
+//     show_contact_patches_ = node["show_contact_patches"].as<bool>();
+//   }
+//   if (node["pressure_type"]) {
+//     pressure_type_ = node["pressure_type"].as<std::string>();
+//   }
+//   if (node["use_surface_tension_constant"]) {
+//     use_surface_tension_constant_ =
+//         node["use_surface_tension_constant"].as<bool>();
+//   }
+//   if (node["use_surface_tension_penalty_local"]) {
+//     use_surface_tension_penalty_local_ =
+//         node["use_surface_tension_penalty_local"].as<bool>();
+//   }
+//   if (node["surface_tension_constant"]) {
+//     surface_tension_constant_ =
+//     node["surface_tension_constant"].as<double>();
+//   } else if (use_surface_tension_constant_) {
+//     printf(
+//         "Warning: use_surface_tension_constant_ = true but no constant value
+//         " "found\n");
+//   }
+//   if (node["wca_sigma"]) {
+//     wca_sigma_ = node["wca_sigma"].as<double>();
+//     // 0.1*r_cutoff=0.1*2^(1/6)*sigma
+//     dx_max_ = 0.1122462048309373 * wca_sigma_;
+//   }
+//   if (node["wca_epsilon"]) {
+//     wca_epsilon_total_ = node["wca_epsilon"].as<double>();
+//   }
+//   // set global parameters
+//   if ((*sim_parameters_)["kBT"]) {
+//     kBT_ = (*sim_parameters_)["kBT"].as<double>();
+//   }
+//   if ((*sim_parameters_)["dt"]) {
+//     dt0_ = (*sim_parameters_)["dt"].as<double>();
+//   }
+//   if ((*sim_parameters_)["bulk_viscosity"]) {
+//     bulk_viscosity_ = (*sim_parameters_)["bulk_viscosity"].as<double>();
+//   }
+//   if (node["use_local_drag_coefficient"]) {
+//     use_local_drag_coefficient_ =
+//     node["use_local_drag_coefficient"].as<bool>();
+//     // local_drag_coefficient_ = 4 * M_PI * bulk_viscosity_;
+//     local_drag_coefficient_ = 1.5 * bulk_viscosity_; // * 1/R but R=1
+//   }
+// }
+
+void Membrane::init_membrane_from_attributes() {
+
+  initial_area_ = average_face_area_ * get_num_faces();
+  initial_volume_ = total_volume_;
+  target_face_area_ = average_face_area_;
+  target_volume_ = total_volume_;
+  update_geotargets();
+
+  mcvec_V_.resize(get_num_vertices(), 3);
+  mcvec_V_.setZero();
+
+  force_V_.resize(get_num_vertices(), 3);
+  force_V_.setZero();
+
+  // contact_force_V_.resize(get_num_vertices(), 3);
+  // contact_force_V_.setZero();
+
+  // external_force_V_.resize(get_num_vertices(), 3);
+  // external_force_V_.setZero();
+
+  // internal_force_V_.resize(get_num_vertices(), 3);
+  // internal_force_V_.setZero();
+
+  // update_pressure_soft_penalty();
+  // update_surface_tension_soft_penalty();
+  update_surface_tension_and_pressure();
+
+  // // randng_
+  // force_V_.resize(get_num_vertices(), 3);
+  // force_V_.setZero();
+  if (enable_flipping_) {
+    t_flip_ = dt_flip_; // time to next flip
+  } else {
+    t_flip_ = std::numeric_limits<double>::infinity();
+  }
+
+  // integration patch initialization
+  integration_patch_.supermesh_ = this;
+  integration_patch_.rgba_face_ = RGBA_DICT.at("meshbrane_orange");
+
+  spb_patch_plus_.supermesh_ = this;
+  spb_patch_minus_.supermesh_ = this;
+}
+
+// void Membrane::init(const YAML::Node &node) {
+//   set_attributes_from_yaml_node(node);
+//   init_matrixmesh_from_attributes();
+//   init_membrane_from_attributes();
+// }
+
+void Membrane::update_geotargets() {
+  target_edge_length_ = average_edge_length_;
+  if (!fix_target_face_area_) {
+    target_face_area_ = average_face_area_;
+  }
+  if (!fix_target_volume_) {
+    target_volume_ = total_volume_;
+  }
+}
+
+void Membrane::init_from_ply() {
+  MatrixMesh::init_from_ply();
+  initial_area_ = average_face_area_ * get_num_faces();
+  initial_volume_ = total_volume_;
+  target_face_area_ = average_face_area_;
+  target_volume_ = total_volume_;
+  update_geotargets();
+
+  mcvec_V_.resize(get_num_vertices(), 3);
+  mcvec_V_.setZero();
+
+  force_V_.resize(get_num_vertices(), 3);
+  force_V_.setZero();
+
+  update_surface_tension_and_pressure();
+
+  // // randng_
+  // force_V_.resize(get_num_vertices(), 3);
+  // force_V_.setZero();
+  if (enable_flipping_) {
+    t_flip_ = dt_flip_; // time to next flip
+  } else {
+    t_flip_ = std::numeric_limits<double>::infinity();
+  }
+
+  // integration patch initialization
+  integration_patch_.supermesh_ = this;
+  integration_patch_.rgba_face_ = RGBA_DICT.at("meshbrane_orange");
+
+  // set_node_drag_coefficient_from_bulk_viscosity();
+  // printf("*****************************************************************"
+  //        "*******************************************node_drag_coefficient_"
+  //        " = %.10f\n",
+  //        node_drag_coefficient_);
 }
 
 ///////////////////////////////////////////////////////
@@ -461,103 +627,24 @@ void Membrane::apply_bending_force_V() {
   }
 }
 
-Vec3d Membrane::get_fluctuations_v(int v, double dt) {
-
-  if (use_local_drag_coefficient_) {
-    Vec3d dx = Vec3d::Zero();
-    for (int i = 0; i < 3; i++) {
-      dx[i] = std::sqrt(2 * kBT_ * dt * area_V_[v] / local_drag_coefficient_) *
-              randng_.standard_normal();
-    }
-    return dx;
-  }
-  Vec3d dx = Vec3d::Zero();
-  for (int i = 0; i < 3; i++) {
-    dx[i] = std::sqrt(2 * kBT_ * dt / node_drag_coefficient_) *
-            randng_.standard_normal();
-  }
-  // printf("dx_noise: %.10f %.10f %.10f\n", dx(0), dx(1), dx(2));
-  return dx;
-}
-
-void Membrane::apply_fluctuations_V(double dt) {
-  if (!enable_fluctuations_) {
-    return;
-  }
-  int num_vertices = get_num_vertices();
-  for (int v = 0; v < num_vertices; v++) {
-    xyz_coord_V_.row(v) += get_fluctuations_v(v, dt);
-  }
-}
-
-void Membrane::apply_contact_force_V() {
-  int num_vertices = get_num_vertices();
-  for (int v = 0; v < num_vertices; v++) {
-    force_V_.row(v) += contact_force_V_.row(v);
-  }
-}
-
-void Membrane::apply_external_force_V() {
-  int num_vertices = get_num_vertices();
-  for (int v = 0; v < num_vertices; v++) {
-    force_V_.row(v) += external_force_V_.row(v);
-  }
-}
-
 void Membrane::update_force_arrows() {
-  // size_t num_vertices = get_num_vertices();
-  // for (int i = 0; i < 3; i++) {
-  //   force_arrows_[i].resize(num_vertices, 3);
-  // }
-  // double shaft_len = 0.9;
-  // double tip_len = 0.1;
-  // double force_scale = vector_field_scale_;
-  // for (int v = 0; v < num_vertices; v++) {
-  //   Vec3d p1 = xyz_coord_V_.row(v);
-  //   Vec3d u12 = force_scale * force_V_.row(v);
-  //   Vec3d p2 = p1 + u12;
-  //   Vec3d n = normal_V_.row(v);
-  //   Vec3d u12_perp;
-  //   math::cross_inplace(n, u12, u12_perp);
-
-  //   Vec3d p3 = p2 - tip_len * u12 + tip_len * u12_perp;
-
-  //   force_arrows_[0].row(v) = p1;
-  //   force_arrows_[1].row(v) = p2;
-  //   force_arrows_[2].row(v) = p3;
-  // }
   Eigen::Vector3d rgb = force_arrows_.rgb_;
   double scale = vector_field_scale_;
   force_arrows_.update(xyz_coord_V_, force_V_, scale, rgb);
 }
 
 void Membrane::update_mcvec_arrows() {
-  // size_t num_vertices = get_num_vertices();
-  // for (int i = 0; i < 3; i++) {
-  //   mcvec_arrows_[i].resize(num_vertices, 3);
-  // }
-  // double shaft_len = 0.9;
-  // double tip_len = 0.1;
-  // double scale = vector_field_scale_;
-  // for (int v = 0; v < num_vertices; v++) {
-  //   Vec3d p1 = xyz_coord_V_.row(v);
-  //   Vec3d u12 = scale * mcvec_V_.row(v);
-  //   Vec3d p2 = p1 + u12;
-  //   Vec3d n = normal_V_.row(v);
-  //   Vec3d u12_perp;
-  //   math::cross_inplace(n, u12, u12_perp);
-
-  //   Vec3d p3 = p2 - tip_len * u12 + tip_len * u12_perp;
-
-  //   mcvec_arrows_[0].row(v) = p1;
-  //   mcvec_arrows_[1].row(v) = p2;
-  //   mcvec_arrows_[2].row(v) = p3;
   Eigen::Vector3d rgb = mcvec_arrows_.rgb_;
   double scale = vector_field_scale_;
   mcvec_arrows_.update(xyz_coord_V_, mcvec_V_, scale, rgb);
 }
 
 double Membrane::monte_flip_probability(int e) const {
+  // requires cached data to be up to date
+  // target_edge_length_
+  // length_E_
+  // area_F_
+  // target_face_area_
   int h0 = h_directed_E_(e);
   int h1 = h_twin_h(h0);
   int h2 = h_next_h(h0);
@@ -582,8 +669,8 @@ double Membrane::monte_flip_probability(int e) const {
   //   x = xyz_coord_v(v0);
   //   xp = xyz_coord_v(v2);
   //   norm_dx = math::L2norm(x - xp);
-  norm_dx_pre = length_E_[e];
-  zpre = norm_dx_pre / target_edge_length_;
+  norm_dx_pre = length_E_[e];               // ***
+  zpre = norm_dx_pre / target_edge_length_; // ***
 
   double Utether_pre =
       Utether(zpre, 1.0, 1.0, dimensionless_tether_repulsive_singularity_,
@@ -676,213 +763,6 @@ int Membrane::flip_sweep() {
   int num_flips{0};
   num_flips = monte_flip_sweep();
   return num_flips;
-}
-
-double Membrane::dt_max() const {
-  if (use_local_drag_coefficient_) {
-    double dx_max = std::min(0.1 * target_edge_length_, dx_max_);
-    double fmax = 0.0;
-    for (int v = 0; v < get_num_vertices(); v++) {
-      fmax = std::max(fmax, math::L2norm(force_V_.row(v) / area_V_[v]));
-    }
-    return dx_max * local_drag_coefficient_ / fmax;
-  }
-  double dx_max = std::min(0.1 * target_edge_length_, dx_max_);
-  double Fmax = 0.0;
-  for (int v = 0; v < get_num_vertices(); v++) {
-    Fmax = std::max(Fmax, math::L2norm(force_V_.row(v)));
-  }
-  return dx_max * node_drag_coefficient_ / Fmax;
-}
-
-void Membrane::euler_step(double dt) {
-
-  if (use_local_drag_coefficient_) {
-    for (int v = 0; v < get_num_vertices(); v++) {
-      double drag_coefficient = local_drag_coefficient_ * area_V_[v];
-      xyz_coord_V_.row(v) += dt * force_V_.row(v) / drag_coefficient;
-    }
-
-    t_ += dt;
-    return;
-  }
-
-  for (int v = 0; v < get_num_vertices(); v++) {
-    xyz_coord_V_.row(v) += dt * force_V_.row(v) / node_drag_coefficient_;
-  }
-
-  t_ += dt;
-}
-
-void Membrane::time_step(double dt) {
-
-  if (use_local_drag_coefficient_) {
-    for (int v = 0; v < get_num_vertices(); v++) {
-      double drag_coefficient = local_drag_coefficient_ * area_V_[v];
-      xyz_coord_V_.row(v) += dt * force_V_.row(v) / drag_coefficient;
-    }
-  } else {
-    for (int v = 0; v < get_num_vertices(); v++) {
-      xyz_coord_V_.row(v) += dt * force_V_.row(v) / node_drag_coefficient_;
-    }
-  }
-
-  apply_fluctuations_V(dt);
-  num_flips_ = 0;
-  if (t_flip_ <= t_) {
-    // num_flips_ = monte_flip_sweep();
-    num_flips_ = flip_sweep();
-    // printf("num_flips = %d\n", num_flips_);
-    t_flip_ = t_flip_ + dt_flip_;
-  }
-
-  t_ += dt;
-  dt_ = dt;
-}
-
-void Membrane::evolve_until(double t_end) {
-  while (t_ < t_end) {
-    update_membrane();
-    dt_ = std::min(dt0_, dt_max());
-    double dt_end = t_end - t_;
-    dt_ = std::min(dt_, dt_end);
-    // if (dt != dt0_) {
-    //   printf("dt=dtmax, t = %.20f, %.20f\n", dt, t_);
-    // } else {
-    //   printf("dt=dt0, t = %.20f, %.20f\n", dt, t_);
-    // }
-    euler_step(dt_);
-    apply_fluctuations_V(dt_);
-    num_flips_ = 0;
-    if (t_flip_ <= t_) {
-      // num_flips_ = monte_flip_sweep();
-      num_flips_ = flip_sweep();
-      // printf("num_flips = %d\n", num_flips_);
-      t_flip_ = t_flip_ + dt_flip_;
-    }
-    // update_membrane();
-  }
-}
-
-void Membrane::evolve_until(double t_end, double dt0) {
-  while (t_ < t_end) {
-    dt_ = std::min(dt0, dt_max());
-    double dt_end = t_end - t_;
-    dt_ = std::min(dt_, dt_end);
-    euler_step(dt_);
-    apply_fluctuations_V(dt_);
-    num_flips_ = 0;
-    if (t_flip_ <= t_) {
-      num_flips_ = flip_sweep();
-      t_flip_ = t_flip_ + dt_flip_;
-    }
-    update_membrane();
-  }
-}
-
-void Membrane::save_state(const fs::path &filename) const {
-  //
-  //
-  //
-}
-
-//////////////////////
-// to be deprecated //
-//////////////////////
-void Membrane::update_curvature_data() {
-  int num_vertices = get_num_vertices();
-  mean_curvature_V_.resize(num_vertices);
-  lap_mean_curvature_V_.resize(num_vertices);
-  gaussian_curvature_V_.resize(num_vertices);
-  mcvec_V_ = laplacian(xyz_coord_V_);
-  for (int v = 0; v < num_vertices; v++) {
-    // Vec3d n = normal_V_.row(v);
-    Vec3d mcvec = mcvec_V_.row(v);
-    int f = f_left_h(h_out_v(v));
-    Vec3d n = normal_F_.row(f);
-    double mcvec_sign = math::sign(math::dot(mcvec, n));
-    mean_curvature_V_[v] = mcvec_sign * math::L2norm(mcvec) / 2;
-    gaussian_curvature_V_[v] = get_gaussian_curvature_angle_defect_v(v);
-  }
-  lap_mean_curvature_V_ = laplacian(mean_curvature_V_);
-  // lap_mean_curvature_V_ =
-  // adaptive_belkin_laplacian(mean_curvature_V_);
-}
-
-bool Membrane::tether_wants_flip(int e) const {
-  int h0 = h_directed_E_(e);
-  int h1 = h_twin_h(h0);
-  int h2 = h_next_h(h0);
-  int h3 = h_next_h(h2);
-  int h4 = h_next_h(h1);
-  int h5 = h_next_h(h4);
-  int v0 = v_origin_h(h1);
-  int v1 = v_origin_h(h3);
-  int v2 = v_origin_h(h0);
-  int v3 = v_origin_h(h5);
-
-  Vec3d x;
-  Vec3d xp;
-  double norm_dx;
-  double zpre;
-  double zpost;
-  double Upre = 0;
-  double Upost = 0;
-
-  x = xyz_coord_v(v0);
-  xp = xyz_coord_v(v2);
-  norm_dx = math::L2norm(x - xp);
-  zpre = norm_dx / target_edge_length_;
-
-  Upre = Utether(zpre, 1.0, 1.0, dimensionless_tether_repulsive_singularity_,
-                 dimensionless_tether_repulsive_onset_,
-                 dimensionless_tether_attractive_onset_,
-                 dimensionless_tether_attractive_singularity_);
-
-  x = xyz_coord_v(v3);
-  xp = xyz_coord_v(v1);
-  norm_dx = math::L2norm(x - xp);
-  zpost = norm_dx / target_edge_length_;
-
-  Upost = Utether(zpost, 1.0, 1.0, dimensionless_tether_repulsive_singularity_,
-                  dimensionless_tether_repulsive_onset_,
-                  dimensionless_tether_attractive_onset_,
-                  dimensionless_tether_attractive_singularity_);
-
-  // check if they are infinite
-  if (std::isinf(Upre) && std::isinf(Upost)) {
-    return std::abs(zpost - 1) < std::abs(zpre - 1);
-  }
-
-  return Upost < Upre;
-}
-
-int Membrane::tether_flip_sweep() {
-  int flip_count = 0;
-  int num_edges = get_num_edges();
-  for (int e = 0; e < num_edges; e++) {
-    if (!h_is_flippable(h_directed_E_(e))) {
-      continue;
-    }
-    // int v0 = v_origin_h(h_directed_E_(e));
-    // int v1 = v_origin_h(h_twin_h(h_directed_E_(e)));
-    // int valence0 = get_valence_v(v0);
-    // int valence1 = get_valence_v(v1);
-    // if (valence0 <= 5 || valence1 <= 5) {
-    //   continue;
-    // }
-    if (tether_wants_flip(e)) {
-      flip_edge(e);
-      flip_count++;
-      continue;
-    }
-    double _r = static_cast<double>(rand()) / static_cast<double>(RAND_MAX);
-    if (_r < 0.01) {
-      flip_edge(e);
-      flip_count++;
-    }
-  }
-  return flip_count;
 }
 
 } // namespace meshbrane

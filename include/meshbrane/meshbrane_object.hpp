@@ -4,23 +4,74 @@
  * @file meshbrane_object.hpp
  */
 
+// #include "meshbrane/pair_interaction.hpp"
 #include <cstddef> // size_t
 #include <limits>
 #include <yaml-cpp/yaml.h>
 
 namespace meshbrane {
 
+class RandomNumberGenerator;
+
 /**
  * @brief Base class for simulated objects.
+ *
+ * @details Each simulated object...
  */
+// struct MeshBraneObject {
+//   int index_{std::numeric_limits<int>::max()};
+//   MeshBraneObject *supercomponent_{nullptr};
+//   std::vector<std::unique_ptr<MeshBraneObject>> subcomponents_{};
+//   std::vector<std::unique_ptr<PairInteraction>> subcomponent_interactions_{};
+
+//   bool is_composite() { return subcomponents_.size() != 0; }
+
+//   virtual ~MeshBraneObject() = default;
+//   virtual void set_attributes_from_yaml_node(const YAML::Node &node) = 0;
+
+//   virtual void init(const YAML::Node &node) = 0;
+
+//   void set_index(int index) { index_ = index; }
+//   int get_index() const { return index_; }
+
+//   // some objects do not have subcomponents, but still have
+//   // internal interactions. For example, Membrane bending forces.
+//   // If numerical state vars are all owned by subcomponents, this does
+//   nothing virtual void apply_self_interactions() {};
+//   // Accumulate forces/torques from internal interactions
+//   void apply_internal_interactions() {
+//     apply_self_interactions();
+//     for (auto &interaction : subcomponent_interactions_) {
+//       interaction->interact();
+//     }
+//   }
+//   // Accumulate fluctuation forces for own state vars.
+//   // If numerical state vars are all owned by subcomponents, this does
+//   nothing virtual void apply_thermal_fluctuations_to_self(double dt, double
+//   kBT,
+//                                                   RandomNumberGenerator *rng)
+//                                                   {
+//   };
+//   // Accumulate thermal fluctuation forces for self and all subcomponents.
+//   void apply_thermal_fluctuations(double dt, double kBT,
+//                                   RandomNumberGenerator *rng) {
+//     apply_thermal_fluctuations_to_self(dt, kBT, rng);
+//     for (auto &component : subcomponents_) {
+//       component->apply_thermal_fluctuations(dt, kBT, rng);
+//     }
+//   };
+// };
+
 struct MeshBraneObject {
   int index_{std::numeric_limits<int>::max()};
+  // MeshBraneObject *supercomponent_{nullptr};
+  // std::vector<std::unique_ptr<MeshBraneObject>> subcomponents_{};
+  // std::vector<std::unique_ptr<PairInteraction>> subcomponent_interactions_{};
 
   virtual ~MeshBraneObject() = default;
+  // virtual void set_attributes_from_yaml_node(const YAML::Node &node) = 0;
 
-  virtual void set_attributes_from_yaml_node(const YAML::Node &node) = 0;
-
-  virtual void init(const YAML::Node &node) = 0;
+  // virtual void init(const YAML::Node &node) = 0;
 
   void set_index(int index) { index_ = index; }
   int get_index() const { return index_; }

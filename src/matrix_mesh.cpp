@@ -19,68 +19,97 @@ namespace fs = std::filesystem;
 
 namespace meshbrane {
 
-void MatrixMesh::set_attributes_from_yaml_node(const YAML::Node &node) {
-  if (node["ply_path"]) {
-    ply_path_ = std::filesystem::path(node["ply_path"].as<std::string>());
-  }
-  if (node["draw_wireframe"]) {
-    draw_wireframe_ = node["draw_wireframe"].as<bool>(); // true
-  }
-  if (node["show_half_edges"]) {
-    show_half_edges_ = node["show_half_edges"].as<bool>(); // true
-  }
-  if (node["show_vertices"]) {
-    show_vertices_ = node["show_vertices"].as<bool>(); // true
-  }
-  if (node["show_edges"]) {
-    show_edges_ = node["show_edges"].as<bool>(); // true
-  }
-  if (node["rgba_face"]) {
-    rgba_face_ = Eigen::Map<Eigen::Vector4d>(
-        node["rgba_face"].as<std::vector<double>>().data());
-  }
-  if (node["rgba_edge"]) {
-    rgba_edge_ = Eigen::Map<Eigen::Vector4d>(
-        node["rgba_edge"].as<std::vector<double>>().data());
-  }
-  if (node["rgba_vertex"]) {
-    rgba_vertex_ = Eigen::Map<Eigen::Vector4d>(
-        node["rgba_vertex"].as<std::vector<double>>().data());
-  }
-  if (node["rgba_half_edge"]) {
-    rgba_half_edge_ = Eigen::Map<Eigen::Vector4d>(
-        node["rgba_half_edge"].as<std::vector<double>>().data());
-  }
-  if (node["radius_vertex"]) {
-    radius_vertex_ = node["radius_vertex"].as<double>();
-  }
-  if (node["laplacian_type"]) {
-    laplacian_type_ =
-        laplacian_type_from_string(node["laplacian_type"].as<std::string>());
-  }
-  if (node["atol"]) {
-    belkin_atol_ = node["atol"].as<double>();
-  }
-  if (node["rtol"]) {
-    belkin_rtol_ = node["rtol"].as<double>();
-  }
-  if (node["belkin_dt"]) {
-    belkin_dt_ = node["belkin_dt"].as<double>();
-  }
-  if (node["belkin_min_ring"]) {
-    belkin_min_ring_ = node["belkin_min_ring"].as<int>();
-  }
-  if (node["heat_dt_multiple"]) {
-    heat_dt_multiple_ = node["heat_dt_multiple"].as<double>();
-  }
-  if (node["construct_laplacian_matrix"]) {
-    construct_laplacian_matrix_ = node["construct_laplacian_matrix"].as<bool>();
-  }
-  if (node["gaussian_curvature_type"]) {
-    gaussian_curvature_type_ = gaussian_curvature_type_from_string(
-        node["gaussian_curvature_type"].as<std::string>());
-  }
+////////////////////////////////////////////////
+////////////////////////
+// Initialization //////
+////////////////////////
+
+MatrixMesh::MatrixMesh(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
+                       const Samplesi &v_origin_H, const Samplesi &h_next_H,
+                       const Samplesi &h_twin_H, const Samplesi &f_left_H,
+                       const Samplesi &h_right_F, const Samplesi &h_negative_B)
+    : xyz_coord_V_(xyz_coord_V), h_out_V_(h_out_V), v_origin_H_(v_origin_H),
+      h_next_H_(h_next_H), h_twin_H_(h_twin_H), f_left_H_(f_left_H),
+      h_right_F_(h_right_F), h_negative_B_(h_negative_B) {
+  throw std::runtime_error(
+      "MatrixMesh::MatrixMesh(...stuff from he tuple...) ");
 }
+
+MatrixMesh::MatrixMesh(const YAML::Node &parameters) {
+  parameters_ = parameters;
+  set_attributes_from_parameters();
+  if (ply_path_.empty()) {
+    throw std::runtime_error(
+        "MatrixMesh constructor: ply_path is required in parameters");
+  }
+  init_from_ply();
+}
+
+////////////////////////////////////////////////
+
+// void MatrixMesh::set_attributes_from_yaml_node(const YAML::Node &node) {
+//   if (node["ply_path"]) {
+//     ply_path_ = std::filesystem::path(node["ply_path"].as<std::string>());
+//   }
+//   if (node["draw_wireframe"]) {
+//     draw_wireframe_ = node["draw_wireframe"].as<bool>(); // true
+//   }
+//   if (node["show_half_edges"]) {
+//     show_half_edges_ = node["show_half_edges"].as<bool>(); // true
+//   }
+//   if (node["show_vertices"]) {
+//     show_vertices_ = node["show_vertices"].as<bool>(); // true
+//   }
+//   if (node["show_edges"]) {
+//     show_edges_ = node["show_edges"].as<bool>(); // true
+//   }
+//   if (node["rgba_face"]) {
+//     rgba_face_ = Eigen::Map<Eigen::Vector4d>(
+//         node["rgba_face"].as<std::vector<double>>().data());
+//   }
+//   if (node["rgba_edge"]) {
+//     rgba_edge_ = Eigen::Map<Eigen::Vector4d>(
+//         node["rgba_edge"].as<std::vector<double>>().data());
+//   }
+//   if (node["rgba_vertex"]) {
+//     rgba_vertex_ = Eigen::Map<Eigen::Vector4d>(
+//         node["rgba_vertex"].as<std::vector<double>>().data());
+//   }
+//   if (node["rgba_half_edge"]) {
+//     rgba_half_edge_ = Eigen::Map<Eigen::Vector4d>(
+//         node["rgba_half_edge"].as<std::vector<double>>().data());
+//   }
+//   if (node["radius_vertex"]) {
+//     radius_vertex_ = node["radius_vertex"].as<double>();
+//   }
+//   if (node["laplacian_type"]) {
+//     laplacian_type_ =
+//         laplacian_type_from_string(node["laplacian_type"].as<std::string>());
+//   }
+//   if (node["atol"]) {
+//     belkin_atol_ = node["atol"].as<double>();
+//   }
+//   if (node["rtol"]) {
+//     belkin_rtol_ = node["rtol"].as<double>();
+//   }
+//   if (node["belkin_dt"]) {
+//     belkin_dt_ = node["belkin_dt"].as<double>();
+//   }
+//   if (node["belkin_min_ring"]) {
+//     belkin_min_ring_ = node["belkin_min_ring"].as<int>();
+//   }
+//   if (node["heat_dt_multiple"]) {
+//     heat_dt_multiple_ = node["heat_dt_multiple"].as<double>();
+//   }
+//   if (node["construct_laplacian_matrix"]) {
+//     construct_laplacian_matrix_ =
+//     node["construct_laplacian_matrix"].as<bool>();
+//   }
+//   if (node["gaussian_curvature_type"]) {
+//     gaussian_curvature_type_ = gaussian_curvature_type_from_string(
+//         node["gaussian_curvature_type"].as<std::string>());
+//   }
+// }
 
 void MatrixMesh::init_matrixmesh_from_attributes() {
   if (ply_path_.empty()) {
@@ -92,10 +121,10 @@ void MatrixMesh::init_matrixmesh_from_attributes() {
   integration_patch_.supermesh_ = this;
 }
 
-void MatrixMesh::init(const YAML::Node &node) {
-  set_attributes_from_yaml_node(node);
-  init_matrixmesh_from_attributes();
-}
+// void MatrixMesh::init(const YAML::Node &node) {
+//   set_attributes_from_yaml_node(node);
+//   init_matrixmesh_from_attributes();
+// }
 /////////////////////////
 // Convergence testing //
 /////////////////////////
@@ -532,6 +561,7 @@ void MatrixMesh::init_mesh() {
 ///////////////////////////////////////////////////////
 // Constructors and Mesh I/O //////////////////////////
 ///////////////////////////////////////////////////////
+
 void MatrixMesh::load_ply() {
   if (ply_path_.empty()) {
     printf("MatrixMesh::load_ply: ply_path_ is empty");
@@ -548,45 +578,20 @@ void MatrixMesh::load_ply() {
   h_negative_B_ = std::get<7>(het);
 }
 
-MatrixMesh::MatrixMesh(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
-                       const Samplesi &v_origin_H, const Samplesi &h_next_H,
-                       const Samplesi &h_twin_H, const Samplesi &f_left_H,
-                       const Samplesi &h_right_F, const Samplesi &h_negative_B)
-    : xyz_coord_V_(xyz_coord_V), h_out_V_(h_out_V), v_origin_H_(v_origin_H),
-      h_next_H_(h_next_H), h_twin_H_(h_twin_H), f_left_H_(f_left_H),
-      h_right_F_(h_right_F), h_negative_B_(h_negative_B) {
-  //   populate_vertices();
-}
-
-MatrixMesh::MatrixMesh(const fs::path &ply_path) {
-  // HalfEdgeTuple het = mesh_io::load_he_samples_from_ply(ply_path);
-  // mesh_io::MeshBuilder mc = mesh_io::MeshBuilder::from_he_ply(ply_path,
-  // false);
-  // xyz_coord_V_ = std::get<0>(het);
-  // h_out_V_ = std::get<1>(het);
-  // v_origin_H_ = std::get<2>(het);
-  // h_next_H_ = std::get<3>(het);
-  // h_twin_H_ = std::get<4>(het);
-  // f_left_H_ = std::get<5>(het);
-  // h_right_F_ = std::get<6>(het);
-  // h_negative_B_ = std::get<7>(het);
-  ply_path_ = ply_path;
-  load_ply();
-}
-
-/**
- * @brief Construct a new MatrixMesh object from a half-edge ply.
- *
- * @param ply_path
- * @return MatrixMesh
- */
-MatrixMesh MatrixMesh::from_he_ply(const fs::path &ply_path) {
-  mesh_io::MeshBuilder mc = mesh_io::MeshBuilder::from_he_ply(ply_path, false);
-  auto [xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H,
-        h_right_F, h_negative_B] = mc.he_samples;
-  return MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
-                    f_left_H, h_right_F, h_negative_B);
-}
+// /**
+//  * @brief Construct a new MatrixMesh object from a half-edge ply.
+//  *
+//  * @param ply_path
+//  * @return MatrixMesh
+//  */
+// MatrixMesh MatrixMesh::from_he_ply(const fs::path &ply_path) {
+//   mesh_io::MeshBuilder mc = mesh_io::MeshBuilder::from_he_ply(ply_path,
+//   false); auto [xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
+//   f_left_H,
+//         h_right_F, h_negative_B] = mc.he_samples;
+//   return MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
+//                     f_left_H, h_right_F, h_negative_B);
+// }
 
 /**
  * @brief Save the mesh to a half-edge ply file.
@@ -600,31 +605,32 @@ void MatrixMesh::write_he_ply(const fs::path &ply_path) const {
       h_right_F_, h_negative_B_, ply_path);
 }
 
-/**
- * @brief Construct a new MatrixMesh object from a vertex-face samples. See
- * `meshbrane::VertexFaceTuple`.
- *
- * @param xyz_coord_V
- * @param V_cycle_F
- * @return MatrixMesh
- */
-MatrixMesh MatrixMesh::from_vf_samples(const Samples3d &xyz_coord_V,
-                                       const Samples3i &V_cycle_F) {
-  mesh_io::MeshBuilder mc =
-      mesh_io::MeshBuilder::from_vf_samples(xyz_coord_V, V_cycle_F, true);
-  auto [xyz_coord_V0, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H,
-        h_right_F, h_negative_B] = mc.he_samples;
-  return MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
-                    f_left_H, h_right_F, h_negative_B);
-}
+// /**
+//  * @brief Construct a new MatrixMesh object from a vertex-face samples. See
+//  * `meshbrane::VertexFaceTuple`.
+//  *
+//  * @param xyz_coord_V
+//  * @param V_cycle_F
+//  * @return MatrixMesh
+//  */
+// MatrixMesh MatrixMesh::from_vf_samples(const Samples3d &xyz_coord_V,
+//                                        const Samples3i &V_cycle_F) {
+//   mesh_io::MeshBuilder mc =
+//       mesh_io::MeshBuilder::from_vf_samples(xyz_coord_V, V_cycle_F, true);
+//   auto [xyz_coord_V0, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H,
+//         h_right_F, h_negative_B] = mc.he_samples;
+//   return MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
+//                     f_left_H, h_right_F, h_negative_B);
+// }
 
-MatrixMesh MatrixMesh::from_vf_ply(const fs::path &ply_path) {
-  mesh_io::MeshBuilder mc = mesh_io::MeshBuilder::from_vf_ply(ply_path, true);
-  auto [xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H,
-        h_right_F, h_negative_B] = mc.he_samples;
-  return MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
-                    f_left_H, h_right_F, h_negative_B);
-}
+// MatrixMesh MatrixMesh::from_vf_ply(const fs::path &ply_path) {
+//   mesh_io::MeshBuilder mc = mesh_io::MeshBuilder::from_vf_ply(ply_path,
+//   true); auto [xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
+//   f_left_H,
+//         h_right_F, h_negative_B] = mc.he_samples;
+//   return MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
+//                     f_left_H, h_right_F, h_negative_B);
+// }
 
 void MatrixMesh::update_vef_from_he() {
 
@@ -2289,30 +2295,17 @@ Samples MatrixMesh::guckenberger_laplacian(Samples &phi) {
   lap_phi.setZero();
   for (int ix{0}; ix < num_vertices; ix++) {
     Vec3d x = xyz_coord_V_.row(ix);
-    heat_dt_ = heat_dt_multiple_ * area_V_[ix];
+    double heat_dt = heat_dt_multiple_ * area_V_[ix];
     for (int f{0}; f < get_num_faces(); f++) {
       for (int iy : V_cycle_F_.row(f)) {
         Vec3d y = xyz_coord_V_.row(iy);
         double A = area_F_[f];
-        lap_phi.row(ix) += (A / (3 * heat_dt_)) *
-                           heat_parametrix2d(x, y, heat_dt_) *
+        lap_phi.row(ix) += (A / (3 * heat_dt)) *
+                           heat_parametrix2d(x, y, heat_dt) *
                            (phi.row(iy) - phi.row(ix));
       }
     }
   }
-  // auto num_vertices = get_num_vertices();
-  // Eigen::MatrixXd lap_phi(phi);
-  // lap_phi.setZero();
-  // for (int ix{0}; ix < num_vertices; ix++) {
-  //   Vec3d x = xyz_coord_V_.row(ix);
-  //   heat_dt_ = heat_dt_multiple_ * area_V_[ix];
-  //   for (int iy{0}; iy < num_vertices; iy++) {
-  //     Vec3d y = xyz_coord_V_.row(iy);
-  //     double A = area_V_[iy];
-  //     lap_phi.row(ix) += (A / heat_dt_) * heat_parametrix2d(x, y, heat_dt_) *
-  //                        (phi.row(iy) - phi.row(ix));
-  //   }
-  // }
 
   return lap_phi;
 }
@@ -2330,10 +2323,8 @@ Samples MatrixMesh::adaptive_guckenberger_laplacian(Samples &phi) {
   for (int ix{0}; ix < num_vertices; ix++) {
     // printf("  ix = %d\n", ix);
     Vec3d x = xyz_coord_V_.row(ix);
-    heat_dt_ = heat_dt_multiple_ * area_V_[ix];
-    // heat_dt_ = belkin_dt_;
-    // printf("  heat_dt_ = %.10f\n", heat_dt_);
-    // printf("  reset_integration_patch\n");
+    double heat_dt = heat_dt_multiple_ * area_V_[ix];
+
     reset_integration_patch();
     // printf("  add_vertex\n");
     integration_patch_.add_vertex(ix);
@@ -2348,8 +2339,8 @@ Samples MatrixMesh::adaptive_guckenberger_laplacian(Samples &phi) {
         for (int iy : V_cycle_F_.row(f)) {
           Vec3d y = xyz_coord_V_.row(iy);
           double A = area_F_[f];
-          lap_phi.row(ix) += (A / (3 * heat_dt_)) *
-                             heat_parametrix2d(x, y, heat_dt_) *
+          lap_phi.row(ix) += (A / (3 * heat_dt)) *
+                             heat_parametrix2d(x, y, heat_dt) *
                              (phi.row(iy) - phi.row(ix));
         }
       }
@@ -2424,7 +2415,7 @@ template <typename Samples> Samples MatrixMesh::heat_laplacian(Samples &phi) {
   lap_phi.setZero();
   for (int ix{0}; ix < num_vertices; ix++) {
     Vec3d x = xyz_coord_V_.row(ix);
-    heat_dt_ = heat_dt_multiple_ * area_V_[ix];
+    double heat_dt = heat_dt_multiple_ * area_V_[ix];
     integration_patch_ = Patch::from_seed_vertex(this, 0);
     reset_integration_patch();
     ////////////////////////////////////////////////
@@ -2448,7 +2439,7 @@ template <typename Samples> Samples MatrixMesh::heat_laplacian(Samples &phi) {
       for (int iy : integration_patch_.newV_) {
         Vec3d y = xyz_coord_v(iy);
         double A = area_V_[iy];
-        lap_phi.row(ix) += (A / heat_dt_) * heat_parametrix2d(x, y, heat_dt_) *
+        lap_phi.row(ix) += (A / heat_dt) * heat_parametrix2d(x, y, heat_dt) *
                            (phi.row(iy) - phi.row(ix));
       }
       delta = (lap_phi.row(ix) - lap_phi0).norm();
@@ -2472,10 +2463,8 @@ Samples MatrixMesh::higher_order_quad_heat_laplacian(Samples &phi) {
   for (int ix{0}; ix < num_vertices; ix++) {
     // printf("  ix = %d\n", ix);
     Vec3d x = xyz_coord_V_.row(ix);
-    heat_dt_ = heat_dt_multiple_ * area_V_[ix];
-    // heat_dt_ = belkin_dt_;
-    // printf("  heat_dt_ = %.10f\n", heat_dt_);
-    // printf("  reset_integration_patch\n");
+    double heat_dt = heat_dt_multiple_ * area_V_[ix];
+
     reset_integration_patch();
     // printf("  add_vertex\n");
     integration_patch_.add_vertex(ix);
@@ -2501,8 +2490,7 @@ Samples MatrixMesh::higher_order_quad_heat_laplacian(Samples &phi) {
           Vec3d y = xyz_coord_fq(f, q);
           double w = quad_weight_fq(f, q);
 
-          lap_phi.row(ix) += (w / heat_dt_) *
-                             heat_parametrix2d(x, y, heat_dt_) *
+          lap_phi.row(ix) += (w / heat_dt) * heat_parametrix2d(x, y, heat_dt) *
                              (phiy - phi.row(ix));
         }
       }
@@ -2666,7 +2654,7 @@ void MatrixMesh::update_laplacian_matrix_heat() {
   for (int ix{0}; ix < get_num_vertices(); ix++) {
     Vec3d x = xyz_coord_V_.row(ix);
     double Ax = area_V_[ix];
-    heat_dt_ = heat_dt_multiple_ * Ax;
+    double heat_dt = heat_dt_multiple_ * Ax;
 
     reset_integration_patch();
     integration_patch_.add_vertex(ix);
@@ -2687,7 +2675,7 @@ void MatrixMesh::update_laplacian_matrix_heat() {
       for (int iy : integration_patch_.newV_) {
         Vec3d y = xyz_coord_V_.row(iy);
         double Ay = area_V_[iy];
-        dLi.push_back((Ay / heat_dt_) * heat_parametrix2d(x, y, heat_dt_));
+        dLi.push_back((Ay / heat_dt) * heat_parametrix2d(x, y, heat_dt));
         dcol_indices.push_back(iy);
         dLi[0] -= dLi.back();
       }

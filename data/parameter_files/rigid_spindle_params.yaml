@@ -54,7 +54,7 @@ envelope:
   gaussian_curvature_type: angle_defect
   # gaussian_curvature_type: laplacian
   # laplacian_type: guckenberger
-  laplacian_type: heat
+  laplacian_type: cotan
   # laplacian_type: adaptive_belkin
   timestep_type: euler_adaptive
   show_contact_patches: true

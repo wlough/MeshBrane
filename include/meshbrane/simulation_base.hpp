@@ -5,11 +5,15 @@
  * @brief Base class for simulations
  */
 
+#include "meshbrane/meshbrane_object.hpp"
+// #include "meshbrane/pair_interaction.hpp"
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <yaml-cpp/yaml.h>
 
 namespace meshbrane {
+
 /**
  * @brief Base class for simulations. Makes output directory and loads parameter
  * file.
@@ -38,6 +42,9 @@ public:
   double dt0_;
   double dt_frame_;
   double T_run_;
+
+  // std::vector<std::unique_ptr<MeshBraneObject>> objects_;
+  // std::vector<std::unique_ptr<PairInteraction>> pair_interactions_;
 
   SimulationBase(const std::filesystem::path &path_to_parameters);
 

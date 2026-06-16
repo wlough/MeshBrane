@@ -182,7 +182,8 @@ namespace meshbrane {
  * - get_genus() : int
  *
  */
-class MatrixMesh : public MeshBraneObject {
+class MatrixMesh {
+  // class MatrixMesh : public MeshBraneObject {
 public:
   std::string name_{"mesh"};
   ////////////////////////////
@@ -205,8 +206,126 @@ public:
   Samplesi h_twin_H_;       //
   ////////////////////////////
 
-  void set_attributes_from_yaml_node(const YAML::Node &node) override;
-  void init(const YAML::Node &node) override;
+  /////////////////////////
+  // fixed parameters /////
+  /////////////////////////
+  YAML::Node parameters_;
+
+  std::filesystem::path ply_path_;
+
+  bool show_half_edges_{false};
+  bool show_vertices_{false};
+  bool show_edges_{true};
+  bool draw_wireframe_{false};
+  RGBA rgba_vertex_ = RGBA_DICT.at("purple");
+  RGBA rgba_half_edge_ = RGBA_DICT.at("purple");
+  RGBA rgba_face_ = RGBA_DICT.at("yellow");
+  RGBA rgba_edge_ = RGBA_DICT.at("blue");
+  double radius_vertex_{5};
+
+  double belkin_dt_{0.001};
+  double heat_dt_multiple_{10.0};
+  double belkin_rtol_{1e-8};
+  double belkin_atol_{1e-8};
+  int belkin_min_ring_{2};
+  bool construct_laplacian_matrix_{false};
+
+  enum class LaplacianType { COTAN, BELKIN, GUCKENBERGER, HEAT };
+  enum class GaussianCurvatureType { ANGLE_DEFECT, LAPLACIAN };
+  LaplacianType laplacian_type_{LaplacianType::COTAN};
+
+  GaussianCurvatureType gaussian_curvature_type_{
+      GaussianCurvatureType::ANGLE_DEFECT};
+
+  Samples3d bary_coord_Q_;
+  Samples1d dimensionless_quad_weight_Q_;
+
+  /////////////////////////////
+  // Interaction accumulator //
+  /////////////////////////////
+  Samples3d force_V_;
+
+  ////////////////////
+  // Cached data /////
+  ////////////////////
+
+  std::vector<Samplesi> V_cycle_B_;
+  Samples3d vec_H_;
+  Samples1d length_E_;
+  Samples1d area_F_;
+  Samples3d normal_F_;
+  Samples3d normal_V_;
+  Samples1d area_V_;
+  double average_edge_length_{0.0};
+  double average_face_area_{0.0};
+  double total_volume_{0.0};
+  // Curvature
+  Samples3d mcvec_V_;
+  Samples1d mean_curvature_V_;
+  Samples1d gaussian_curvature_V_;
+  Samples1d lap_mean_curvature_V_;
+
+  Eigen::SparseMatrix<double, Eigen::RowMajor>
+      laplacian_matrix_V_; // row major for insertion efficiency
+
+  Eigen::Matrix<double, Eigen::Dynamic, 1> radius_V;
+  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_V;
+  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_H;
+  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_F;
+  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_E_;
+
+  std::array<Eigen::Matrix<double, Eigen::Dynamic, 3>, 3>
+      shifted_half_edge_arrows_;
+  SimpleVectorField vector_field_arrows_;
+
+  ///////////////////////////
+  // Stuff to get rid of /////
+  ////////////////////////////
+  // double heat_dt_{0.001};
+  Patch integration_patch_;
+
+  ////////////////////////
+  // Initialization //////
+  ////////////////////////
+  MatrixMesh() = default;
+  // ~MatrixMesh() = default;
+
+  /**
+   * @brief Construct a new MatrixMesh object from the vectors in a
+   * `meshbrane::MatrixMeshSamples` tuple.
+   *
+   * @param xyz_coord_V
+   * @param h_out_V
+   * @param v_origin_H
+   * @param h_next_H
+   * @param h_twin_H
+   * @param f_left_H
+   * @param h_right_F
+   * @param h_negative_B
+   * @return MatrixMesh
+   */
+  MatrixMesh(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
+             const Samplesi &v_origin_H, const Samplesi &h_next_H,
+             const Samplesi &h_twin_H, const Samplesi &f_left_H,
+             const Samplesi &h_right_F, const Samplesi &h_negative_B);
+
+  MatrixMesh(const YAML::Node &parameters);
+
+  // void set_attributes_from_yaml_node(const YAML::Node &node) override;
+  // void init(const YAML::Node &node) override;
+
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  //
 
   void init_matrixmesh_from_attributes();
 
@@ -286,9 +405,6 @@ public:
     }
   }
 
-  enum class LaplacianType { COTAN, BELKIN, GUCKENBERGER, HEAT };
-  enum class GaussianCurvatureType { ANGLE_DEFECT, LAPLACIAN };
-
   LaplacianType
   laplacian_type_from_string(const std::string &laplacian_type) const {
     if (laplacian_type == "cotan") {
@@ -316,89 +432,6 @@ public:
                                "gaussian curvature type");
     }
   }
-
-  LaplacianType laplacian_type_{LaplacianType::COTAN};
-
-  GaussianCurvatureType gaussian_curvature_type_{
-      GaussianCurvatureType::ANGLE_DEFECT};
-
-  ////////////////////////////////
-  // Stuff from parameters file //
-  ////////////////////////////////
-  YAML::Node parameters_;
-
-  std::filesystem::path ply_path_;
-
-  bool show_half_edges_{false};
-  bool show_vertices_{false};
-  bool show_edges_{true};
-  bool draw_wireframe_{false};
-  RGBA rgba_vertex_ = RGBA_DICT.at("purple");
-  RGBA rgba_half_edge_ = RGBA_DICT.at("purple");
-  RGBA rgba_face_ = RGBA_DICT.at("yellow");
-  RGBA rgba_edge_ = RGBA_DICT.at("blue");
-  double radius_vertex_{5};
-
-  double belkin_dt_{0.001};
-  double heat_dt_multiple_{10.0};
-  double belkin_rtol_{1e-8};
-  double belkin_atol_{1e-8};
-  int belkin_min_ring_{2};
-  bool construct_laplacian_matrix_{false};
-
-  ////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////
-  // to be categorized start /////////////////////////////////////
-  ////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////
-  double heat_dt_{0.001};
-  ////////////////////////////
-  // Cached geometric data ///
-  ////////////////////////////
-  std::vector<Samplesi> V_cycle_B_;
-  Samples3d vec_H_;
-  Samples1d length_E_;
-  Samples1d area_F_;
-  Samples3d normal_F_;
-  Samples3d normal_V_;
-  Samples1d area_V_;
-  double average_edge_length_{0.0};
-  double average_face_area_{0.0};
-  double total_volume_{0.0};
-  // Curvature
-  Samples3d mcvec_V_;
-  Samples1d mean_curvature_V_;
-  Samples1d gaussian_curvature_V_;
-  Samples1d lap_mean_curvature_V_;
-
-  ////////////////////////////
-  // Laplacian data //////////
-  ////////////////////////////
-  // Patch integration_patch_test;
-  Patch integration_patch_;
-
-  Eigen::SparseMatrix<double, Eigen::RowMajor>
-      laplacian_matrix_V_; // row major for insertion efficiency
-  ////////////////////////////
-  // Other data //////////////
-  ////////////////////////////
-  Samples3d force_V_;
-
-  Eigen::Matrix<double, Eigen::Dynamic, 1> radius_V;
-  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_V;
-  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_H;
-  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_F;
-  Eigen::Matrix<double, Eigen::Dynamic, 4> rgba_E_;
-
-  std::array<Eigen::Matrix<double, Eigen::Dynamic, 3>, 3>
-      shifted_half_edge_arrows_;
-  SimpleVectorField vector_field_arrows_;
-
-  ////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////
-  // to be categorized end ///////////////////////////////////////
-  ////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////
 
   void set_attributes_from_parameters() {
     printf("MatrixMesh::set_attributes_from_parameters\n");
@@ -565,70 +598,37 @@ public:
   // Constructors and Mesh I/O //////////////////////////
   ///////////////////////////////////////////////////////
 
-  MatrixMesh(const YAML::Node &parameters) {
-    parameters_ = parameters;
-    set_attributes_from_parameters();
-    if (ply_path_.empty()) {
-      throw std::runtime_error(
-          "MatrixMesh constructor: ply_path is required in parameters");
-    }
-    init_from_ply();
-  }
-
-  MatrixMesh() = default;
-  ~MatrixMesh() = default;
-
-  /**
-   * @brief Construct a new MatrixMesh object from the vectors in a
-   * `meshbrane::MatrixMeshSamples` tuple.
-   *
-   * @param xyz_coord_V
-   * @param h_out_V
-   * @param v_origin_H
-   * @param h_next_H
-   * @param h_twin_H
-   * @param f_left_H
-   * @param h_right_F
-   * @param h_negative_B
-   * @return MatrixMesh
-   */
-  MatrixMesh(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
-             const Samplesi &v_origin_H, const Samplesi &h_next_H,
-             const Samplesi &h_twin_H, const Samplesi &f_left_H,
-             const Samplesi &h_right_F, const Samplesi &h_negative_B);
-
-  MatrixMesh(const std::filesystem::path &ply_path);
   /**
    * @brief Construct a new MatrixMesh object from ply file of half-edge
    * samples.
    * @param ply_path
    * @return MatrixMesh
    */
-  static MatrixMesh from_he_ply(const std::filesystem::path &ply_path);
+  // static MatrixMesh from_he_ply(const std::filesystem::path &ply_path);
   static MatrixMesh from_icosohedron();
   void init_icosohedron();
   static MatrixMesh from_icososphere(int n);
   void write_he_ply(const std::filesystem::path &ply_path) const;
 
-  /**
-   * @brief Construct a new MatrixMesh object from the vectors in a
-   * `meshbrane::VertexFaceSamples` tuple.
-   * @param xyz_coord_V
-   * @param V_cycle_F
-   * @return MatrixMesh<VertexType>
-   */
-  static MatrixMesh from_vf_samples(const Samples3d &xyz_coord_V,
-                                    const Samples3i &V_cycle_F);
+  // /**
+  //  * @brief Construct a new MatrixMesh object from the vectors in a
+  //  * `meshbrane::VertexFaceSamples` tuple.
+  //  * @param xyz_coord_V
+  //  * @param V_cycle_F
+  //  * @return MatrixMesh<VertexType>
+  //  */
+  // static MatrixMesh from_vf_samples(const Samples3d &xyz_coord_V,
+  //                                   const Samples3i &V_cycle_F);
 
-  /**
-   * @brief Construct a new MatrixMesh object from ply file of vertex-face
-   * samples.
-   *
-   * @param ply_path
-   * @return MatrixMesh
-   */
-  static MatrixMesh from_vf_ply(const std::filesystem::path &ply_path);
-  void write_vf_ply(const std::filesystem::path &ply_path) const;
+  // /**
+  //  * @brief Construct a new MatrixMesh object from ply file of vertex-face
+  //  * samples.
+  //  *
+  //  * @param ply_path
+  //  * @return MatrixMesh
+  //  */
+  // static MatrixMesh from_vf_ply(const std::filesystem::path &ply_path);
+  // void write_vf_ply(const std::filesystem::path &ply_path) const;
 
   ///////////////////////////////////////////////////////
   // Fundamental accessors and properties ///////////////
@@ -869,8 +869,7 @@ public:
   ///////////////////////////////////////////////////////
   // Quadrature /////////////////////////////////////////
   ///////////////////////////////////////////////////////
-  Samples3d bary_coord_Q_;
-  Samples1d dimensionless_quad_weight_Q_;
+
   Vec3d bary_coord_q(int q) const { return bary_coord_Q_.row(q); }
   Vec3d xyz_coord_fq(int f, int q) const;
   double quad_weight_fq(int f, int q) const {

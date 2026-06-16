@@ -5,6 +5,7 @@
  * @brief Defines RigidSpindleSim class and associated classes
  */
 
+#include "meshbrane/kmc.hpp"
 #include "meshbrane/membrane.hpp"
 #include "meshbrane/meshbrane_data_types.hpp"
 #include "meshbrane/rigid_spindle.hpp"
@@ -427,6 +428,7 @@ public:
 
 class RigidSpindleSim : public SimulationBase {
 public:
+  kmc::RandomNumberGenerator rng_;
   double dt_mean_{0.0};
   double dt_save_{1.0};
   double kBT_;
@@ -481,7 +483,8 @@ public:
   RigidSpindleSim(const std::filesystem::path &path_to_parameters);
 
   double dt_max();
-  void timestep();
+  // void timestep();
+  void evolve_until_next_frame();
   void evolve_until(double t_end);
   void draw_scene();
   void run(int argc, char *argv[]);
@@ -493,12 +496,25 @@ public:
 
   void find_contact_patch1();
   void find_contact_patch2();
-  void apply_interaction_forces();
 
-  void print_info();
   // double get_
   void record_envelope_data();
   void record_spindle_data();
+
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  void print_info();
+  void clear_interactions();
+  void update_cached_data();
+  void apply_pair_interactions();
+  void apply_internal_interactions();
+  void apply_thermal_fluctuations(double dt);
+  void update_state_variables(double dt);
 };
 
 } // namespace meshbrane

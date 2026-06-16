@@ -14,41 +14,19 @@
 
 namespace meshbrane {
 
-class RigidMesh : public MatrixMesh {
+class SphericalSPB : public MatrixMesh {
 public:
+  YAML::Node *sim_parameters_{nullptr};
+  ////////////////////////////
+  // from RigidMesh /////////
+  ////////////////////////////
   Vec3d force_;
   Vec3d torque_;
   Vec3d xyz_frame_{0.0, 0.0, 0.0};
   Eigen::Matrix3d rotation_matrix_frame_ = Eigen::Matrix3d::Identity();
   Samples3d xyz_relative_V_;
-  RigidMesh() = default;
-  ~RigidMesh() = default;
-  RigidMesh(MatrixMesh &mesh) : MatrixMesh(mesh) {}
-  RigidMesh(const std::filesystem::path &ply_path) : MatrixMesh(ply_path) {}
-  RigidMesh(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
-            const Samplesi &v_origin_H, const Samplesi &h_next_H,
-            const Samplesi &h_twin_H, const Samplesi &f_left_H,
-            const Samplesi &h_right_F, const Samplesi &h_negative_B)
-      : MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
-                   f_left_H, h_right_F, h_negative_B) {}
-  // void init_sphere(Vec3d &xyz, double radius, int num_refinements = 0);
   void update_coords_from_frame();
   void sum_force_V();
-  void set_attributes_from_parameters() {
-    printf("RigidMesh::set_attributes_from_parameters\n");
-    MatrixMesh::set_attributes_from_parameters();
-  }
-};
-
-class SphericalSPB : public RigidMesh {
-public:
-  YAML::Node *sim_parameters_{nullptr};
-  // YAML::Node parameters_;
-  ////////////////////////////
-  // state variables /////////
-  ////////////////////////////
-  // Vec3d xyz_frame_; // from RigidMesh
-  // Eigen::Matrix3d rotation_matrix_frame_; // from RigidMesh
   ///////////////////////////
   // Velocities /////////////
   ///////////////////////////
@@ -93,7 +71,7 @@ public:
   // methods //////
   /////////////////
   SphericalSPB() = default;
-  ~SphericalSPB() = default;
+  // ~SphericalSPB() = default;
   void set_attributes_from_parameters();
   void init_state(Vec3d &center, Eigen::Matrix3d &rotation_matrix);
   void sum_envelope_force_V();
@@ -101,6 +79,7 @@ public:
   void update_state_variables(double dt);
   Vec3d get_linear_fluctuations(double dt);
   Vec3d get_rotational_fluctuations(double dt);
+  void apply_thermal_fluctuations(double dt, kmc::RandomNumberGenerator &rng);
 };
 
 class RigidMTBundle : public MeshBraneObject {
@@ -179,10 +158,10 @@ public:
   /////////////////
   // methods //////
   /////////////////
-  void set_attributes_from_yaml_node(const YAML::Node &node) override;
-  void init(const YAML::Node &node) override;
+  // void set_attributes_from_yaml_node(const YAML::Node &node) override;
+  // void init(const YAML::Node &node) override;
   RigidMTBundle() = default;
-  ~RigidMTBundle() = default;
+  // ~RigidMTBundle() = default;
   Vec3d get_axis() { return rotation_matrix_center_.col(2); }
   Vec3d get_xyz1() {
     return xyz_center_ + 0.5 * length_ * rotation_matrix_center_.col(2);
@@ -207,6 +186,7 @@ public:
   void update_state_variables(double dt);
   Vec3d get_linear_fluctuations(double dt);
   Vec3d get_rotational_fluctuations(double dt);
+  void apply_thermal_fluctuations(double dt, kmc::RandomNumberGenerator &rng);
 };
 
 class RigidSpindle : public MeshBraneObject {
@@ -230,23 +210,18 @@ public:
   ///////////////////////////
   // Cached data ////////////
   ///////////////////////////
-  double envelope_force_{0.0};
+  // double envelope_force_{0.0};
   // std::vector<double> envelope_force_vec_;
   ///////////////////
   // Misc ///////////
   ///////////////////
   std::string name_;
   bool draw_axes_{false};
-  // Vec3d xyz_center0_{0.0, 0.0, 0.0};
-  // Vec3d axis0_{0.0, 0.0, 1.0};
   ///////////////////////////
   // Methods ////////////////
   ///////////////////////////
-  void set_attributes_from_yaml_node(const YAML::Node &node) override;
-  void init(const YAML::Node &node) override;
-
   RigidSpindle() = default;
-  ~RigidSpindle() = default;
+  // ~RigidSpindle() = default;
   RigidSpindle(YAML::Node *sim_parameters, std::string name) {
     // assign parameters
     sim_parameters_ = sim_parameters;
@@ -263,23 +238,6 @@ public:
   void compute_velocities();
   void update_state_variables(double dt);
   void print_info();
-  ///////////////////////////////////////////////////////
-  // double contact_length_{0.5};
-  // double overlap_length_{0.25};
-  // double length_{0.5};
-  // double motor_force_per_length_{300.0};
-  // Vec3d axis_{0.0, 0.0, 1.0};
-  // double v_grow_{0.0};
-
-  // void grow(double dt);
-  // void update_lengths();
-  // void apply_forces_to_spbs();
-  // void init_spherical_spbs();
-
-  // void set_global_sim_parameters();
-  // void time_step(double dt);
-
-  //////////////////////////////
-  //////////////////////////////
+  void apply_thermal_fluctuations(double dt, kmc::RandomNumberGenerator &rng);
 };
 } // namespace meshbrane

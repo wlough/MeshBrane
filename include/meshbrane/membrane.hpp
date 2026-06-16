@@ -27,6 +27,14 @@ namespace meshbrane {
  */
 class Membrane : public MatrixMesh {
 public:
+  /////////////////////////
+  // fixed parameters /////
+  /////////////////////////
+
+  ////////////////////
+  // Cached data /////
+  ////////////////////
+
   ///////////////////////////////////////////////////////
   // Data members ///////////////////////////////////////
   ///////////////////////////////////////////////////////
@@ -38,9 +46,9 @@ public:
   kmc::RandomNumberGenerator randng_;
   YAML::Node *sim_parameters_{nullptr};
   // Samples3d force_V_;
-  Samples3d external_force_V_;
-  Samples3d internal_force_V_;
-  Samples3d contact_force_V_;
+  // Samples3d external_force_V_;
+  // Samples3d internal_force_V_;
+  // Samples3d contact_force_V_;
 
   double initial_area_{0.0};
   double initial_volume_{0.0};
@@ -109,12 +117,12 @@ public:
   // Initialization /////////////////////////////////////
   ///////////////////////////////////////////////////////
 
-  void set_attributes_from_yaml_node(const YAML::Node &node) override;
-  void init(const YAML::Node &node) override;
+  // void set_attributes_from_yaml_node(const YAML::Node &node) override;
+  // void init(const YAML::Node &node) override;
   void init_membrane_from_attributes();
 
   Membrane() = default;
-  ~Membrane() = default;
+  // ~Membrane() = default;
   // Membrane(const YAML::Node &parameters) {
   //   throw std::runtime_error("Membrane(const YAML::Node &parameters)");
   //   parameters_ = parameters;
@@ -132,29 +140,30 @@ public:
     spb_patch_minus_ = Patch(this);
   }
 
-  Membrane(MatrixMesh &mesh) : MatrixMesh(mesh) {
-    throw std::runtime_error("Membrane(MatrixMesh &mesh)");
-  }
-  Membrane(const std::filesystem::path &ply_path) : MatrixMesh(ply_path) {
-    throw std::runtime_error("Membrane(const std::filesystem::path &ply_path)");
-  }
-  Membrane(const Samples3d &xyz_coord_V, const Samplesi &h_out_V,
-           const Samplesi &v_origin_H, const Samplesi &h_next_H,
-           const Samplesi &h_twin_H, const Samplesi &f_left_H,
-           const Samplesi &h_right_F, const Samplesi &h_negative_B)
-      : MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
-                   f_left_H, h_right_F, h_negative_B) {
+  ////////////////////////////////////////
+  // stuff that actually gets used
 
-    throw std::runtime_error(
-        "Membrane(const Samples3d &xyz_coord_V, const Samplesi &h_out_V, const "
-        "Samplesi &v_origin_H, const Samplesi &h_next_H, const Samplesi "
-        "&h_twin_H, const Samplesi &f_left_H, const Samplesi &h_right_F, const "
-        "Samplesi &h_negative_B)");
-  }
+  void apply_internal_interactions();
+  void clear_interactions();
+  void apply_thermal_fluctuations(double dt, double kBT,
+                                  kmc::RandomNumberGenerator &rng);
+  void update_cached_data();
+  void update_state_variables(double dt);
+  /**
+   * @brief Get the maximum time step for the current applied forces.
+   *
+   * @return double
+   */
+  double dt_max() const;
+
+  void print_info();
+
+  void update_membrane_visuals();
 
   ///////////////////////////////////////////////////////
   // Prototyping ////////////////////////////////////////
   ///////////////////////////////////////////////////////
+
   void init_from_ply();
 
   // void set_node_drag_coefficient_from_bulk_viscosity() {
@@ -182,173 +191,21 @@ public:
   //   node_drag_coefficient_ = 6.0 * M_PI * mu * Rv;
   // }
 
-  void set_attributes_from_parameters() {
-    MatrixMesh::set_attributes_from_parameters();
-    ///////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////
-    if (parameters_["timestep_type"]) {
-      timestep_type_ = parameters_["timestep_type"].as<std::string>();
-    }
-    // Bending force
-    if (parameters_["bending_modulus"]) {
-      bending_modulus_ = parameters_["bending_modulus"].as<double>();
-    }
-    if (parameters_["spontaneous_curvature"]) {
-      spontaneous_curvature_ =
-          parameters_["spontaneous_curvature"].as<double>();
-    }
-    if (parameters_["splay_modulus"]) {
-      splay_modulus_ = parameters_["splay_modulus"].as<double>();
-    }
-    ///////////////////////////////////////////////////////
-    // Tether force
-    if (parameters_["dimensionless_tether_repulsive_singularity"]) {
-      dimensionless_tether_repulsive_singularity_ =
-          parameters_["dimensionless_tether_repulsive_singularity"]
-              .as<double>();
-    }
-    if (parameters_["dimensionless_tether_repulsive_onset"]) {
-      dimensionless_tether_repulsive_onset_ =
-          parameters_["dimensionless_tether_repulsive_onset"].as<double>();
-    }
-    if (parameters_["dimensionless_tether_attractive_onset"]) {
-      dimensionless_tether_attractive_onset_ =
-          parameters_["dimensionless_tether_attractive_onset"].as<double>();
-    }
-    if (parameters_["dimensionless_tether_attractive_singularity"]) {
-      dimensionless_tether_attractive_singularity_ =
-          parameters_["dimensionless_tether_attractive_singularity"]
-              .as<double>();
-    }
-    if (parameters_["tether_stiffness"]) {
-      tether_stiffness_ = parameters_["tether_stiffness"].as<double>();
-    }
-    // Area conservation force
-    if (parameters_["area_stiffness"]) {
-      area_stiffness_ = parameters_["area_stiffness"].as<double>();
-    }
-    if (parameters_["fix_target_face_area"]) {
-      fix_target_face_area_ = parameters_["fix_target_face_area"].as<bool>();
-    }
-    // Volume conservation force
-    if (parameters_["fix_target_volume"]) {
-      fix_target_volume_ = parameters_["fix_target_volume"].as<bool>();
-    }
-    if (parameters_["volume_stiffness"]) {
-      volume_stiffness_ = parameters_["volume_stiffness"].as<double>();
-    }
-    if (parameters_["node_drag_coefficient"]) {
-      node_drag_coefficient_ =
-          parameters_["node_drag_coefficient"].as<double>();
-    }
-    ///////////////////////////////////////////////////////
-    if (parameters_["vector_field_scale"]) {
-      vector_field_scale_ = parameters_["vector_field_scale"].as<double>();
-    }
-    if (parameters_["show_force_field"]) {
-      show_force_field_ = parameters_["show_force_field"].as<bool>();
-    }
-    if (parameters_["show_mcvec_field"]) {
-      show_mcvec_field_ = parameters_["show_mcvec_field"].as<bool>();
-    }
-    if (parameters_["enable_flipping"]) {
-      enable_flipping_ = parameters_["enable_flipping"].as<bool>();
-    }
-    if (parameters_["enable_fluctuations"]) {
-      enable_fluctuations_ = parameters_["enable_fluctuations"].as<bool>();
-    }
-    if (parameters_["dt_flip"]) {
-      dt_flip_ = parameters_["dt_flip"].as<double>();
-    }
-    if (parameters_["flipping_probability"]) {
-      flipping_probability_ = parameters_["flipping_probability"].as<double>();
-    }
-    ///////////////////////////////////////////////////////
-    if (parameters_["show_contact_patches"]) {
-      show_contact_patches_ = parameters_["show_contact_patches"].as<bool>();
-    }
-    if (parameters_["pressure_type"]) {
-      pressure_type_ = parameters_["pressure_type"].as<std::string>();
-    }
-    if (parameters_["use_surface_tension_constant"]) {
-      use_surface_tension_constant_ =
-          parameters_["use_surface_tension_constant"].as<bool>();
-    }
-    if (parameters_["use_surface_tension_penalty_local"]) {
-      use_surface_tension_penalty_local_ =
-          parameters_["use_surface_tension_penalty_local"].as<bool>();
-    }
-    if (parameters_["surface_tension_constant"]) {
-      surface_tension_constant_ =
-          parameters_["surface_tension_constant"].as<double>();
-    } else if (use_surface_tension_constant_) {
-      printf(
-          "Warning: use_surface_tension_constant_ = true but no constant value "
-          "found\n");
-    }
-    if (parameters_["wca_sigma"]) {
-      wca_sigma_ = parameters_["wca_sigma"].as<double>();
-      // 0.1*r_cutoff=0.1*2^(1/6)*sigma
-      dx_max_ = 0.1122462048309373 * wca_sigma_;
-    }
-    if (parameters_["wca_epsilon"]) {
-      wca_epsilon_total_ = parameters_["wca_epsilon"].as<double>();
-    }
-    // set global parameters
-    if ((*sim_parameters_)["kBT"]) {
-      kBT_ = (*sim_parameters_)["kBT"].as<double>();
-    }
-    if ((*sim_parameters_)["dt"]) {
-      dt0_ = (*sim_parameters_)["dt"].as<double>();
-    }
-    if ((*sim_parameters_)["bulk_viscosity"]) {
-      bulk_viscosity_ = (*sim_parameters_)["bulk_viscosity"].as<double>();
-    }
-    if (parameters_["use_local_drag_coefficient"]) {
-      use_local_drag_coefficient_ =
-          parameters_["use_local_drag_coefficient"].as<bool>();
-      // local_drag_coefficient_ = 4 * M_PI * bulk_viscosity_;
-      local_drag_coefficient_ = 1.5 * bulk_viscosity_; // * 1/R but R=1
-    }
-  }
+  void set_attributes_from_parameters();
 
   /**
    * @brief Update target edge length, area, and volume for constraint forces.
    *
    */
   void update_geotargets();
-  void update_membrane();
-  void update_cached_data();
-  void update_internal_forces();
-  void zero_forces() {
-    force_V_.resize(get_num_vertices(), 3);
-    force_V_.setZero();
-    // external_force_V_.setZero();
-    // contact_force_V_.setZero();
-    // internal_force_V_.setZero();
-  }
-  void update_membrane_visuals();
+  // void update_membrane();
 
-  /**
-   * @brief Get the maximum time step for the current applied forces.
-   *
-   * @return double
-   */
-  double dt_max() const;
-  void euler_step(double dt);
-  void predictor_corrector_step(double dt);
-  void time_step(double dt);
-  void evolve_until(double t_end);
-  void evolve_until(double t_end, double dt0);
-  void apply_internal_forces() {
-    apply_tether_force_V();
-    apply_bending_force_V();
-    apply_area_force_V();
-    apply_volume_force_V();
-  }
+  // void update_internal_forces();
 
-  void save_state(const std::filesystem::path &filename) const;
+  // void euler_step(double dt);
+
+  // void evolve_until(double t_end);
+  // void evolve_until(double t_end, double dt0);
 
   ///////////////////////////////////////////////////////
   // Membrane physics ///////////////////////////////////
@@ -368,59 +225,17 @@ public:
   Vec3d get_volume_force_v(int v) const;
   void apply_volume_force_V();
 
-  Vec3d get_fluctuations_v(int v, double dt);
-  void apply_fluctuations_V(double dt);
+  // Vec3d get_fluctuations_v(int v, double dt);
+  // void apply_fluctuations_V(double dt);
 
-  void apply_contact_force_V();
-  void apply_external_force_V();
+  // void apply_contact_force_V();
+  // void apply_external_force_V();
 
   int flip_sweep();
-  int tether_flip_sweep();
-  bool tether_wants_flip(int e) const;
+  // int tether_flip_sweep();
+  // bool tether_wants_flip(int e) const;
   int monte_flip_sweep();
   double monte_flip_probability(int e) const;
-  int flip_edges_monte();
-
-  //////////////////////////////////////////////
-  // Visualization /////////////////////////////
-  //////////////////////////////////////////////
-
-  void apply_forces() {
-    force_V_.resize(get_num_vertices(), 3);
-    force_V_.setZero();
-    apply_tether_force_V();
-    apply_bending_force_V();
-    apply_area_force_V();
-    apply_volume_force_V();
-    apply_contact_force_V();
-    apply_external_force_V();
-  }
-
-  void print_info() {
-    double A = area_F_.sum();
-    double A0 = initial_area_;
-    double V = total_volume_;
-    double V0 = initial_volume_;
-    double P = pressure_;
-    std::cout << "  " << name_ << std::endl;
-    printf("    (A-A0)/A0=%.10f\n", (A - A0) / A0);
-    printf("    (V-V0)/V0=%.10f\n", (V - V0) / V0);
-    printf("    pressure=%.10f\n", pressure_);
-    printf("    surface tension mean=%.10f\n", surface_tension_F_.mean());
-    printf("    surface tension max=%.10f\n", surface_tension_F_.maxCoeff());
-    printf("    surface tension min=%.10f\n", surface_tension_F_.minCoeff());
-    // printf("    num_flips: %d\n", num_flips_);
-    printf("    num_flips: %d\n", total_edge_flips_);
-    // printf("    num_flips/num_edges: %.10f\n",
-    //        static_cast<double>(num_flips_) /
-    //            static_cast<double>(get_num_edges()));
-    // printf("  dt=%.20f\n", dt_);
-  }
-
-  //////////////////////
-  // to be deprecated //
-  //////////////////////
-  void update_curvature_data();
 };
 
 } // namespace meshbrane
