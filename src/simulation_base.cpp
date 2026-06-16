@@ -18,8 +18,7 @@ SimulationBase::SimulationBase(const fs::path &path_to_parameters) {
   // loadParameters(path_to_parameters);
   parameters_ = YAML::LoadFile(path_to_parameters);
   if (parameters_["dt"]) {
-    dt_ = parameters_["dt"].as<double>();
-    dt0_ = dt_;
+    dt_max_ = parameters_["dt"].as<double>();
   } else {
     throw std::runtime_error("No dt provided in parameters file");
   }
@@ -33,7 +32,6 @@ SimulationBase::SimulationBase(const fs::path &path_to_parameters) {
   } else {
     throw std::runtime_error("No T_run provided in parameters file");
   }
-
   if (parameters_["run_name"]) {
     run_name_ = parameters_["run_name"].as<std::string>();
   } else {

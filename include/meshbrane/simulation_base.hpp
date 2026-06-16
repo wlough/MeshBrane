@@ -25,21 +25,17 @@ public:
 
   std::string run_name_;
   std::filesystem::path output_dir_;
-
   std::filesystem::path logs_dir_;
   std::filesystem::path raw_data_dir_;
   std::filesystem::path visualizations_dir_;
   std::filesystem::path temp_images_dir_;
-
   std::filesystem::path log_path_;
-
   int frame_count_ = 0;
   int frame_index_length_ = 6;
   std::string frame_prefix_ = "frame";
 
   double t_ = 0.0;
-  double dt_;
-  double dt0_;
+  double dt_max_;
   double dt_frame_;
   double T_run_;
 

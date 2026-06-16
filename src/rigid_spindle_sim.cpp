@@ -20,8 +20,8 @@ RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
     : SimulationBase(path_to_parameters) {
   printf("RigidSpindleSim::RigidSpindleSim\n");
   // moved to base class...
-  // printf("set dt0_\n");
-  // dt0_ = parameters_["dt"].as<double>();
+  // printf("set dt_max_\n");
+  // dt_max_ = parameters_["dt"].as<double>();
   // printf("set dt_frame_\n");
   // dt_frame_ = parameters_["dt_frame"].as<double>();
   // printf("set T_run_\n");
@@ -260,8 +260,8 @@ void RigidSpindleSim::apply_thermal_fluctuations(double dt) {
 }
 
 void RigidSpindleSim::update_state_variables(double dt) {
-  spindle_.update_state_variables(dt_);
-  envelope_.update_state_variables(dt_);
+  spindle_.update_state_variables(dt);
+  envelope_.update_state_variables(dt);
 }
 
 // Helpers
@@ -447,7 +447,7 @@ void RigidSpindleSim::record_spindle_data() {}
 
 double RigidSpindleSim::dt_max() {
   // printf("RigidSpindleSim::dt_max\n");
-  double dt_max = dt0_;
+  double dt_max = dt_max_;
   dt_max = std::min(dt_max, envelope_.dt_max());
   // dt_max = std::min(dt_max, spindle_.dt_max());
   return dt_max;
@@ -459,21 +459,22 @@ void RigidSpindleSim::evolve_until(double t_end) {
   dt_mean_ = 0.0;
   envelope_.total_edge_flips_ = 0;
   while (t_ < t_end) {
+    /////////////////////
+    /////////////////////
     clear_interactions();
     update_cached_data();
     apply_pair_interactions();
     apply_internal_interactions();
-
-    dt_ = dt_max();
+    double dt = dt_max();
     double dt_end = t_end - t_;
-    dt_ = std::min(dt_, dt_end);
+    dt = std::min(dt, dt_end);
+    apply_thermal_fluctuations(dt);
+    update_state_variables(dt);
+    t_ += dt;
+    /////////////////////
+    /////////////////////
 
-    apply_thermal_fluctuations(dt_);
-
-    update_state_variables(dt_);
-    t_ += dt_;
-
-    dt_mean_ += dt_;
+    dt_mean_ += dt;
     envelope_.total_edge_flips_ += envelope_.num_flips_;
     ++step;
   }

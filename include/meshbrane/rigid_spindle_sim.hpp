@@ -16,7 +16,24 @@
 #include <filesystem>
 
 namespace meshbrane {
+class TimeSeriesBase {
+public:
+  std::filesystem::path save_path_;
+  TimeSeriesBase() = default;
+  virtual ~TimeSeriesBase() = default;
+  virtual void save_file() = 0;
+  virtual void append_file() = 0;
+  virtual void load_file() = 0;
+};
 
+class SimDataBase {
+public:
+  std::vector<std::unique_ptr<TimeSeriesBase>> series_;
+
+  // template <typename T> void add_time_series(
+  //   series_.pushba
+  // );
+};
 //
 template <typename T> class TimeSeries {
 public:
@@ -37,7 +54,6 @@ public:
     file.write(reinterpret_cast<const char *>(samples_.data()),
                size * sizeof(T));
   }
-
   void append_file() {
     // Open the file in read-write mode
     std::fstream file(save_path_,
@@ -323,6 +339,8 @@ struct TimeSeriesSpec {
   std::vector<int64_t> sample_shape;
 };
 
+// template <typename T>
+
 class RigidSpindleSimData {
 public:
   TimeSeries<double> t_;
@@ -418,32 +436,41 @@ public:
     envelope_moments_.samples_.clear();
   }
 
-  void make_output_directory(const std::filesystem::path &output_dir) {
-    // create the directory if it doesn't exist
-    if (!std::filesystem::exists(output_dir)) {
-      std::filesystem::create_directories(output_dir);
-    }
-  }
+  // void make_output_directory(const std::filesystem::path &output_dir) {
+  //   // create the directory if it doesn't exist
+  //   if (!std::filesystem::exists(output_dir)) {
+  //     std::filesystem::create_directories(output_dir);
+  //   }
+  // }
 };
 
 class RigidSpindleSim : public SimulationBase {
 public:
+  // core
   kmc::RandomNumberGenerator rng_;
-  double dt_mean_{0.0};
-  double dt_save_{1.0};
   double kBT_;
   double bulk_viscosity_;
-  Membrane envelope_;
-  RigidSpindle spindle_;
 
-  double midpoint_radius_{0.0};
+  // RigidSpindleSim specific
+  double dt_mean_{0.0};
+  double dt_save_{1.0};
 
   RigidSpindleSimData data_;
+  Viewer viewer_;
+
+  double midpoint_radius_{0.0};
   Samples2d zr_coords_V_;
   Vec3d envelope_xyz_center_;
   Samples1d envelope_moments_;
   double spb_antipodality_{0.0};
   // RigidSpindleSimData data_save_;
+
+  bool spindle_force_on_{true};
+
+  Membrane envelope_;
+  RigidSpindle spindle_;
+
+  RigidSpindleSim(const std::filesystem::path &path_to_parameters);
 
   void add_data_samples() {
 
@@ -476,11 +503,6 @@ public:
     // data_.mt_rotation_matrix_center_.add_sample(
     //     spindle_.mt_bundle_.rotation_matrix_center_);
   }
-
-  Viewer viewer_;
-  bool spindle_force_on_{true};
-
-  RigidSpindleSim(const std::filesystem::path &path_to_parameters);
 
   double dt_max();
   // void timestep();
