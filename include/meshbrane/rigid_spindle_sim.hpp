@@ -450,25 +450,21 @@ public:
   kmc::RandomNumberGenerator rng_;
   double kBT_;
   double bulk_viscosity_;
-
-  // RigidSpindleSim specific
-  double dt_mean_{0.0};
   double dt_save_{1.0};
-
-  RigidSpindleSimData data_;
   Viewer viewer_;
 
+  // RigidSpindleSim specific
+  RigidSpindleSimData data_;
+  Membrane envelope_;
+  RigidSpindle spindle_;
+
+  double dt_mean_{0.0};
   double midpoint_radius_{0.0};
   Samples2d zr_coords_V_;
   Vec3d envelope_xyz_center_;
   Samples1d envelope_moments_;
   double spb_antipodality_{0.0};
-  // RigidSpindleSimData data_save_;
-
   bool spindle_force_on_{true};
-
-  Membrane envelope_;
-  RigidSpindle spindle_;
 
   RigidSpindleSim(const std::filesystem::path &path_to_parameters);
 
@@ -505,7 +501,6 @@ public:
   }
 
   double dt_max();
-  // void timestep();
   void evolve_until_next_frame();
   void evolve_until(double t_end);
   void draw_scene();
@@ -518,8 +513,6 @@ public:
 
   void find_contact_patch1();
   void find_contact_patch2();
-
-  // double get_
   void record_envelope_data();
   void record_spindle_data();
 

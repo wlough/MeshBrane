@@ -82,7 +82,7 @@ public:
   void apply_thermal_fluctuations(double dt, kmc::RandomNumberGenerator &rng);
 };
 
-class RigidMTBundle : public MeshBraneObject {
+class RigidMTBundle {
   // class RigidMTBundle : public MatrixMesh {
 public:
   YAML::Node *sim_parameters_{nullptr};
@@ -189,7 +189,7 @@ public:
   void apply_thermal_fluctuations(double dt, kmc::RandomNumberGenerator &rng);
 };
 
-class RigidSpindle : public MeshBraneObject {
+class RigidSpindle {
 public:
   YAML::Node *sim_parameters_{nullptr};
   YAML::Node parameters_;

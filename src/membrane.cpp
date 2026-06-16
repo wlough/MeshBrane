@@ -64,15 +64,11 @@ void Membrane::update_state_variables(double dt) {
       xyz_coord_V_.row(v) += dt * force_V_.row(v) / node_drag_coefficient_;
     }
   }
-
-  // apply_fluctuations_V(dt);
   num_flips_ = 0;
   if (t_flip_ <= t_) {
-    // num_flips_ = monte_flip_sweep();
     update_mesh_geometric_data();
     update_geotargets();
-    num_flips_ = flip_sweep();
-    // printf("num_flips = %d\n", num_flips_);
+    num_flips_ = monte_flip_sweep();
     t_flip_ = t_flip_ + dt_flip_;
   }
 
@@ -143,9 +139,9 @@ void Membrane::set_attributes_from_parameters() {
   ///////////////////////////////////////////////////////
   ///////////////////////////////////////////////////////
   ///////////////////////////////////////////////////////
-  if (parameters_["timestep_type"]) {
-    timestep_type_ = parameters_["timestep_type"].as<std::string>();
-  }
+  // if (parameters_["timestep_type"]) {
+  //   timestep_type_ = parameters_["timestep_type"].as<std::string>();
+  // }
   // Bending force
   if (parameters_["bending_modulus"]) {
     bending_modulus_ = parameters_["bending_modulus"].as<double>();
@@ -220,9 +216,6 @@ void Membrane::set_attributes_from_parameters() {
   if (parameters_["show_contact_patches"]) {
     show_contact_patches_ = parameters_["show_contact_patches"].as<bool>();
   }
-  if (parameters_["pressure_type"]) {
-    pressure_type_ = parameters_["pressure_type"].as<std::string>();
-  }
   if (parameters_["use_surface_tension_constant"]) {
     use_surface_tension_constant_ =
         parameters_["use_surface_tension_constant"].as<bool>();
@@ -251,9 +244,9 @@ void Membrane::set_attributes_from_parameters() {
   if ((*sim_parameters_)["kBT"]) {
     kBT_ = (*sim_parameters_)["kBT"].as<double>();
   }
-  if ((*sim_parameters_)["dt"]) {
-    dt0_ = (*sim_parameters_)["dt"].as<double>();
-  }
+  // if ((*sim_parameters_)["dt"]) {
+  //   dt0_ = (*sim_parameters_)["dt"].as<double>();
+  // }
   if ((*sim_parameters_)["bulk_viscosity"]) {
     bulk_viscosity_ = (*sim_parameters_)["bulk_viscosity"].as<double>();
   }
@@ -268,9 +261,6 @@ void Membrane::set_attributes_from_parameters() {
 // void Membrane::set_attributes_from_yaml_node(const YAML::Node &node) {
 //   MatrixMesh::set_attributes_from_yaml_node(node);
 
-//   if (node["timestep_type"]) {
-//     timestep_type_ = node["timestep_type"].as<std::string>();
-//   }
 //   // Bending force
 //   if (node["bending_modulus"]) {
 //     bending_modulus_ = node["bending_modulus"].as<double>();
@@ -345,9 +335,6 @@ void Membrane::set_attributes_from_parameters() {
 //   if (node["show_contact_patches"]) {
 //     show_contact_patches_ = node["show_contact_patches"].as<bool>();
 //   }
-//   if (node["pressure_type"]) {
-//     pressure_type_ = node["pressure_type"].as<std::string>();
-//   }
 //   if (node["use_surface_tension_constant"]) {
 //     use_surface_tension_constant_ =
 //         node["use_surface_tension_constant"].as<bool>();
@@ -375,9 +362,6 @@ void Membrane::set_attributes_from_parameters() {
 //   // set global parameters
 //   if ((*sim_parameters_)["kBT"]) {
 //     kBT_ = (*sim_parameters_)["kBT"].as<double>();
-//   }
-//   if ((*sim_parameters_)["dt"]) {
-//     dt0_ = (*sim_parameters_)["dt"].as<double>();
 //   }
 //   if ((*sim_parameters_)["bulk_viscosity"]) {
 //     bulk_viscosity_ = (*sim_parameters_)["bulk_viscosity"].as<double>();
@@ -514,24 +498,13 @@ void Membrane::update_surface_tension_and_pressure() {
   // set surface tension to zero
   surface_tension_F_.resize(get_num_faces());
   surface_tension_F_.setZero();
-  // if (surface_tension_type_ == "constant") {
-  //   update_surface_tension_constant();
-  // }
-
-  // if (surface_tension_type_ == "penalty_local") {
-  //   update_surface_tension_soft_penalty();
-  // }
   if (use_surface_tension_constant_) {
     update_surface_tension_constant();
   }
-
   if (use_surface_tension_penalty_local_) {
     update_surface_tension_soft_penalty();
   }
-
-  if (pressure_type_ == "penalty") {
-    update_pressure_soft_penalty();
-  }
+  update_pressure_soft_penalty();
 }
 
 Vec3d Membrane::get_volume_force_v(int v) const {
@@ -754,15 +727,6 @@ int Membrane::monte_flip_sweep() {
     }
   }
   return flip_count;
-}
-
-int Membrane::flip_sweep() {
-  if (!enable_flipping_) {
-    return 0;
-  }
-  int num_flips{0};
-  num_flips = monte_flip_sweep();
-  return num_flips;
 }
 
 } // namespace meshbrane

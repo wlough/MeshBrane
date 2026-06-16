@@ -4,7 +4,7 @@
  * @file meshbrane_object.hpp
  */
 
-// #include "meshbrane/pair_interaction.hpp"
+#include "meshbrane/pair_interaction.hpp"
 #include <cstddef> // size_t
 #include <limits>
 #include <yaml-cpp/yaml.h>
@@ -18,63 +18,137 @@ class RandomNumberGenerator;
  *
  * @details Each simulated object...
  */
-// struct MeshBraneObject {
-//   int index_{std::numeric_limits<int>::max()};
-//   MeshBraneObject *supercomponent_{nullptr};
-//   std::vector<std::unique_ptr<MeshBraneObject>> subcomponents_{};
-//   std::vector<std::unique_ptr<PairInteraction>> subcomponent_interactions_{};
-
-//   bool is_composite() { return subcomponents_.size() != 0; }
-
-//   virtual ~MeshBraneObject() = default;
-//   virtual void set_attributes_from_yaml_node(const YAML::Node &node) = 0;
-
-//   virtual void init(const YAML::Node &node) = 0;
-
-//   void set_index(int index) { index_ = index; }
-//   int get_index() const { return index_; }
-
-//   // some objects do not have subcomponents, but still have
-//   // internal interactions. For example, Membrane bending forces.
-//   // If numerical state vars are all owned by subcomponents, this does
-//   nothing virtual void apply_self_interactions() {};
-//   // Accumulate forces/torques from internal interactions
-//   void apply_internal_interactions() {
-//     apply_self_interactions();
-//     for (auto &interaction : subcomponent_interactions_) {
-//       interaction->interact();
-//     }
-//   }
-//   // Accumulate fluctuation forces for own state vars.
-//   // If numerical state vars are all owned by subcomponents, this does
-//   nothing virtual void apply_thermal_fluctuations_to_self(double dt, double
-//   kBT,
-//                                                   RandomNumberGenerator *rng)
-//                                                   {
-//   };
-//   // Accumulate thermal fluctuation forces for self and all subcomponents.
-//   void apply_thermal_fluctuations(double dt, double kBT,
-//                                   RandomNumberGenerator *rng) {
-//     apply_thermal_fluctuations_to_self(dt, kBT, rng);
-//     for (auto &component : subcomponents_) {
-//       component->apply_thermal_fluctuations(dt, kBT, rng);
-//     }
-//   };
-// };
-
 struct MeshBraneObject {
-  int index_{std::numeric_limits<int>::max()};
-  // MeshBraneObject *supercomponent_{nullptr};
-  // std::vector<std::unique_ptr<MeshBraneObject>> subcomponents_{};
-  // std::vector<std::unique_ptr<PairInteraction>> subcomponent_interactions_{};
+  MeshBraneObject *supercomponent_{nullptr};
 
+  std::vector<std::unique_ptr<MeshBraneObject>> subcomponents_{};
+  std::vector<std::unique_ptr<PairInteraction>> subcomponent_interactions_{};
+
+  // virtual methods
   virtual ~MeshBraneObject() = default;
-  // virtual void set_attributes_from_yaml_node(const YAML::Node &node) = 0;
+  // set global sim paramaters (e.g. temperature, bulk viscosity, etc...)
+  virtual void set_global_parameters(const YAML::Node &node) {}
+  // set object specific parameters
+  virtual void set_own_parameters(const YAML::Node &node) {}
+  // initialize subcomponents
+  virtual void init_subcomponents(const YAML::Node &sim_node,
+                                  const YAML::Node &own_node) {}
+  // initialize interactions between subcomponents
+  virtual void init_interactions() {}
+  // some objects do not have subcomponents, but still have
+  // internal interactions. For example, Membrane bending forces.
+  // If numerical state vars are all owned by subcomponents, this does
+  // nothing
+  virtual void apply_self_interactions() {};
+  // Accumulate fluctuation forces for own state vars.
+  // If numerical state vars are all owned by subcomponents, this does
+  // nothing
+  virtual void apply_thermal_fluctuations_to_self(double dt, double kBT,
+                                                  RandomNumberGenerator &rng) {}
 
-  // virtual void init(const YAML::Node &node) = 0;
+  // other methods
+  bool is_composite() const { return !subcomponents_.empty(); }
+  // Accumulate forces/torques from internal interactions
+  void apply_internal_interactions() {
+    apply_self_interactions();
+    for (auto &component : subcomponents_) {
+      component->apply_internal_interactions();
+    }
+    for (auto &interaction : subcomponent_interactions_) {
+      interaction->interact();
+    }
+  }
+  // Accumulate thermal fluctuation forces for self and all subcomponents.
+  void apply_thermal_fluctuations(double dt, double kBT,
+                                  RandomNumberGenerator &rng) {
+    apply_thermal_fluctuations_to_self(dt, kBT, rng);
 
-  void set_index(int index) { index_ = index; }
-  int get_index() const { return index_; }
+    for (auto &component : subcomponents_) {
+      component->apply_thermal_fluctuations(dt, kBT, rng);
+    }
+  }
+
+  template <typename T>
+  T &init_subcomponent(const YAML::Node &sim_node, const YAML::Node &own_node,
+                       const std::string &key) {
+    static_assert(std::is_base_of_v<MeshBraneObject, T>,
+                  "T must derive from MeshBraneObject");
+
+    if (!own_node[key]) {
+      throw std::runtime_error("Missing subcomponent key: " + key);
+    }
+
+    auto obj = std::make_unique<T>();
+    T &ref = *obj;
+
+    obj->init(sim_node, own_node[key], this);
+    subcomponents_.push_back(std::move(obj));
+
+    return ref;
+  }
+
+  template <typename Tinteraction, typename Tobj1, typename Tobj2>
+  void init_interaction(Tobj1 &obj1, Tobj2 &obj2) {
+    static_assert(std::is_base_of_v<MeshBraneObject, Tobj1>,
+                  "Tobj1 must derive from MeshBraneObject");
+
+    static_assert(std::is_base_of_v<MeshBraneObject, Tobj2>,
+                  "Tobj2 must derive from MeshBraneObject");
+
+    static_assert(std::is_base_of_v<PairInteraction, Tinteraction>,
+                  "Tinteraction must derive from PairInteraction");
+
+    static_assert(std::is_constructible_v<Tinteraction, Tobj1 &, Tobj2 &>,
+                  "Tinteraction must be constructible from Tobj1& and Tobj2&");
+
+    auto interaction = std::make_unique<Tinteraction>(obj1, obj2);
+    subcomponent_interactions_.push_back(std::move(interaction));
+  }
+
+  void init(const YAML::Node &sim_node, const YAML::Node &own_node,
+            MeshBraneObject *supercomponent = nullptr) {
+    supercomponent_ = supercomponent;
+
+    set_global_parameters(sim_node);
+    set_own_parameters(own_node);
+    init_subcomponents(sim_node, own_node);
+    init_interactions();
+  }
+};
+
+class Obj1 : public MeshBraneObject {
+public:
+  Obj1() = default;
+};
+
+class Obj2 : public MeshBraneObject {
+public:
+  Obj2() = default;
+};
+
+class Obj0 : public MeshBraneObject {
+public:
+  class Obj1Obj2Interaction : public PairInteraction {
+  public:
+    Obj1 &obj1_;
+    Obj2 &obj2_;
+
+    Obj1Obj2Interaction(Obj1 &obj1, Obj2 &obj2) : obj1_(obj1), obj2_(obj2) {}
+
+    void interact() override {
+      // use obj1_ and obj2_
+    }
+  };
+
+  Obj0() = default;
+
+  void init_subcomponents(const YAML::Node &sim_node,
+                          const YAML::Node &own_node) override {
+    Obj1 &obj1 = init_subcomponent<Obj1>(sim_node, own_node, "obj1");
+    Obj2 &obj2 = init_subcomponent<Obj2>(sim_node, own_node, "obj2");
+
+    init_interaction<Obj1Obj2Interaction>(obj1, obj2);
+  }
 };
 
 template <typename T>
@@ -84,7 +158,7 @@ make_meshbrane_object_from_yaml_node(const YAML::Node &node) {
                 "T must derive from MeshBraneObject");
 
   auto obj = std::make_unique<T>();
-  obj->init(node);
+  // obj->init(node);
   return obj;
 }
 

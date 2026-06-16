@@ -19,18 +19,18 @@ namespace meshbrane {
 RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
     : SimulationBase(path_to_parameters) {
   printf("RigidSpindleSim::RigidSpindleSim\n");
-  // moved to base class...
-  // printf("set dt_max_\n");
-  // dt_max_ = parameters_["dt"].as<double>();
-  // printf("set dt_frame_\n");
-  // dt_frame_ = parameters_["dt_frame"].as<double>();
-  // printf("set T_run_\n");
-  // T_run_ = parameters_["T_run"].as<double>();
-  printf("set dt_save_\n");
-  dt_save_ = parameters_["dt_save"].as<double>();
-  printf("set kBT_\n");
-  kBT_ = parameters_["kBT"].as<double>();
-
+  if (parameters_["dt_save"]) {
+    printf("set dt_save_\n");
+    dt_save_ = parameters_["dt_save"].as<double>();
+  } else {
+    throw std::runtime_error("No dt_save provided in parameters file");
+  }
+  if (parameters_["kBT"]) {
+    printf("set kBT_\n");
+    kBT_ = parameters_["kBT"].as<double>();
+  } else {
+    throw std::runtime_error("No kBT provided in parameters file");
+  }
   if (parameters_["spindle"]) {
     printf("set spindle_\n");
     spindle_ = RigidSpindle(&parameters_, "spindle");
