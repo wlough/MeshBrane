@@ -8,6 +8,7 @@
 #include "meshbrane/meshbrane_object.hpp"
 #include <stdexcept>
 #include <type_traits>
+#include <yaml-cpp/yaml.h>
 
 namespace meshbrane {
 
@@ -15,6 +16,18 @@ class PairInteraction {
 public:
   virtual ~PairInteraction() = default;
   virtual void interact() = 0;
+  virtual void init(const YAML::Node &sim_node,
+                    const YAML::Node &composite_node) {};
+};
+
+template <typename Tobj1, typename Tobj2>
+class TypedPairInteraction : public PairInteraction {
+protected:
+  Tobj1 &obj1_;
+  Tobj2 &obj2_;
+
+public:
+  TypedPairInteraction(Tobj1 &obj1, Tobj2 &obj2) : obj1_(obj1), obj2_(obj2) {}
 };
 
 // template <typename Obj1T, typename Obj2T>

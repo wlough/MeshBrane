@@ -139,10 +139,10 @@ public:
 
   void apply_internal_interactions();
   void clear_interactions();
-  void apply_thermal_fluctuations(double dt, double kBT,
-                                  kmc::RandomNumberGenerator &rng);
+  void apply_thermal_fluctuations_to_self(double dt, double kBT,
+                                          kmc::RandomNumberGenerator &rng);
   void update_cached_data();
-  void update_state_variables(double dt);
+  void update_own_state_variables(double dt);
   /**
    * @brief Get the maximum time step for the current applied forces.
    *

@@ -38,36 +38,43 @@ public:
 
   void set_own_parameters(const YAML::Node &sim_node,
                           const YAML::Node &own_node) override {
+    printf("SphericalSPBChromatinComplex::set_own_parameters\n");
     // global sim parameters
     if (sim_node["bulk_viscosity"]) {
       bulk_viscosity_ = sim_node["bulk_viscosity"].as<double>();
     } else {
-      throw std::runtime_error("No bulk_viscosity provided in sim parameters");
+      throw std::runtime_error("SphericalSPBChromatinComplex: No "
+                               "bulk_viscosity provided in sim parameters");
     }
     // object specific parameters
     if (own_node["radius"]) {
       radius_ = own_node["radius"].as<double>();
     } else {
-      throw std::runtime_error("No radius provided in parameters");
+      throw std::runtime_error(
+          "SphericalSPBChromatinComplex: No radius provided in parameters");
     }
     if (own_node["wca_sigma"]) {
       wca_sigma_ = own_node["wca_sigma"].as<double>();
     } else {
-      throw std::runtime_error("No wca_sigma provided in parameters");
+      throw std::runtime_error(
+          "SphericalSPBChromatinComplex: No wca_sigma provided in parameters");
     }
     if (own_node["wca_epsilon"]) {
       wca_epsilon_ = own_node["wca_epsilon"].as<double>();
     } else {
-      throw std::runtime_error("No wca_epsilon provided in parameters");
+      throw std::runtime_error("SphericalSPBChromatinComplex: No wca_epsilon "
+                               "provided in parameters");
     }
     if (own_node["enable_fluctuations"]) {
       enable_fluctuations_ = own_node["enable_fluctuations"].as<bool>();
     } else {
-      throw std::runtime_error("No enable_fluctuations provided in parameters");
+      throw std::runtime_error("SphericalSPBChromatinComplex: No "
+                               "enable_fluctuations provided in parameters");
     }
   }
 
   void after_init() override {
+    printf("SphericalSPBChromatinComplex::after_init\n");
     linear_drag_coefficient_ = 6.0 * M_PI * bulk_viscosity_ * radius_;
     angular_drag_coefficient_ =
         8.0 * M_PI * bulk_viscosity_ * radius_ * radius_ * radius_;
@@ -87,7 +94,7 @@ public:
     }
   }
 
-  void clear_own_interactions() override {
+  void clear_own_forces() override {
     force_.setZero();
     torque_.setZero();
   }
@@ -139,57 +146,67 @@ public:
 
   void set_own_parameters(const YAML::Node &sim_node,
                           const YAML::Node &own_node) override {
+    printf("RigidMTBundle0::set_own_parameters\n");
     // global sim parameters
     if (sim_node["bulk_viscosity"]) {
       bulk_viscosity_ = sim_node["bulk_viscosity"].as<double>();
     } else {
-      throw std::runtime_error("No bulk_viscosity provided in sim parameters");
+      throw std::runtime_error(
+          "RigidMTBundle0: No bulk_viscosity provided in sim parameters");
     }
     // object specific parameters
     if (own_node["radius"]) {
       radius_ = own_node["radius"].as<double>();
     } else {
-      throw std::runtime_error("No radius provided in parameters");
+      throw std::runtime_error(
+          "RigidMTBundle0: No radius provided in parameters");
     }
     if (own_node["wca_sigma"]) {
       wca_sigma_ = own_node["wca_sigma"].as<double>();
     } else {
-      throw std::runtime_error("No wca_sigma provided in parameters");
+      throw std::runtime_error(
+          "RigidMTBundle0: No wca_sigma provided in parameters");
     }
     if (own_node["wca_epsilon"]) {
       wca_epsilon_ = own_node["wca_epsilon"].as<double>();
     } else {
-      throw std::runtime_error("No wca_epsilon provided in parameters");
+      throw std::runtime_error(
+          "RigidMTBundle0: No wca_epsilon provided in parameters");
     }
     if (own_node["enable_fluctuations"]) {
       enable_fluctuations_ = own_node["enable_fluctuations"].as<bool>();
     } else {
-      throw std::runtime_error("No enable_fluctuations provided in parameters");
+      throw std::runtime_error(
+          "RigidMTBundle0: No enable_fluctuations provided in parameters");
     }
     if (own_node["v_grow"]) {
       v_grow_ = own_node["v_grow"].as<double>();
     } else {
-      throw std::runtime_error("No v_grow provided in parameters");
+      throw std::runtime_error(
+          "RigidMTBundle0: No v_grow provided in parameters");
     }
     if (own_node["motor_force_per_length"]) {
       motor_force_per_length_ = own_node["motor_force_per_length"].as<double>();
     } else {
       throw std::runtime_error(
-          "No motor_force_per_length provided in parameters");
+          "RigidMTBundle0: No motor_force_per_length provided in parameters");
     }
     if (own_node["max_length"]) {
       max_length_ = own_node["max_length"].as<double>();
     } else {
-      throw std::runtime_error("No max_length provided in parameters");
+      throw std::runtime_error(
+          "RigidMTBundle0: No max_length provided in parameters");
     }
     if (own_node["max_force"]) {
       max_force_ = own_node["max_force"].as<double>();
     } else {
-      throw std::runtime_error("No max_force provided in parameters");
+      throw std::runtime_error(
+          "RigidMTBundle0: No max_force provided in parameters");
     }
   }
 
   void after_init() override {
+    printf("RigidMTBundle0::after_init\n");
     ang_drag_per_len_par_ = 4.0 * M_PI * bulk_viscosity_ * radius_ * radius_;
     update_linear_drag_coefficients();
   }
@@ -223,7 +240,7 @@ public:
 
     torque_center_ += T_par * u_par + T_perp1 * u_perp1 + T_perp2 * u_perp2;
   }
-  void clear_own_interactions() override {
+  void clear_own_forces() override {
     force_center_.setZero();
     torque_center_.setZero();
     force_compress_ = 0.0;
@@ -292,6 +309,16 @@ public:
       return 0.0;
     }
   }
+
+  Vec3d get_axis() { return rotation_matrix_center_.col(2); }
+  Vec3d get_xyz1() {
+    return xyz_center_ + rotation_matrix_center_.col(2) *
+                             (total_length_ + overlap_length_) / 2.0;
+  }
+  Vec3d get_xyz2() {
+    return xyz_center_ - rotation_matrix_center_.col(2) *
+                             (total_length_ + overlap_length_) / 2.0;
+  }
 };
 
 class RigidSpindle0 : public MeshBraneObject {
@@ -300,46 +327,68 @@ public:
   SphericalSPBChromatinComplex *spb_chrom_complex2_{nullptr};
   RigidMTBundle0 *mt_bundle_{nullptr};
 
-  double mt_spb_stretch_stiffness_{0.0};
-  double mt_spb_rotation_stiffness_{0.0};
+  // double mt_spb_stretch_stiffness_{0.0};
+  // double mt_spb_rotation_stiffness_{0.0};
   bool draw_axes_{false};
   //
   //
   //
-  class MTSPB1Interaction : public PairInteraction {
+  class MTSPB1Interaction
+      : public TypedPairInteraction<RigidMTBundle0,
+                                    SphericalSPBChromatinComplex> {
   public:
-    RigidMTBundle0 &mt_bundle_;
-    SphericalSPBChromatinComplex &spb_;
+    using Base =
+        TypedPairInteraction<RigidMTBundle0, SphericalSPBChromatinComplex>;
+    MTSPB1Interaction(RigidMTBundle0 &mt_bundle,
+                      SphericalSPBChromatinComplex &spb)
+        : Base(mt_bundle, spb) {}
+
     double stretch_stiffness_{0.0};
     double rotation_stiffness_{0.0};
 
-    MTSPB1Interaction(RigidMTBundle0 &mt_bundle,
-                      SphericalSPBChromatinComplex &spb)
-        : mt_bundle_(mt_bundle), spb_(spb) {}
+    void init(const YAML::Node &sim_node,
+              const YAML::Node &composite_node) override {
+      if (composite_node["mt_spb_stretch_stiffness"]) {
+        stretch_stiffness_ =
+            composite_node["mt_spb_stretch_stiffness"].as<double>();
+      } else {
+        throw std::runtime_error(
+            "No mt_spb_stretch_stiffness provided in sim parameters");
+      }
+      if (composite_node["mt_spb_rotation_stiffness"]) {
+        rotation_stiffness_ =
+            composite_node["mt_spb_rotation_stiffness"].as<double>();
+      } else {
+        throw std::runtime_error(
+            "No mt_spb_rotation_stiffness provided in sim parameters");
+      }
+    };
 
     void interact() override {
-      Vec3d x_mt_center = mt_bundle_.xyz_center_;
+      RigidMTBundle0 &mt_bundle = obj1_;
+      SphericalSPBChromatinComplex &spb = obj2_;
+      Vec3d x_mt_center = mt_bundle.xyz_center_;
       double L_center_to_end =
-          (mt_bundle_.total_length_ + mt_bundle_.overlap_length_) / 2;
-      Vec3d u = mt_bundle_.rotation_matrix_center_.col(2); // ***
+          (mt_bundle.total_length_ + mt_bundle.overlap_length_) / 2;
+      Vec3d u = mt_bundle.rotation_matrix_center_.col(2); // ***
       Vec3d vec_center_to_end = L_center_to_end * u;
-      Vec3d x_spb = spb_.xyz_center_;
+      Vec3d x_spb = spb.xyz_center_;
       Vec3d x_mt_end = x_mt_center + vec_center_to_end;
 
       // force exerted on SPB by MT bundle
       Vec3d F_spb = -stretch_stiffness_ * (x_spb - x_mt_end);
 
-      spb_.force_ += F_spb;
+      spb.force_ += F_spb;
 
-      mt_bundle_.force_center_ += -F_spb;
+      mt_bundle.force_center_ += -F_spb;
 
-      mt_bundle_.torque_center_ += -math::cross(vec_center_to_end, F_spb);
+      mt_bundle.torque_center_ += -math::cross(vec_center_to_end, F_spb);
 
-      mt_bundle_.force_compress_ += -F_spb.dot(u);
+      mt_bundle.force_compress_ += -F_spb.dot(u);
 
-      Eigen::Matrix3d R_mt = mt_bundle_.rotation_matrix_center_;
+      Eigen::Matrix3d R_mt = mt_bundle.rotation_matrix_center_;
       Eigen::Matrix3d R_mt_inv = R_mt.transpose();
-      Eigen::Matrix3d R_spb = spb_.rotation_matrix_center_;
+      Eigen::Matrix3d R_spb = spb.rotation_matrix_center_;
 
       Eigen::Matrix3d delta_R = R_spb * R_mt_inv;
 
@@ -348,48 +397,70 @@ public:
       // torque exerted on SPB by MT bundle
       Vec3d T_spb = -rotation_stiffness_ * delta_theta;
 
-      spb_.torque_ += T_spb;
+      spb.torque_ += T_spb;
 
-      mt_bundle_.torque_center_ -= T_spb;
+      mt_bundle.torque_center_ -= T_spb;
     }
   };
   //
   //
   //
-  class MTSPB2Interaction : public PairInteraction {
+  class MTSPB2Interaction
+      : public TypedPairInteraction<RigidMTBundle0,
+                                    SphericalSPBChromatinComplex> {
   public:
-    RigidMTBundle0 &mt_bundle_;
-    SphericalSPBChromatinComplex &spb_;
+    using Base =
+        TypedPairInteraction<RigidMTBundle0, SphericalSPBChromatinComplex>;
+    MTSPB2Interaction(RigidMTBundle0 &mt_bundle,
+                      SphericalSPBChromatinComplex &spb)
+        : Base(mt_bundle, spb) {}
+
     double stretch_stiffness_{0.0};
     double rotation_stiffness_{0.0};
 
-    MTSPB2Interaction(RigidMTBundle0 &mt_bundle,
-                      SphericalSPBChromatinComplex &spb)
-        : mt_bundle_(mt_bundle), spb_(spb) {}
+    void init(const YAML::Node &sim_node,
+              const YAML::Node &composite_node) override {
+      if (composite_node["mt_spb_stretch_stiffness"]) {
+        stretch_stiffness_ =
+            composite_node["mt_spb_stretch_stiffness"].as<double>();
+      } else {
+        throw std::runtime_error(
+            "No mt_spb_stretch_stiffness provided in sim parameters");
+      }
+      if (composite_node["mt_spb_rotation_stiffness"]) {
+        rotation_stiffness_ =
+            composite_node["mt_spb_rotation_stiffness"].as<double>();
+      } else {
+        throw std::runtime_error(
+            "No mt_spb_rotation_stiffness provided in sim parameters");
+      }
+    };
 
     void interact() override {
-      Vec3d x_mt_center = mt_bundle_.xyz_center_;
+      RigidMTBundle0 &mt_bundle = obj1_;
+      SphericalSPBChromatinComplex &spb = obj2_;
+      Vec3d x_mt_center = mt_bundle.xyz_center_;
       double L_center_to_end =
-          (mt_bundle_.total_length_ + mt_bundle_.overlap_length_) / 2;
-      Vec3d u = -mt_bundle_.rotation_matrix_center_.col(2); // ***
+          (mt_bundle.total_length_ + mt_bundle.overlap_length_) / 2;
+      Vec3d u = -mt_bundle.rotation_matrix_center_.col(2); // ***
       Vec3d vec_center_to_end = L_center_to_end * u;
-      Vec3d x_spb = spb_.xyz_center_;
+      Vec3d x_spb = spb.xyz_center_;
       Vec3d x_mt_end = x_mt_center + vec_center_to_end;
 
       // force exerted on SPB by MT bundle
       Vec3d F_spb = -stretch_stiffness_ * (x_spb - x_mt_end);
 
-      spb_.force_ += F_spb;
+      spb.force_ += F_spb;
 
-      mt_bundle_.force_center_ += -F_spb;
+      mt_bundle.force_center_ += -F_spb;
 
-      mt_bundle_.torque_center_ += -math::cross(vec_center_to_end, F_spb);
+      mt_bundle.torque_center_ += -math::cross(vec_center_to_end, F_spb);
 
-      mt_bundle_.force_compress_ += -F_spb.dot(u);
+      mt_bundle.force_compress_ += -F_spb.dot(u);
 
-      Eigen::Matrix3d R_mt = mt_bundle_.rotation_matrix_center_;
+      Eigen::Matrix3d R_mt = mt_bundle.rotation_matrix_center_;
       Eigen::Matrix3d R_mt_inv = R_mt.transpose();
-      Eigen::Matrix3d R_spb = spb_.rotation_matrix_center_;
+      Eigen::Matrix3d R_spb = spb.rotation_matrix_center_;
 
       Eigen::Matrix3d delta_R = R_spb * R_mt_inv;
 
@@ -398,39 +469,90 @@ public:
       // torque exerted on SPB by MT bundle
       Vec3d T_spb = -rotation_stiffness_ * delta_theta;
 
-      spb_.torque_ += T_spb;
+      spb.torque_ += T_spb;
 
-      mt_bundle_.torque_center_ -= T_spb;
+      mt_bundle.torque_center_ -= T_spb;
     }
   };
   //
   //
   //
   void set_own_parameters(const YAML::Node &sim_node,
-                          const YAML::Node &own_node) override {} // ***
+                          const YAML::Node &own_node) override {
+    printf("RigidSpindle0::set_own_parameters\n");
+    if (own_node["draw_axes"]) {
+      draw_axes_ = own_node["draw_axes"].as<bool>();
+    } else {
+      throw std::runtime_error(
+          "RigidSpindle0: No draw_axes provided in parameters");
+    }
+  }
   void set_initial_conditions(const YAML::Node &sim_node,
-                              const YAML::Node &own_node) override {} // ***
-  //
-  //
-  //
+                              const YAML::Node &own_node) override {
+    printf("RigidSpindle0::set_initial_conditions\n");
+    std::vector<double> axis;
+    std::vector<double> xyz_center;
+
+    if (own_node["xyz_center"]) {
+      xyz_center = own_node["xyz_center"].as<std::vector<double>>();
+    } else {
+      throw std::runtime_error(
+          "RigidSpindle0: No xyz_center provided in parameters");
+    }
+    if (own_node["axis"]) {
+      axis = own_node["axis"].as<std::vector<double>>();
+    } else {
+      throw std::runtime_error("RigidSpindle0: No axis provided in parameters");
+    }
+
+    mt_bundle_->xyz_center_ = Vec3d(xyz_center.data());
+
+    Vec3d ez(axis.data());
+    ez.normalize();
+    Vec3d ex = math::cross(ez, Vec3d(1.0, 0.0, 0.0));
+    if (ex.norm() < 1e-6) {
+      ex = math::cross(ez, Vec3d(0.0, 1.0, 0.0));
+    }
+    ex.normalize();
+    Vec3d ey = math::cross(ez, ex);
+    ey.normalize();
+    mt_bundle_->rotation_matrix_center_.col(0) = ex;
+    mt_bundle_->rotation_matrix_center_.col(1) = ey;
+    mt_bundle_->rotation_matrix_center_.col(2) = ez;
+
+    spb_chrom_complex1_->xyz_center_ = mt_bundle_->get_xyz1();
+    spb_chrom_complex1_->rotation_matrix_center_ =
+        mt_bundle_->rotation_matrix_center_;
+    spb_chrom_complex2_->xyz_center_ = mt_bundle_->get_xyz2();
+    spb_chrom_complex2_->rotation_matrix_center_ =
+        mt_bundle_->rotation_matrix_center_;
+  }
+
   void init_subcomponents(const YAML::Node &sim_node,
                           const YAML::Node &own_node) override {
+    printf("RigidSpindle0::init_subcomponents\n");
     mt_bundle_ =
         &init_subcomponent<RigidMTBundle0>(sim_node, own_node, "mt_bundle");
     spb_chrom_complex1_ = &init_subcomponent<SphericalSPBChromatinComplex>(
         sim_node, own_node, "spb_chrom_complex1");
+
+    std::string key2 = "spb_chrom_complex2";
+    if (own_node["symmetric"]) {
+      bool symmetric = own_node["symmetric"].as<bool>();
+      if (symmetric) {
+        key2 = "spb_chrom_complex1";
+      }
+    }
     spb_chrom_complex2_ = &init_subcomponent<SphericalSPBChromatinComplex>(
-        sim_node, own_node, "spb_chrom_complex2");
+        sim_node, own_node, key2);
   }
-  void init_interactions() override {
-    MTSPB1Interaction &mtspb1_int =
-        init_interaction<MTSPB1Interaction>(*mt_bundle_, *spb_chrom_complex1_);
-    mtspb1_int.stretch_stiffness_ = mt_spb_stretch_stiffness_;
-    mtspb1_int.rotation_stiffness_ = mt_spb_rotation_stiffness_;
-    MTSPB2Interaction &mtspb2_int =
-        init_interaction<MTSPB2Interaction>(*mt_bundle_, *spb_chrom_complex2_);
-    mtspb2_int.stretch_stiffness_ = mt_spb_stretch_stiffness_;
-    mtspb2_int.rotation_stiffness_ = mt_spb_rotation_stiffness_;
+  void init_interactions(const YAML::Node &sim_node,
+                         const YAML::Node &own_node) override {
+    printf("RigidSpindle0::init_interactions\n");
+    MTSPB1Interaction &mtspb1_int = init_interaction<MTSPB1Interaction>(
+        *mt_bundle_, *spb_chrom_complex1_, sim_node, own_node);
+    MTSPB2Interaction &mtspb2_int = init_interaction<MTSPB2Interaction>(
+        *mt_bundle_, *spb_chrom_complex2_, sim_node, own_node);
   }
 };
 

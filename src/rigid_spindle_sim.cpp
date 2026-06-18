@@ -18,6 +18,7 @@ namespace meshbrane {
 
 RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
     : SimulationBase(path_to_parameters) {
+
   printf("RigidSpindleSim::RigidSpindleSim\n");
   if (parameters_["dt_save"]) {
     printf("set dt_save_\n");
@@ -111,6 +112,24 @@ RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
   printf("Added data samples\n");
   data_.save_file();
   data_.clear();
+
+  //
+  //
+  //
+  //
+  auto spindle = &init_object<RigidSpindle0>(parameters_, "spindle");
+  // auto spindle = std::make_unique<RigidSpindle0>();
+  // spindle->init(parameters_, parameters_["spindle"]);
+  bool spindle_is_composite = spindle->is_composite();
+  spindle->update_cached_data();
+  spindle->clear_forces();
+  spindle->apply_internal_interactions();
+  spindle->apply_thermal_fluctuations(dt_max_, kBT_, rng_);
+  spindle->update_state_variables(dt_max_);
+  //
+  //
+  //
+  //
 }
 
 // Core methods
@@ -255,13 +274,13 @@ void RigidSpindleSim::update_cached_data() {
 
 void RigidSpindleSim::apply_thermal_fluctuations(double dt) {
   //
-  envelope_.apply_thermal_fluctuations(dt, kBT_, rng_);
+  envelope_.apply_thermal_fluctuations_to_self(dt, kBT_, rng_);
   // spindle_.apply_thermal_fluctuations(dt, kBT_, rng_);
 }
 
 void RigidSpindleSim::update_state_variables(double dt) {
   spindle_.update_state_variables(dt);
-  envelope_.update_state_variables(dt);
+  envelope_.update_own_state_variables(dt);
 }
 
 // Helpers

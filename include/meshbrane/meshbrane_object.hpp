@@ -43,7 +43,8 @@ struct MeshBraneObject {
   virtual void set_initial_conditions(const YAML::Node &sim_node,
                                       const YAML::Node &own_node) {}
   // initialize interactions between subcomponents
-  virtual void init_interactions() {}
+  virtual void init_interactions(const YAML::Node &sim_node,
+                                 const YAML::Node &own_node) {}
   // misc object-specific init stuff
   virtual void after_init() {}
   // some objects do not have subcomponents, but still have
@@ -57,7 +58,7 @@ struct MeshBraneObject {
   virtual void
   apply_thermal_fluctuations_to_self(double dt, double kBT,
                                      kmc::RandomNumberGenerator &rng) {}
-  virtual void clear_own_interactions() {}
+  virtual void clear_own_forces() {}
 
   virtual void update_own_cached_data() {}
 
@@ -85,11 +86,11 @@ struct MeshBraneObject {
     }
   }
 
-  void clear_interactions() {
-    clear_own_interactions();
+  void clear_forces() {
+    clear_own_forces();
 
     for (auto &component : subcomponents_) {
-      component->clear_interactions();
+      component->clear_forces();
     }
   }
 
@@ -127,7 +128,9 @@ struct MeshBraneObject {
   }
 
   template <typename Tinteraction, typename Tobj1, typename Tobj2>
-  Tinteraction &init_interaction(Tobj1 &obj1, Tobj2 &obj2) {
+  Tinteraction &init_interaction(Tobj1 &obj1, Tobj2 &obj2,
+                                 const YAML::Node &sim_node,
+                                 const YAML::Node &own_node) {
     static_assert(std::is_base_of_v<MeshBraneObject, Tobj1>,
                   "Tobj1 must derive from MeshBraneObject");
 
@@ -142,6 +145,7 @@ struct MeshBraneObject {
 
     auto interaction = std::make_unique<Tinteraction>(obj1, obj2);
     Tinteraction &ref = *interaction;
+    ref.init(sim_node, own_node);
     subcomponent_interactions_.push_back(std::move(interaction));
     return ref;
   }
@@ -152,50 +156,50 @@ struct MeshBraneObject {
 
     set_own_parameters(sim_node, own_node);
     init_subcomponents(sim_node, own_node);
-    init_interactions();
+    init_interactions(sim_node, own_node);
     after_init();
   }
 };
 
-class Obj1 : public MeshBraneObject {
-public:
-  double some_data1_;
-};
+// class Obj1 : public MeshBraneObject {
+// public:
+//   double some_data1_;
+// };
 
-class Obj2 : public MeshBraneObject {
-public:
-  double some_data2_;
-};
+// class Obj2 : public MeshBraneObject {
+// public:
+//   double some_data2_;
+// };
 
-class Obj0 : public MeshBraneObject {
-public:
-  // Non-owning aliases. Ownership is held by subcomponents_.
-  Obj1 *obj1_{nullptr};
-  Obj2 *obj2_{nullptr};
-  //
-private:
-  class Obj1Obj2Interaction : public PairInteraction {
-  public:
-    Obj1 &obj1_;
-    Obj2 &obj2_;
+// class Obj0 : public MeshBraneObject {
+// public:
+//   // Non-owning aliases. Ownership is held by subcomponents_.
+//   Obj1 *obj1_{nullptr};
+//   Obj2 *obj2_{nullptr};
+//   //
+// private:
+//   class Obj1Obj2Interaction : public TypedPairInteraction<Obj1, Obj2> {
+//   public:
+//     using Base = TypedPairInteraction<Obj1, Obj2>;
+//     Obj1Obj2Interaction(Obj1 &obj1, Obj2 &obj2) : Base(obj1, obj2) {}
 
-    Obj1Obj2Interaction(Obj1 &obj1, Obj2 &obj2) : obj1_(obj1), obj2_(obj2) {}
-
-    void interact() override {
-      // use obj1_ and obj2_
-    }
-  };
-  //
-public:
-  void init_subcomponents(const YAML::Node &sim_node,
-                          const YAML::Node &own_node) override {
-    obj1_ = &init_subcomponent<Obj1>(sim_node, own_node, "obj1");
-    obj2_ = &init_subcomponent<Obj2>(sim_node, own_node, "obj2");
-  }
-  void init_interactions() override {
-    init_interaction<Obj1Obj2Interaction>(*obj1_, *obj2_);
-  }
-};
+//     void interact() override {
+//       // use obj1_ and obj2_
+//     }
+//   };
+//   //
+// public:
+//   void init_subcomponents(const YAML::Node &sim_node,
+//                           const YAML::Node &own_node) override {
+//     obj1_ = &init_subcomponent<Obj1>(sim_node, own_node, "obj1");
+//     obj2_ = &init_subcomponent<Obj2>(sim_node, own_node, "obj2");
+//   }
+//   void init_interactions(const YAML::Node &sim_node,
+//                          const YAML::Node &own_node) override {
+//     init_interaction<Obj1Obj2Interaction>(*obj1_, *obj2_, sim_node,
+//     own_node);
+//   }
+// };
 
 // template <typename T>
 // std::unique_ptr<T>

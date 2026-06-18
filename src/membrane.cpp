@@ -25,8 +25,8 @@ void Membrane::clear_interactions() {
   force_V_.setZero();
 }
 
-void Membrane::apply_thermal_fluctuations(double dt, double kBT,
-                                          kmc::RandomNumberGenerator &rng) {
+void Membrane::apply_thermal_fluctuations_to_self(
+    double dt, double kBT, kmc::RandomNumberGenerator &rng) {
   if (!enable_fluctuations_) {
     return;
   }
@@ -52,7 +52,7 @@ void Membrane::update_cached_data() {
   // update_internal_forces();
 }
 
-void Membrane::update_state_variables(double dt) {
+void Membrane::update_own_state_variables(double dt) {
 
   if (use_local_drag_coefficient_) {
     for (int v = 0; v < get_num_vertices(); v++) {
