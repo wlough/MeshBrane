@@ -20,6 +20,7 @@ Installation requires
 
 * [Eigen](https://gitlab.com/libeigen/eigen)
 * [yaml-cpp](https://github.com/jbeder/yaml-cpp)
+* [ffmpeg](https://github.com/FFmpeg/FFmpeg)
 
 ## Examples
 
