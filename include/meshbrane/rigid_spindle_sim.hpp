@@ -360,6 +360,12 @@ public:
   TimeSeries<Samples1d> envelope_moments_;
   TimeSeries<double> spb_antipodality_;
 
+  TimeSeries<Samples1d> envelope_mean_curvature_V_;
+  TimeSeries<Samples1d> envelope_gaussian_curvature_V_;
+  TimeSeries<Samples1d> envelope_lap_mean_curvature_V_;
+  TimeSeries<double> envelope_area_;
+  TimeSeries<double> envelope_volume_;
+
   RigidSpindleSimData() = default;
   RigidSpindleSimData(const std::filesystem::path &data_dir) {
     t_ = TimeSeries<double>(data_dir / "t.dat");
@@ -383,6 +389,15 @@ public:
     envelope_moments_ =
         TimeSeries<Samples1d>(data_dir / "envelope_moments.dat");
     spb_antipodality_ = TimeSeries<double>(data_dir / "spb_antipodality.dat");
+
+    envelope_mean_curvature_V_ =
+        TimeSeries<Samples1d>(data_dir / "envelope_mean_curvature_V.dat");
+    envelope_gaussian_curvature_V_ =
+        TimeSeries<Samples1d>(data_dir / "envelope_gaussian_curvature_V.dat");
+    envelope_lap_mean_curvature_V_ =
+        TimeSeries<Samples1d>(data_dir / "envelope_lap_mean_curvature_V.dat");
+    envelope_area_ = TimeSeries<double>(data_dir / "envelope_area.dat");
+    envelope_volume_ = TimeSeries<double>(data_dir / "envelope_volume.dat");
   }
   void save_file() {
     t_.save_file();
@@ -400,6 +415,12 @@ public:
     spb_antipodality_.save_file();
     envelope_xyz_center_.save_file();
     envelope_moments_.save_file();
+
+    envelope_mean_curvature_V_.save_file();
+    envelope_gaussian_curvature_V_.save_file();
+    envelope_lap_mean_curvature_V_.save_file();
+    envelope_area_.save_file();
+    envelope_volume_.save_file();
   }
   void append_file() {
     t_.append_file();
@@ -417,6 +438,12 @@ public:
     spb_antipodality_.append_file();
     envelope_xyz_center_.append_file();
     envelope_moments_.append_file();
+
+    envelope_mean_curvature_V_.append_file();
+    envelope_gaussian_curvature_V_.append_file();
+    envelope_lap_mean_curvature_V_.append_file();
+    envelope_area_.append_file();
+    envelope_volume_.append_file();
   }
   void clear() {
     t_.samples_.clear();
@@ -434,6 +461,11 @@ public:
     spb_antipodality_.samples_.clear();
     envelope_xyz_center_.samples_.clear();
     envelope_moments_.samples_.clear();
+    envelope_mean_curvature_V_.samples_.clear();
+    envelope_gaussian_curvature_V_.samples_.clear();
+    envelope_lap_mean_curvature_V_.samples_.clear();
+    envelope_area_.samples_.clear();
+    envelope_volume_.samples_.clear();
   }
 
   // void make_output_directory(const std::filesystem::path &output_dir) {
@@ -498,6 +530,14 @@ public:
 
     // data_.mt_rotation_matrix_center_.add_sample(
     //     spindle_.mt_bundle_.rotation_matrix_center_);
+
+    data_.envelope_mean_curvature_V_.add_sample(envelope_.mean_curvature_V_);
+    data_.envelope_gaussian_curvature_V_.add_sample(
+        envelope_.gaussian_curvature_V_);
+    data_.envelope_lap_mean_curvature_V_.add_sample(
+        envelope_.lap_mean_curvature_V_);
+    data_.envelope_area_.add_sample(envelope_.area_F_.sum());
+    data_.envelope_volume_.add_sample(envelope_.total_volume_);
   }
 
   double dt_max();

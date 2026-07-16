@@ -117,15 +117,15 @@ RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
   //
   //
   //
-  auto spindle = &init_object<RigidSpindle0>(parameters_, "spindle");
-  // auto spindle = std::make_unique<RigidSpindle0>();
-  // spindle->init(parameters_, parameters_["spindle"]);
-  bool spindle_is_composite = spindle->is_composite();
-  spindle->update_cached_data();
-  spindle->clear_forces();
-  spindle->apply_internal_interactions();
-  spindle->apply_thermal_fluctuations(dt_max_, kBT_, rng_);
-  spindle->update_state_variables(dt_max_);
+  // auto spindle = &init_object<RigidSpindle0>(parameters_, "spindle");
+  // // auto spindle = std::make_unique<RigidSpindle0>();
+  // // spindle->init(parameters_, parameters_["spindle"]);
+  // bool spindle_is_composite = spindle->is_composite();
+  // spindle->update_cached_data();
+  // spindle->clear_forces();
+  // spindle->apply_internal_interactions();
+  // spindle->apply_thermal_fluctuations(dt_max_, kBT_, rng_);
+  // spindle->update_state_variables(dt_max_);
   //
   //
   //

@@ -1,0 +1,99 @@
+output_dir: output # Path to output directory
+run_name: bending_force_test # Name of the run
+make_movie: false # Whether to make a movie of the simulation
+clear_output_dir: true # Whether to clear the output directory
+dt: 1e-6
+dt_frame: 5e-4
+dt_save: 0.01
+T_run: 5.0
+kBT: 1.0291e-2 # ***
+bulk_viscosity: 1.0
+viewer:
+  eye: [0.00000001, 6.8125, 0]
+  center: [0.0, 0.0, 0.0]
+  up: [0.0, 1.0, 0.0]
+  width: 1920
+  height: 1080
+  dfar: 12
+  dnear: 0.1
+  background_color: [1.0, 1.0, 1.0, 1.0]
+envelope:
+  bending_modulus: 1.0
+  area_stiffness: 8.125e1 # ***
+  surface_tension_constant: 3.25e1 # ***
+  volume_stiffness: 2.5e4 # ***
+  tether_stiffness: 1.605e-1 # ***
+  dt_flip: 1e-5 # ***
+  flipping_probability: 0.3 # ***
+  wca_sigma: 3.25e-2 # ***
+  # ply_path: data/example_ply/unit_sphere_020480_he.ply
+  ply_path: data/example_ply/unit_sphere_005120_he.ply
+  # ply_path: data/example_ply/unit_sphere_001280_he.ply
+  use_surface_tension_constant: true
+  use_surface_tension_penalty_local: true
+  enable_fluctuations: false
+  spontaneous_curvature: 0.0
+  splay_modulus: 0.0
+  dimensionless_tether_repulsive_singularity: 0.4
+  dimensionless_tether_repulsive_onset: 0.8
+  dimensionless_tether_attractive_onset: 1.2
+  dimensionless_tether_attractive_singularity: 1.6
+  fix_target_face_area: true
+  fix_target_volume: true
+  pressure_type: penalty
+  node_drag_coefficient: 1.0 # ***
+  use_local_drag_coefficient: true
+  vector_field_scale: .1
+  show_force_field: false
+  show_mcvec_field: false
+  enable_flipping: false
+  show_half_edges: false
+  show_vertices: false
+  show_edges: false
+  draw_wireframe: true
+  gaussian_curvature_type: angle_defect
+  # gaussian_curvature_type: laplacian
+  # laplacian_type: guckenberger
+  laplacian_type: cotan
+  # laplacian_type: adaptive_belkin
+  timestep_type: euler_adaptive
+  show_contact_patches: true
+  atol: 1e-6
+  rtol: 1e-3
+  belkin_dt: 0.001
+  belkin_min_ring: 2
+  heat_dt_multiple: 1
+  construct_laplacian_matrix: false
+  rgba_face: [1.0, 0.7431, 0.0, 1.0]
+  rgba_half_edge: [0.5804, 0.0, 0.8275, 1.0]
+spindle:
+  xyz_center: [0.0, 0.0, 0.0]
+  axis: [0.0, 0.0, 1.0]
+  draw_axes: false
+  symmetric: true
+  spb1:
+    contact_radius: 0.1
+    num_refinements: 0
+    wca_epsilon: 1.25e1
+    wca_sigma: 3.25e-2
+    enable_fluctuations: false
+  spb2:
+    contact_radius: 0.15
+    num_refinements: 0
+    wca_epsilon: 1.25e1
+    wca_sigma: 3.25e-2
+    enable_fluctuations: false
+  mt_bundle:
+    xyz_center: [0.0, 0.0, 0.0]
+    axis: [0.0, 0.0, 1.0]
+    overlap_length: 0.0
+    length: 0.0
+    radius: 9.5e-2
+    motor_force_per_length: 0.0
+    max_force: 0.0
+    max_length: 0.0
+    wca_epsilon: 1.25e1
+    wca_sigma: 3.25e-2
+    v_grow: 0.0
+    num_mts: 20
+    enable_fluctuations: false
