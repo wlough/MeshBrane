@@ -365,6 +365,7 @@ public:
   TimeSeries<Samples1d> envelope_lap_mean_curvature_V_;
   TimeSeries<double> envelope_area_;
   TimeSeries<double> envelope_volume_;
+  TimeSeries<double> envelope_average_edge_length_;
 
   RigidSpindleSimData() = default;
   RigidSpindleSimData(const std::filesystem::path &data_dir) {
@@ -398,6 +399,8 @@ public:
         TimeSeries<Samples1d>(data_dir / "envelope_lap_mean_curvature_V.dat");
     envelope_area_ = TimeSeries<double>(data_dir / "envelope_area.dat");
     envelope_volume_ = TimeSeries<double>(data_dir / "envelope_volume.dat");
+    envelope_average_edge_length_ =
+        TimeSeries<double>(data_dir / "envelope_average_edge_length.dat");
   }
   void save_file() {
     t_.save_file();
@@ -421,6 +424,7 @@ public:
     envelope_lap_mean_curvature_V_.save_file();
     envelope_area_.save_file();
     envelope_volume_.save_file();
+    envelope_average_edge_length_.save_file();
   }
   void append_file() {
     t_.append_file();
@@ -444,6 +448,7 @@ public:
     envelope_lap_mean_curvature_V_.append_file();
     envelope_area_.append_file();
     envelope_volume_.append_file();
+    envelope_average_edge_length_.append_file();
   }
   void clear() {
     t_.samples_.clear();
@@ -466,6 +471,7 @@ public:
     envelope_lap_mean_curvature_V_.samples_.clear();
     envelope_area_.samples_.clear();
     envelope_volume_.samples_.clear();
+    envelope_average_edge_length_.samples_.clear();
   }
 
   // void make_output_directory(const std::filesystem::path &output_dir) {
@@ -538,6 +544,8 @@ public:
         envelope_.lap_mean_curvature_V_);
     data_.envelope_area_.add_sample(envelope_.area_F_.sum());
     data_.envelope_volume_.add_sample(envelope_.total_volume_);
+    data_.envelope_average_edge_length_.add_sample(
+        envelope_.average_edge_length_);
   }
 
   double dt_max();

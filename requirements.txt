@@ -1,0 +1,9 @@
+jupyterlab
+ipykernel
+black
+jedi
+matplotlib
+mccabe
+numpy
+pycodestyle
+python-lsp-server[all]

@@ -1,10 +1,10 @@
 output_dir: output # Path to output directory
-run_name: bending_force_test # Name of the run
+run_name: bending_force_test2 # Name of the run
 make_movie: false # Whether to make a movie of the simulation
 clear_output_dir: true # Whether to clear the output directory
 dt: 1e-6
 dt_frame: 5e-4
-dt_save: 0.01
+dt_save: 1e-5
 T_run: 5.0
 kBT: 1.0291e-2 # ***
 bulk_viscosity: 1.0
@@ -26,8 +26,8 @@ envelope:
   dt_flip: 1e-5 # ***
   flipping_probability: 0.3 # ***
   wca_sigma: 3.25e-2 # ***
-  # ply_path: data/example_ply/unit_sphere_020480_he.ply
-  ply_path: data/example_ply/unit_sphere_005120_he.ply
+  ply_path: data/example_ply/unit_sphere_020480_he.ply
+  # ply_path: data/example_ply/unit_sphere_005120_he.ply
   # ply_path: data/example_ply/unit_sphere_001280_he.ply
   use_surface_tension_constant: true
   use_surface_tension_penalty_local: true
