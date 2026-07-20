@@ -58,7 +58,7 @@ envelope:
   gaussian_curvature_type: angle_defect
   laplacian_type: cotan
   timestep_type: euler_adaptive
-  show_contact_patches: false
+  show_contact_patches: true
   atol: 1e-6
   rtol: 1e-3
   belkin_dt: 0.1
@@ -76,24 +76,24 @@ spindle:
     num_refinements: 4
     wca_epsilon: 1.25e1
     wca_sigma: 3.25e-2
-    enable_fluctuations: false
+    enable_fluctuations: true
   spb2:
     contact_radius: 0.15
     num_refinements: 4
     wca_epsilon: 1.25e1
     wca_sigma: 3.25e-2
-    enable_fluctuations: false
+    enable_fluctuations: true
   mt_bundle:
     xyz_center: [0.0, 0.0, 0.0]
     axis: [0.0, 0.0, 1.0]
     overlap_length: 3e-1
-    length: 4e-1
+    length: 6e-1
     radius: 9.5e-2
     motor_force_per_length: 1.5e2
-    max_force: [5e1, 1e2, 2e2, 4e2]
+    max_force: [2e2]
     max_length: 3e0
     wca_epsilon: 1.25e1
     wca_sigma: 3.25e-2
     v_grow: 2.54065
     num_mts: 20
-    enable_fluctuations: false
+    enable_fluctuations: true

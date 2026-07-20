@@ -1,0 +1,1 @@
+build/bin/rigid_spindle_sim data/parameter_files/area_volume_test/area_volume_test_sphere_000320.yaml & build/bin/rigid_spindle_sim data/parameter_files/area_volume_test/area_volume_test_sphere_001280.yaml & build/bin/rigid_spindle_sim data/parameter_files/area_volume_test/area_volume_test_sphere_005120.yaml
