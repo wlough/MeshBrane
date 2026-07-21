@@ -6,4 +6,6 @@ matplotlib
 mccabe
 numpy
 pycodestyle
+pymathutils
 python-lsp-server[all]
+sympy

@@ -159,6 +159,74 @@ template <> void TimeSeries<Samples2d>::load_file() {
   }
 }
 
+//
+template <> void TimeSeries<Samples3d>::save_file() {
+  std::ofstream file(save_path_, std::ios::binary);
+  if (!file)
+    throw std::runtime_error("Could not open file for writing");
+  uint64_t n = static_cast<uint64_t>(samples_.size());
+  file.write(reinterpret_cast<const char *>(&n), sizeof(n));
+
+  int64_t rows = n ? samples_[0].rows() : 0;
+  int64_t cols = 3;
+  file.write(reinterpret_cast<const char *>(&rows), sizeof(rows));
+  file.write(reinterpret_cast<const char *>(&cols), sizeof(cols));
+
+  for (const auto &M : samples_) {
+    assert(M.rows() == rows && M.cols() == cols);
+    // write row-major for easy numpy reshape
+    Eigen::Matrix<double, Eigen::Dynamic, 3, Eigen::RowMajor> tmp = M;
+    file.write(reinterpret_cast<const char *>(tmp.data()),
+               sizeof(double) * rows * cols);
+  }
+}
+
+template <> void TimeSeries<Samples3d>::append_file() {
+  std::fstream file(save_path_,
+                    std::ios::binary | std::ios::in | std::ios::out);
+  if (!file)
+    throw std::runtime_error("Could not open file for appending");
+
+  uint64_t current_size;
+  file.read(reinterpret_cast<char *>(&current_size), sizeof(current_size));
+  uint64_t add = static_cast<uint64_t>(samples_.size());
+  uint64_t new_size = current_size + add;
+
+  file.seekp(0, std::ios::beg);
+  file.write(reinterpret_cast<const char *>(&new_size), sizeof(new_size));
+  file.seekp(0, std::ios::end);
+
+  // assume rows/cols header already present and equal for all frames
+  for (const auto &M : samples_) {
+    Eigen::Matrix<double, Eigen::Dynamic, 3, Eigen::RowMajor> tmp = M;
+    file.write(reinterpret_cast<const char *>(tmp.data()),
+               sizeof(double) * tmp.rows() * tmp.cols());
+  }
+  samples_.clear();
+}
+
+template <> void TimeSeries<Samples3d>::load_file() {
+  std::ifstream file(save_path_, std::ios::binary);
+  if (!file)
+    throw std::runtime_error("Could not open file for reading");
+  uint64_t n;
+  file.read(reinterpret_cast<char *>(&n), sizeof(n));
+  int64_t rows, cols;
+  file.read(reinterpret_cast<char *>(&rows), sizeof(rows));
+  file.read(reinterpret_cast<char *>(&cols), sizeof(cols));
+  samples_.clear();
+  samples_.reserve(n);
+  for (uint64_t i = 0; i < n; ++i) {
+    Eigen::Matrix<double, Eigen::Dynamic, 3> M(rows, cols);
+    Eigen::Matrix<double, Eigen::Dynamic, 3, Eigen::RowMajor> tmp(rows, cols);
+    file.read(reinterpret_cast<char *>(tmp.data()),
+              sizeof(double) * rows * cols);
+    M = tmp; // copy to column-major Samples3d
+    samples_.push_back(std::move(M));
+  }
+}
+
+//
 template <> void TimeSeries<Eigen::Vector3d>::save_file() {
   std::ofstream file(save_path_, std::ios::binary);
   if (!file) {
@@ -366,6 +434,8 @@ public:
   TimeSeries<double> envelope_area_;
   TimeSeries<double> envelope_volume_;
   TimeSeries<double> envelope_average_edge_length_;
+  TimeSeries<Samples3d> envelope_xyz_coord_V_;
+  TimeSeries<Samples1d> envelope_area_V_;
 
   RigidSpindleSimData() = default;
   RigidSpindleSimData(const std::filesystem::path &data_dir) {
@@ -401,6 +471,9 @@ public:
     envelope_volume_ = TimeSeries<double>(data_dir / "envelope_volume.dat");
     envelope_average_edge_length_ =
         TimeSeries<double>(data_dir / "envelope_average_edge_length.dat");
+    envelope_xyz_coord_V_ =
+        TimeSeries<Samples3d>(data_dir / "envelope_xyz_coord_V.dat");
+    envelope_area_V_ = TimeSeries<Samples1d>(data_dir / "envelope_area_V.dat");
   }
   void save_file() {
     t_.save_file();
@@ -425,6 +498,8 @@ public:
     envelope_area_.save_file();
     envelope_volume_.save_file();
     envelope_average_edge_length_.save_file();
+    envelope_xyz_coord_V_.save_file();
+    envelope_area_V_.save_file();
   }
   void append_file() {
     t_.append_file();
@@ -449,6 +524,8 @@ public:
     envelope_area_.append_file();
     envelope_volume_.append_file();
     envelope_average_edge_length_.append_file();
+    envelope_xyz_coord_V_.append_file();
+    envelope_area_V_.append_file();
   }
   void clear() {
     t_.samples_.clear();
@@ -472,6 +549,8 @@ public:
     envelope_area_.samples_.clear();
     envelope_volume_.samples_.clear();
     envelope_average_edge_length_.samples_.clear();
+    envelope_xyz_coord_V_.samples_.clear();
+    envelope_area_V_.samples_.clear();
   }
 
   // void make_output_directory(const std::filesystem::path &output_dir) {
@@ -491,6 +570,8 @@ public:
   double dt_save_{1.0};
   Viewer viewer_;
 
+  bool save_sim_data_{true};
+
   // RigidSpindleSim specific
   RigidSpindleSimData data_;
   Membrane envelope_;
@@ -507,7 +588,9 @@ public:
   RigidSpindleSim(const std::filesystem::path &path_to_parameters);
 
   void add_data_samples() {
-
+    if (!save_sim_data_) {
+      return;
+    }
     record_spindle_data();
     record_envelope_data();
 
@@ -546,6 +629,8 @@ public:
     data_.envelope_volume_.add_sample(envelope_.total_volume_);
     data_.envelope_average_edge_length_.add_sample(
         envelope_.average_edge_length_);
+    data_.envelope_xyz_coord_V_.add_sample(envelope_.xyz_coord_V_);
+    data_.envelope_area_V_.add_sample(envelope_.area_V_);
   }
 
   double dt_max();

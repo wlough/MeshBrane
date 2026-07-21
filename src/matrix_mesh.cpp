@@ -517,7 +517,8 @@ double MatrixMesh::signed_volume_f(int f) const {
   Vec3d v = xyz_coord_v(v_origin_h(h2));
   Vec3d w = xyz_coord_v(v_origin_h(h3));
   return (u[1] * v[2] * w[0] - u[2] * v[1] * w[0] + u[2] * v[0] * w[1] -
-          u[0] * v[2] * w[1] + u[0] * v[1] * w[2] - u[1] * v[0] * w[2]);
+          u[0] * v[2] * w[1] + u[0] * v[1] * w[2] - u[1] * v[0] * w[2]) /
+         6.0;
 }
 
 void MatrixMesh::update_mesh_volume() {

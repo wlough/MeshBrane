@@ -1,13 +1,14 @@
 output_dir: output # Path to output directory
-run_name: fluctuation_test_test # Name of the run
+run_name: fluctuation_test # Name of the run
 make_movie: false # Whether to make a movie of the simulation
 clear_output_dir: true # Whether to clear the output directory
-dt: 1e-6
+dt: 1e-5
 dt_frame: 5e-4
-dt_save: 0.25
+dt_save: .1
 T_run: 5.0
 kBT: 1.0291e-2 # ***
 bulk_viscosity: 1.0
+save_sim_data: true
 viewer:
   eye: [0.00000001, 6.8125, 0]
   center: [0.0, 0.0, 0.0]
@@ -27,8 +28,8 @@ envelope:
   flipping_probability: 0.3 # ***
   wca_sigma: 3.25e-2 # ***
   # ply_path: data/example_ply/unit_sphere_020480_he.ply
-  ply_path: data/example_ply/unit_sphere_005120_he.ply
-  # ply_path: data/example_ply/unit_sphere_001280_he.ply
+  # ply_path: data/example_ply/unit_sphere_005120_he.ply
+  ply_path: data/example_ply/unit_sphere_001280_he.ply
   use_surface_tension_constant: true
   use_surface_tension_penalty_local: true
   enable_fluctuations: true
@@ -57,7 +58,7 @@ envelope:
   laplacian_type: cotan
   # laplacian_type: adaptive_belkin
   timestep_type: euler_adaptive
-  show_contact_patches: true
+  show_contact_patches: false
   atol: 1e-6
   rtol: 1e-3
   belkin_dt: 0.001
@@ -78,7 +79,7 @@ spindle:
     wca_sigma: 3.25e-2
     enable_fluctuations: false
   spb2:
-    contact_radius: 0.15
+    contact_radius: 0.1
     num_refinements: 0
     wca_epsilon: 1.25e1
     wca_sigma: 3.25e-2

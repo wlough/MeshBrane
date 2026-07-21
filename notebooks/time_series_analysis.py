@@ -5,12 +5,20 @@ try:
     nb_dir = Path().resolve()
     proj_dir = (nb_dir / "..").resolve()
     sys.path.insert(0, str(proj_dir))
-
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from src_python.time_series import read_time_series, plot_log_log_fit
 except:
     pass
+
+import numpy as np
+import matplotlib.pyplot as plt
+from pymathutils import thetaphi_from_xyz
+from pymathutils.special import (
+    Ylm,
+    compute_all_Ylm,
+    spherical_harmonic_index_n_LM,
+    spherical_harmonic_index_lm_N,
+)
+from src_python.time_series import read_time_series, plot_log_log_fit
+import sympy as sp
 
 # %%
 # Curvature and bending stress convergence
@@ -86,7 +94,7 @@ mean_eps_lapH = np.array([np.mean(e) for e in eps_lapH])
 mean_eps_K = np.array([np.mean(e) for e in eps_K])
 mean_eps_F = np.array([np.mean(e) for e in eps_F])
 
-plot_log_log_fit(1 / L, normalizedL2_err_H)
+plot_log_log_fit(1 / L, mean_eps_H)
 
 # %%
 # Area and volume conservation SPHERE
@@ -136,7 +144,6 @@ plt.show()
 # %%
 # Area and volume conservation MITOSIS
 
-
 output_dir = "../output/area_volume_test_mitosis"
 rows = [
     0,
@@ -147,7 +154,7 @@ rows = [
 cols = [0]
 num_rows = 4
 num_cols = 1
-t_max = 5.0
+t_max = 2.0
 err_min = 0.001
 
 R_contact = np.array(
@@ -179,6 +186,9 @@ time = [read_time_series(path) for path in time_paths]
 area = [read_time_series(path) for path in area_paths]
 volume = [read_time_series(path) for path in volume_paths]
 
+
+A_tube = 2 * np.pi * 0.1 * 2
+# dA_A = [(A - A_tube - A[0]) / A[0] for A in area]
 dA_A = [(A - A[0]) / A[0] for A in area]
 dV_V = [(V - V[0]) / V[0] for V in volume]
 
@@ -188,8 +198,10 @@ fig, axes = plt.subplots(
     nrows=1,
     ncols=2,
     figsize=(8, 4),
-    # sharey=True,
+    sharey=True,
 )
+axes[0].set_title(r"$\Delta A/A_0$")
+axes[1].set_title(r"$\Delta V/V_0$")
 
 for r, t, da_a, dv_v in zip(R_contact, time, dA_A, dV_V):
     t_mask = t <= t_max
@@ -204,4 +216,110 @@ for r, t, da_a, dv_v in zip(R_contact, time, dA_A, dV_V):
     axes[0].plot(tt, a_err, label=r"$\rho=" + f"{r}" + r"$")
     axes[1].plot(tt, v_err, label=r"$\rho=" + f"{r}" + r"$")
 plt.legend()
+
+fig.savefig("../output/area_volume_test_mitosis.png", dpi=600)
 plt.show()
+
+
+# %%
+# Fluctuations
+
+output_dir = "../output/fluctuation_test_test"
+
+l_max = 10
+t_start = 0.01
+
+xyz_coord_V_path = f"{output_dir}/raw_data/envelope_xyz_coord_V.dat"
+area_V_path = f"{output_dir}/raw_data/envelope_area_V.dat"
+volume_path = f"{output_dir}/raw_data/envelope_volume.dat"
+t_path = f"{output_dir}/raw_data/t.dat"
+
+big_t = read_time_series(t_path)
+t_mask = big_t >= t_start
+big_t = big_t[t_mask]
+big_xyz_coord_V = read_time_series(xyz_coord_V_path)[t_mask]
+big_area_V = read_time_series(area_V_path)[t_mask]
+big_volume = read_time_series(volume_path)[t_mask] / 6  # ***
+
+
+big_R0 = (3 * big_volume / (4 * np.pi)) ** (1 / 3)
+big_xyz_coord_V_com = np.mean(big_xyz_coord_V, axis=1)
+
+big_xyz_coord_V = np.array(
+    [
+        [xyz - xyz_com for xyz in XYZt]
+        for XYZt, xyz_com in zip(big_xyz_coord_V, big_xyz_coord_V_com)
+    ]
+)
+
+big_R = np.linalg.norm(big_xyz_coord_V, axis=2) - 1.0
+
+big_thetaphi_coord_V = np.array([thetaphi_from_xyz(xyz) for xyz in big_xyz_coord_V])
+
+
+# tvn
+big_Yn = np.array([compute_all_Ylm(l_max, th_ph) for th_ph in big_thetaphi_coord_V])
+
+
+big_Un = np.einsum("tv, tv, tvn->tn", big_area_V, big_R, big_Yn.conjugate())
+
+# big_sqr_Un = np.abs(np.einsum("tv, tv, tvn->tn", big_area_V,
+#                    big_R, big_Yn.conjugate()))**2
+mean_sqr_Un = np.mean(np.abs(big_Un) ** 2, axis=0)
+
+mean_sqr_Ulm = [[0.0 for m in range(-l, l + 1)] for l in range(l_max + 1)]
+
+
+for l in range(l_max + 1):
+    for m in range(-l, l + 1):
+        n = spherical_harmonic_index_n_LM(l, m)
+        mean_sqr_Ulm[l][m] = mean_sqr_Un[n]
+
+mean_sqr_Ul = np.array([np.mean(mean_sqr_Ulm[l]) for l in range(l_max + 1)])
+
+##
+kBT = 1.0291e-2
+B = 1.0
+l = np.arange(l_max + 1)
+gamma = kBT / (B * (l - 1) * (l + 2) * mean_sqr_Ul) - l * (l + 1)
+gamma
+##
+
+##
+kBT = 1.0291e-2
+gamma = 32.5
+l = np.arange(l_max + 1)
+B = kBT / (mean_sqr_Ul * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
+B
+# ##
+
+# %%
+#
+# ######
+# gamma, kBT, B = sp.symbols(r"\gamma k_{B}T B")
+# # eqns = [
+# #     mean_sqr_Ul[l] - kBT / (B * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
+# #     for l in range(2, 5)
+# # ]
+# eqns = sp.Array(
+#     [
+#         mean_sqr_Ul[l] * (B * (l - 1) * (l + 2) * (gamma + l * (l + 1))) - kBT
+#         for l in range(2, 5)
+#     ]
+# )
+# vars = sp.Array([B, gamma, kBT])
+# #
+# sp.solve(eqns, vars)
+# #######
+#
+#
+# B, gamma = sp.symbols(r"B \gamma")
+# kBT = 1.0291e-2
+# eqns = sp.Array(
+#     [
+#         mean_sqr_Ul[l] * (B * (l - 1) * (l + 2) * (gamma + l * (l + 1))) - kBT
+#         for l in range(5, 7)
+#     ]
+# )
+# vars = sp.Array([B, gamma])
+# sp.solve(eqns, vars)

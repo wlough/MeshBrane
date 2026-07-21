@@ -32,6 +32,12 @@ RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
   } else {
     throw std::runtime_error("No kBT provided in parameters file");
   }
+
+  if (parameters_["save_sim_data"]) {
+    printf("set save_sim_data_\n");
+    save_sim_data_ = parameters_["save_sim_data"].as<bool>();
+  }
+
   if (parameters_["spindle"]) {
     printf("set spindle_\n");
     spindle_ = RigidSpindle(&parameters_, "spindle");
@@ -106,12 +112,14 @@ RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
   spindle_.compute_velocities();
   printf("Computed spindle velocities\n");
   //
-  data_ = RigidSpindleSimData(raw_data_dir_);
-  printf("Initialized data_\n");
-  add_data_samples();
-  printf("Added data samples\n");
-  data_.save_file();
-  data_.clear();
+  if (save_sim_data_) {
+    data_ = RigidSpindleSimData(raw_data_dir_);
+    printf("Initialized data_\n");
+    add_data_samples();
+    printf("Added data samples\n");
+    data_.save_file();
+    data_.clear();
+  }
 
   //
   //
@@ -141,7 +149,7 @@ void RigidSpindleSim::print_info() {
   printf("\n");
   printf("  t=%.10f\n", t_);
   printf("  dt=%.10f\n", dt_mean_);
-  printf("  Midpoint radius: %.10f\n", midpoint_radius_);
+  // printf("  Midpoint radius: %.10f\n", midpoint_radius_);
   envelope_.print_info();
   // printf("  Spindle length: %.10f\n", spindle_.length_);
   spindle_.print_info();
@@ -588,11 +596,13 @@ void RigidSpindleSim::write_outputs() {
   fs::path frame_path = get_frame_path();
   viewer_.save_frame(frame_path);
 
-  double t0 = data_.t_.first();
-  double t1 = data_.t_.last();
-  double Dt = t1 - t0;
-  if (dt_save_ < Dt) {
-    data_.append_file();
+  if (save_sim_data_) {
+    double t0 = data_.t_.first();
+    double t1 = data_.t_.last();
+    double Dt = t1 - t0;
+    if (dt_save_ < Dt) {
+      data_.append_file();
+    }
   }
 
   // fs::path ply_path = get_envelope_ply_path();
