@@ -1,12 +1,9 @@
-try:
-    import sys
-    from pathlib import Path
+import sys
+from pathlib import Path
 
-    nb_dir = Path().resolve()
-    proj_dir = (nb_dir / "..").resolve()
-    sys.path.insert(0, str(proj_dir))
-except:
-    pass
+nb_dir = Path().resolve()
+proj_dir = (nb_dir / "..").resolve()
+sys.path.insert(0, str(proj_dir))
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,11 +14,17 @@ from pymathutils.special import (
     spherical_harmonic_index_n_LM,
     spherical_harmonic_index_lm_N,
 )
+
+
 from src_python.time_series import read_time_series, plot_log_log_fit
 import sympy as sp
 
 # %%
-# Curvature and bending stress convergence
+############################################
+############################################
+# Curvature and bending stress convergence #
+############################################
+############################################
 
 output_dir = "../output/bending_force_test_angle_defect"
 # output_dir = "../output/bending_force_test_laplacian"
@@ -97,7 +100,11 @@ mean_eps_F = np.array([np.mean(e) for e in eps_F])
 plot_log_log_fit(1 / L, mean_eps_H)
 
 # %%
-# Area and volume conservation SPHERE
+#######################################
+#######################################
+# Area and volume conservation SPHERE #
+#######################################
+#######################################
 
 
 output_dir = "../output/area_volume_test_sphere"
@@ -141,8 +148,13 @@ for nf, t, da_a, dv_v in zip(Nf, time, dA_A, dV_V):
 plt.legend()
 
 plt.show()
+
 # %%
-# Area and volume conservation MITOSIS
+########################################
+########################################
+# Area and volume conservation MITOSIS #
+########################################
+########################################
 
 output_dir = "../output/area_volume_test_mitosis"
 rows = [
@@ -222,12 +234,20 @@ plt.show()
 
 
 # %%
-# Fluctuations
+################
+################
+# Fluctuations #
+################
+################
+# output_dir = "../output/fluctuations_test_001280"
+output_dir = "../output/fluctuations_test_005120"
 
-output_dir = "../output/fluctuation_test_test"
-
-l_max = 10
+l_max = 20
 t_start = 0.01
+# t_start = 0.0
+# t_stop = 0.18
+t_stop = 0.5
+nt_skip = 5
 
 xyz_coord_V_path = f"{output_dir}/raw_data/envelope_xyz_coord_V.dat"
 area_V_path = f"{output_dir}/raw_data/envelope_area_V.dat"
@@ -235,24 +255,27 @@ volume_path = f"{output_dir}/raw_data/envelope_volume.dat"
 t_path = f"{output_dir}/raw_data/t.dat"
 
 big_t = read_time_series(t_path)
-t_mask = big_t >= t_start
-big_t = big_t[t_mask]
-big_xyz_coord_V = read_time_series(xyz_coord_V_path)[t_mask]
-big_area_V = read_time_series(area_V_path)[t_mask]
-big_volume = read_time_series(volume_path)[t_mask] / 6  # ***
+
+t_mask = np.logical_and(big_t >= t_start, big_t <= t_stop)
+big_t.size
+big_t = big_t[t_mask][::nt_skip]
+big_xyz_coord_V = read_time_series(xyz_coord_V_path)[t_mask][::nt_skip]
+big_area_V = read_time_series(area_V_path)[t_mask][::nt_skip]
+big_volume = read_time_series(volume_path)[t_mask][::nt_skip]  # ***
 
 
-big_R0 = (3 * big_volume / (4 * np.pi)) ** (1 / 3)
-big_xyz_coord_V_com = np.mean(big_xyz_coord_V, axis=1)
+R0 = (3 * big_volume[0] / (4 * np.pi)) ** (1 / 3)
+# big_xyz_coord_V_com = np.mean(big_xyz_coord_V, axis=1)
+#
+# # big_xyz_coord_V = np.array(
+# #     [
+# #         [xyz - xyz_com for xyz in XYZt]
+# #         for XYZt, xyz_com in zip(big_xyz_coord_V, big_xyz_coord_V_com)
+# #     ]
+# # )
 
-big_xyz_coord_V = np.array(
-    [
-        [xyz - xyz_com for xyz in XYZt]
-        for XYZt, xyz_com in zip(big_xyz_coord_V, big_xyz_coord_V_com)
-    ]
-)
-
-big_R = np.linalg.norm(big_xyz_coord_V, axis=2) - 1.0
+big_R = np.linalg.norm(big_xyz_coord_V, axis=2)
+big_r = big_R / R0 - 1.0
 
 big_thetaphi_coord_V = np.array([thetaphi_from_xyz(xyz) for xyz in big_xyz_coord_V])
 
@@ -261,28 +284,69 @@ big_thetaphi_coord_V = np.array([thetaphi_from_xyz(xyz) for xyz in big_xyz_coord
 big_Yn = np.array([compute_all_Ylm(l_max, th_ph) for th_ph in big_thetaphi_coord_V])
 
 
-big_Un = np.einsum("tv, tv, tvn->tn", big_area_V, big_R, big_Yn.conjugate())
+big_Un = np.einsum("tv, tv, tvn->tn", big_area_V, big_r, big_Yn.conjugate())
 
-# big_sqr_Un = np.abs(np.einsum("tv, tv, tvn->tn", big_area_V,
-#                    big_R, big_Yn.conjugate()))**2
-mean_sqr_Un = np.mean(np.abs(big_Un) ** 2, axis=0)
+big_sqr_Un = np.abs(big_Un) ** 2
+
+mean_sqr_Un = np.mean(big_sqr_Un, axis=0)
+
+# std_sqr_Un = np.std(big_sqr_Un, axis=0)
 
 mean_sqr_Ulm = [[0.0 for m in range(-l, l + 1)] for l in range(l_max + 1)]
 
+# std_sqr_Ulm = [[0.0 for m in range(-l, l + 1)] for l in range(l_max + 1)]
 
 for l in range(l_max + 1):
     for m in range(-l, l + 1):
         n = spherical_harmonic_index_n_LM(l, m)
         mean_sqr_Ulm[l][m] = mean_sqr_Un[n]
+        # std_sqr_Ulm[l][m] = std_sqr_Un[n]
 
 mean_sqr_Ul = np.array([np.mean(mean_sqr_Ulm[l]) for l in range(l_max + 1)])
 
+# std_sqr_Ul = np.array([np.mean(std_sqr_Ulm[l]) for l in range(l_max + 1)])
+#
+# std_sqr_Ul / mean_sqr_Ul
+
+#
+from scipy.optimize import least_squares
+
+ell_range = [l for l in range(2, l_max + 1)]
+
+X = np.array(ell_range)
+Y = mean_sqr_Ul[X]
+kBT = 1.0291e-2
+beta0 = np.array([1.0, 32.5])
+tol = 1e-15
+
+
+def fun(beta):
+    B, gamma = beta
+    return np.array(
+        [
+            y - kBT / (B * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
+            for l, y in zip(X, Y)
+        ]
+    )
+
+
+lsqr_out = least_squares(
+    fun,
+    beta0,
+    ftol=tol,
+    gtol=tol,
+    xtol=tol,
+)
+beta = lsqr_out.x
+fun(beta)
+(beta - beta0) / beta0
+# %%
 ##
 kBT = 1.0291e-2
 B = 1.0
 l = np.arange(l_max + 1)
 gamma = kBT / (B * (l - 1) * (l + 2) * mean_sqr_Ul) - l * (l + 1)
-gamma
+gamma[2:]
 ##
 
 ##
@@ -290,7 +354,7 @@ kBT = 1.0291e-2
 gamma = 32.5
 l = np.arange(l_max + 1)
 B = kBT / (mean_sqr_Ul * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
-B
+B[2:]
 # ##
 
 # %%
