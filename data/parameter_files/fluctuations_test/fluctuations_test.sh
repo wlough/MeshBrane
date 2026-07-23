@@ -1,0 +1,1 @@
+build/bin/rigid_spindle_sim data/parameter_files/fluctuations_test/fluctuations_test_000320.yaml & build/bin/rigid_spindle_sim data/parameter_files/fluctuations_test/fluctuations_test_001280.yaml & build/bin/rigid_spindle_sim data/parameter_files/fluctuations_test/fluctuations_test_005120.yaml

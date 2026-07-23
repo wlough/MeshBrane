@@ -1,11 +1,11 @@
 output_dir: output # Path to output directory
-run_name: fluctuations_test_001280 # Name of the run
+run_name: fluctuations_test_000320 # Name of the run
 make_movie: false # Whether to make a movie of the simulation
 clear_output_dir: true # Whether to clear the output directory
 dt: 1e-5
-dt_frame: 5e-4
-dt_save: 1e-2
-T_run: 0.5
+dt_frame: 1e-5 # 5e-4
+dt_save: 1e-4
+T_run: 1.0
 kBT: 1.0291e-2 # ***
 bulk_viscosity: 1.0
 save_sim_data: true
@@ -29,7 +29,7 @@ envelope:
   wca_sigma: 3.25e-2 # ***
   # ply_path: data/example_ply/unit_sphere_020480_he.ply
   # ply_path: data/example_ply/unit_sphere_005120_he.ply
-  ply_path: data/example_ply/unit_sphere_001280_he.ply
+  ply_path: data/example_ply/unit_sphere_000320_he.ply
   use_surface_tension_constant: true
   use_surface_tension_penalty_local: true
   enable_fluctuations: true

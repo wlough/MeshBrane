@@ -59,6 +59,7 @@ K_paths = [
 Ne = 3 * Nf / 2
 Nv = 2 + Nf / 2
 L = np.array([read_time_series(path)[0] for path in L_paths])
+1 / L
 
 
 H = [read_time_series(path)[0] for path in H_paths]
@@ -239,15 +240,23 @@ plt.show()
 # Fluctuations #
 ################
 ################
+output_dir = "../output/fluctuations_test_000320"
 # output_dir = "../output/fluctuations_test_001280"
-output_dir = "../output/fluctuations_test_005120"
+# output_dir = "../output/fluctuations_test_005120"
+
+# output_dir = "../output/fluctuations_test/fluctuations_test_000320"
+# output_dir = "../output/fluctuations_test/fluctuations_test_001280"
+# output_dir = "../output/fluctuations_test/fluctuations_test_005120"
+
+# l_max = 20
+# t_start = 0.01
+# t_stop = 0.5075
+# nt_skip = 5
 
 l_max = 20
-t_start = 0.01
-# t_start = 0.0
-# t_stop = 0.18
-t_stop = 0.5
-nt_skip = 5
+t_start = 0.005
+t_stop = 0.7
+nt_skip = 1
 
 xyz_coord_V_path = f"{output_dir}/raw_data/envelope_xyz_coord_V.dat"
 area_V_path = f"{output_dir}/raw_data/envelope_area_V.dat"
@@ -257,22 +266,31 @@ t_path = f"{output_dir}/raw_data/t.dat"
 big_t = read_time_series(t_path)
 
 t_mask = np.logical_and(big_t >= t_start, big_t <= t_stop)
-big_t.size
+
 big_t = big_t[t_mask][::nt_skip]
 big_xyz_coord_V = read_time_series(xyz_coord_V_path)[t_mask][::nt_skip]
 big_area_V = read_time_series(area_V_path)[t_mask][::nt_skip]
 big_volume = read_time_series(volume_path)[t_mask][::nt_skip]  # ***
+Nt, Nv, _ = big_xyz_coord_V.shape
+n_max = spherical_harmonic_index_n_LM(l_max, l_max)
 
 
 R0 = (3 * big_volume[0] / (4 * np.pi)) ** (1 / 3)
 # big_xyz_coord_V_com = np.mean(big_xyz_coord_V, axis=1)
 #
-# # big_xyz_coord_V = np.array(
-# #     [
-# #         [xyz - xyz_com for xyz in XYZt]
-# #         for XYZt, xyz_com in zip(big_xyz_coord_V, big_xyz_coord_V_com)
-# #     ]
-# # )
+big_xyz_coord_V_com = np.einsum(
+    "tv, tvx->tx",
+    big_area_V / np.sum(big_area_V, axis=1, keepdims=True),
+    big_xyz_coord_V,
+)
+
+
+big_xyz_coord_V = np.array(
+    [
+        [xyz - xyz_com for xyz in XYZt]
+        for XYZt, xyz_com in zip(big_xyz_coord_V, big_xyz_coord_V_com)
+    ]
+)
 
 big_R = np.linalg.norm(big_xyz_coord_V, axis=2)
 big_r = big_R / R0 - 1.0
@@ -281,13 +299,78 @@ big_thetaphi_coord_V = np.array([thetaphi_from_xyz(xyz) for xyz in big_xyz_coord
 
 
 # tvn
-big_Yn = np.array([compute_all_Ylm(l_max, th_ph) for th_ph in big_thetaphi_coord_V])
+# big_Yn = np.array([compute_all_Ylm(l_max, th_ph) for th_ph in big_thetaphi_coord_V])
+# big_Un = np.einsum("tv, tv, tvn->tn", big_area_V, big_r, big_Yn.conjugate())
 
+big_Un = []
+for area_V, r, thetaphi_coord_V in zip(big_area_V, big_r, big_thetaphi_coord_V):
+    Yn = compute_all_Ylm(l_max, thetaphi_coord_V)
+    big_Un.append(np.einsum("v,v,vn->n", area_V, r, Yn.conjugate()))
+big_Un = np.array(big_Un)
 
-big_Un = np.einsum("tv, tv, tvn->tn", big_area_V, big_r, big_Yn.conjugate())
 
 big_sqr_Un = np.abs(big_Un) ** 2
+# var_sqr_Un = np.var(big_sqr_Un, axis=0)
 
+
+# %%
+
+
+def get_auto_corr(x):
+    mean_x = np.mean(x)
+    z = x - mean_x
+    corr_x = []
+    T = len(x)
+    for tau in range(T):
+        corr_x_tau = np.sum([z[t] * z[t + tau] for t in range(T - tau)]) / np.sum(
+            z[: T - tau] ** 2
+        )
+        corr_x.append(corr_x_tau)
+    return np.array(corr_x)
+
+
+def estimated_autocorrelation(x):
+    n = len(x)
+    variance = x.var()
+    x = x - x.mean()
+    r = np.correlate(x, x, mode="full")[-n:]
+    # assert np.allclose(r, np.array([(x[:n-k]*x[-(n-k):]).sum() for k in range(n)]))
+    result = r / (variance * (np.arange(n, 0, -1)))
+    return result
+
+
+def autocor(x):
+    # x_exp = sum(x) / len(x)
+    x_exp = np.mean(x)
+    z = x - x_exp
+    lag = np.array([h for h in range(1 - len(z), len(z))])
+    cor = np.array(
+        [np.sum([z[n] * z[n + abs(h)] for n in range(len(z) - abs(h))]) for h in lag]
+    ) / np.dot(z, z)
+    # return lag, cor
+    return cor
+
+
+def autocor_lag(x):
+    x_exp = sum(x) / len(x)
+    z = x - x_exp
+    lag = np.array([h for h in range(1 - len(z), len(z))])
+    return lag
+
+
+# cor_sqr_Un = np.array([estimated_autocorrelation(u) for u in big_sqr_Un.T])
+cor_sqr_Un = np.array([get_auto_corr(u) for u in big_sqr_Un.T])
+cor_sqr_Ulm = [
+    [cor_sqr_Un[spherical_harmonic_index_n_LM(l, m)] for m in range(-l, l + 1)]
+    for l in range(l_max)
+]
+
+plt.plot(cor_sqr_Ulm[3][0])
+#
+cor = get_auto_corr(big_volume)
+plt.plot(cor)
+
+# %%
 mean_sqr_Un = np.mean(big_sqr_Un, axis=0)
 
 # std_sqr_Un = np.std(big_sqr_Un, axis=0)
@@ -317,7 +400,7 @@ X = np.array(ell_range)
 Y = mean_sqr_Ul[X]
 kBT = 1.0291e-2
 beta0 = np.array([1.0, 32.5])
-tol = 1e-15
+tol = 2.25e-16
 
 
 def fun(beta):
