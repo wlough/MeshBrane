@@ -37,6 +37,10 @@ RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
     printf("set save_sim_data_\n");
     save_sim_data_ = parameters_["save_sim_data"].as<bool>();
   }
+  if (parameters_["no_graph"]) {
+    printf("set no_graph_\n");
+    no_graph_ = parameters_["no_graph"].as<bool>();
+  }
 
   if (parameters_["spindle"]) {
     printf("set spindle_\n");
@@ -558,8 +562,24 @@ void RigidSpindleSim::draw_scene() {
   }
 }
 
+void RigidSpindleSim::run_no_graph() {
+  printf("Running RigidSpindleSim::run_no_graph\n");
+  while (t_ < T_run_) {
+    print_info();
+    write_outputs();
+    evolve_until_next_frame();
+    add_data_samples();
+  }
+}
+
 void RigidSpindleSim::run(int argc, char *argv[]) {
   printf("Running RigidSpindleSim::run\n");
+
+  if (no_graph_) {
+    run_no_graph();
+    return;
+  }
+
   viewer_.iglviewer_.core().is_animating = true;
   viewer_.iglviewer_.callback_pre_draw =
       [&](igl::opengl::glfw::Viewer &viewer) {
@@ -593,9 +613,11 @@ fs::path RigidSpindleSim::get_envelope_ply_path() {
 }
 
 void RigidSpindleSim::write_outputs() {
-  fs::path frame_path = get_frame_path();
-  viewer_.save_frame(frame_path);
 
+  if (!no_graph_) {
+    fs::path frame_path = get_frame_path();
+    viewer_.save_frame(frame_path);
+  }
   if (save_sim_data_) {
     double t0 = data_.t_.first();
     double t1 = data_.t_.last();

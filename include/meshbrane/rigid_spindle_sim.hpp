@@ -436,6 +436,7 @@ public:
   TimeSeries<double> envelope_average_edge_length_;
   TimeSeries<Samples3d> envelope_xyz_coord_V_;
   TimeSeries<Samples1d> envelope_area_V_;
+  TimeSeries<Samples3d> envelope_normal_V_;
 
   RigidSpindleSimData() = default;
   RigidSpindleSimData(const std::filesystem::path &data_dir) {
@@ -474,6 +475,8 @@ public:
     envelope_xyz_coord_V_ =
         TimeSeries<Samples3d>(data_dir / "envelope_xyz_coord_V.dat");
     envelope_area_V_ = TimeSeries<Samples1d>(data_dir / "envelope_area_V.dat");
+    envelope_normal_V_ =
+        TimeSeries<Samples3d>(data_dir / "envelope_normal_V.dat");
   }
   void save_file() {
     t_.save_file();
@@ -500,6 +503,7 @@ public:
     envelope_average_edge_length_.save_file();
     envelope_xyz_coord_V_.save_file();
     envelope_area_V_.save_file();
+    envelope_normal_V_.save_file();
   }
   void append_file() {
     t_.append_file();
@@ -526,6 +530,7 @@ public:
     envelope_average_edge_length_.append_file();
     envelope_xyz_coord_V_.append_file();
     envelope_area_V_.append_file();
+    envelope_normal_V_.append_file();
   }
   void clear() {
     t_.samples_.clear();
@@ -551,6 +556,7 @@ public:
     envelope_average_edge_length_.samples_.clear();
     envelope_xyz_coord_V_.samples_.clear();
     envelope_area_V_.samples_.clear();
+    envelope_normal_V_.samples_.clear();
   }
 
   // void make_output_directory(const std::filesystem::path &output_dir) {
@@ -584,6 +590,7 @@ public:
   Samples1d envelope_moments_;
   double spb_antipodality_{0.0};
   bool spindle_force_on_{true};
+  bool no_graph_{false};
 
   RigidSpindleSim(const std::filesystem::path &path_to_parameters);
 
@@ -631,6 +638,7 @@ public:
         envelope_.average_edge_length_);
     data_.envelope_xyz_coord_V_.add_sample(envelope_.xyz_coord_V_);
     data_.envelope_area_V_.add_sample(envelope_.area_V_);
+    data_.envelope_normal_V_.add_sample(envelope_.normal_V_);
   }
 
   double dt_max();
@@ -638,6 +646,7 @@ public:
   void evolve_until(double t_end);
   void draw_scene();
   void run(int argc, char *argv[]);
+  void run_no_graph();
 
   void save_frame();
   void write_outputs();

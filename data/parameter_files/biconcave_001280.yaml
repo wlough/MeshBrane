@@ -1,5 +1,5 @@
 output_dir: output # Path to output directory
-run_name: fluctuations_test_000320_no_graph # Name of the run
+run_name: biconcave_001280 # Name of the run
 make_movie: false # Whether to make a movie of the simulation
 clear_output_dir: true # Whether to clear the output directory
 dt: 1e-5
@@ -9,7 +9,7 @@ T_run: 5.0
 kBT: 1.0291e-2 # ***
 bulk_viscosity: 1.0
 save_sim_data: true
-no_graph: true
+# no_graph: true
 viewer:
   eye: [0.00000001, 6.8125, 0]
   center: [0.0, 0.0, 0.0]
@@ -22,7 +22,7 @@ viewer:
 envelope:
   bending_modulus: 1.0
   area_stiffness: 8.125e1 # ***
-  surface_tension_constant: 3.25e1 # ***
+  surface_tension_constant: -2e1 # 3.25e1 # ***
   volume_stiffness: 2.5e4 # ***
   tether_stiffness: 1.605e-1 # ***
   dt_flip: 1e-5 # ***
@@ -30,7 +30,7 @@ envelope:
   wca_sigma: 3.25e-2 # ***
   # ply_path: data/example_ply/unit_sphere_020480_he.ply
   # ply_path: data/example_ply/unit_sphere_005120_he.ply
-  ply_path: data/example_ply/unit_sphere_000320_he.ply
+  ply_path: data/example_ply/unit_sphere_001280_he.ply
   use_surface_tension_constant: true
   use_surface_tension_penalty_local: true
   enable_fluctuations: true

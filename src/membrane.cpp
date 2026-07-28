@@ -99,6 +99,16 @@ void Membrane::print_info() {
   double V = total_volume_;
   double V0 = initial_volume_;
   double P = pressure_;
+
+  // double surface_tension_mean = 0.0;
+  // size_t Nf = get_num_faces();
+  // for (size_t f = 0; f < Nf; f++) {
+  //   double gamma_f = surface_tension_F_[f];
+  //   double area_f = area_F_[f];
+  //   surface_tension_mean += gamma_f * area_f;
+  // }
+  // surface_tension_mean /= A;
+
   std::cout << "  " << name_ << std::endl;
   printf("    (A-A0)/A0=%.10f\n", (A - A0) / A0);
   printf("    (V-V0)/V0=%.10f\n", (V - V0) / V0);
