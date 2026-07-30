@@ -72,6 +72,10 @@ lapH0 = 0.0
 K0 = 1.0
 F0 = -2 * (lapH0 + 2 * H0 * (H0**2 - K0))
 
+# H0 = H[-1].mean()
+# lapH0 = lapH[-1].mean()
+# K0 = K[-1].mean()
+# F0 = F[-1].mean()
 
 eps_H = [np.abs(h - H0) for h in H]
 eps_lapH = [np.abs(laph - lapH0) for laph in lapH]
@@ -98,7 +102,8 @@ mean_eps_lapH = np.array([np.mean(e) for e in eps_lapH])
 mean_eps_K = np.array([np.mean(e) for e in eps_K])
 mean_eps_F = np.array([np.mean(e) for e in eps_F])
 
-plot_log_log_fit(1 / L, mean_eps_H)
+# plot_log_log_fit(Nf[:-1], mean_eps_lapH[:-1])
+plot_log_log_fit(Nf, mean_eps_lapH)
 
 # %%
 #######################################
@@ -201,8 +206,8 @@ volume = [read_time_series(path) for path in volume_paths]
 
 
 A_tube = 2 * np.pi * 0.1 * 2
-# dA_A = [(A - A_tube - A[0]) / A[0] for A in area]
-dA_A = [(A - A[0]) / A[0] for A in area]
+dA_A = [(A - A_tube - A[0]) / A[0] for A in area]
+# dA_A = [(A - A[0]) / A[0] for A in area]
 dV_V = [(V - V[0]) / V[0] for V in volume]
 
 
