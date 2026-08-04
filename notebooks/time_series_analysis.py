@@ -102,7 +102,7 @@ mean_eps_lapH = np.array([np.mean(e) for e in eps_lapH])
 mean_eps_K = np.array([np.mean(e) for e in eps_K])
 mean_eps_F = np.array([np.mean(e) for e in eps_F])
 
-# plot_log_log_fit(Nf[:-1], mean_eps_lapH[:-1])
+plot_log_log_fit(Nf[:-1], mean_eps_lapH[:-1])
 plot_log_log_fit(Nf, mean_eps_lapH)
 
 # %%
@@ -242,340 +242,62 @@ plt.show()
 # %%
 ################
 ################
-# Fluctuations #
+# Energy #
 ################
 ################
-# output_dir = "../output/fluctuations_test_000320_tiny_steps"
-# output_dir = "../output/fluctuations_test_001280"
-# output_dir = "../output/fluctuations_test_005120"
-
-# output_dir = "../output/fluctuations_test/fluctuations_test_000320"
-# output_dir = "../output/fluctuations_test/fluctuations_test_001280"
-output_dir = "../output/fluctuations_test/fluctuations_test_005120"
-
-# l_max = 20
-# t_start = 0.01
-# t_stop = 0.5075
-# nt_skip = 5
-
-l_max = 20
-t_start = 0.01
-t_stop = 1.0
-nt_skip = 1
-
-xyz_coord_V_path = f"{output_dir}/raw_data/envelope_xyz_coord_V.dat"
-area_V_path = f"{output_dir}/raw_data/envelope_area_V.dat"
-volume_path = f"{output_dir}/raw_data/envelope_volume.dat"
-t_path = f"{output_dir}/raw_data/t.dat"
-
-big_t = read_time_series(t_path)
-big_t.shape
-t_mask = np.logical_and(big_t >= t_start, big_t <= t_stop)
-
-big_t = big_t[t_mask][::nt_skip]
-big_xyz_coord_V = read_time_series(xyz_coord_V_path)[t_mask][::nt_skip]
-big_area_V = read_time_series(area_V_path)[t_mask][::nt_skip]
-big_volume = read_time_series(volume_path)[t_mask][::nt_skip]  # ***
-Nt, Nv, _ = big_xyz_coord_V.shape
-n_max = spherical_harmonic_index_n_LM(l_max, l_max)
 
 
-R0 = (3 * big_volume[0] / (4 * np.pi)) ** (1 / 3)
-# big_xyz_coord_V_com = np.mean(big_xyz_coord_V, axis=1)
-#
-big_xyz_coord_V_com = np.einsum(
-    "tv, tvx->tx",
-    big_area_V / np.sum(big_area_V, axis=1, keepdims=True),
-    big_xyz_coord_V,
-)
+output_dir = "../output"
 
-
-big_xyz_coord_V = np.array(
+Nf = np.array(
     [
-        [xyz - xyz_com for xyz in XYZt]
-        for XYZt, xyz_com in zip(big_xyz_coord_V, big_xyz_coord_V_com)
+        320,
+        1280,
+        5120,
+        20480,
     ]
 )
 
-big_R = np.linalg.norm(big_xyz_coord_V, axis=2)
-big_r = big_R / R0 - 1.0
-big_solid_angle_V = big_area_V / big_R**2
-
-big_thetaphi_coord_V = np.array([thetaphi_from_xyz(xyz) for xyz in big_xyz_coord_V])
-
-
-# tvn
-# big_Yn = np.array([compute_all_Ylm(l_max, th_ph) for th_ph in big_thetaphi_coord_V])
-# big_Un = np.einsum("tv, tv, tvn->tn", big_area_V, big_r, big_Yn.conjugate())
-
-big_Un = []
-for area_V, r, thetaphi_coord_V in zip(big_area_V, big_r, big_thetaphi_coord_V):
-    Yn = compute_all_Ylm(l_max, thetaphi_coord_V)
-    big_Un.append(np.einsum("v,v,vn->n", area_V, r, Yn.conjugate()))
-big_Un = np.array(big_Un)
-
-np.abs(big_Un.mean(axis=0))
-big_sqr_Un = np.abs(big_Un) ** 2
-# var_sqr_Un = np.var(big_sqr_Un, axis=0)
-
-
-# %%
-from scipy.signal import correlate
-from scipy.fft import fft
-
-
-def get_auto_corr0(x):
-    mean_x = np.mean(x)
-    z = x - mean_x
-    corr_x = []
-    T = len(x)
-    for tau in range(T):
-        corr_x_tau = np.sum([z[t] * z[t + tau] for t in range(T - tau)]) / np.sum(
-            z[: T - tau] ** 2
-        )
-        corr_x.append(corr_x_tau)
-    return np.array(corr_x)
-
-
-def get_auto_corr1(x):
-    mean_x = np.mean(x)
-    z = x - mean_x
-    corr_x = []
-    T = len(x)
-    for tau in range(T):
-        corr_x_tau = (z[: T - tau] @ np.roll(z, -tau)[: T - tau]) / (
-            z[: T - tau] @ z[: T - tau]
-        )
-        corr_x.append(corr_x_tau)
-    return np.array(corr_x)
-
-
-def get_auto_corr2(x):
-    mean_x = np.mean(x)
-    z = x - mean_x
-    corr_x = []
-    T = len(x)
-    for tau in range(T):
-        corr_x_tau = np.dot(z[: T - tau], np.roll(z, -tau)[: T - tau]) / np.dot(
-            z[: T - tau], z[: T - tau]
-        )
-        corr_x.append(corr_x_tau)
-    return np.array(corr_x)
-
-
-def get_auto_corr3(x):
-    mean_x = np.mean(x)
-    z = x - mean_x
-    var_x = np.mean(z**2)
-    corr_x = []
-    T = len(x)
-    corr_x = (
-        np.array(
-            [np.mean(z[: T - tau] * np.roll(z, -tau)[: T - tau]) for tau in range(T)]
-        )
-        / var_x
-    )
-    return corr_x
-
-
-def get_auto_corr(x):
-    mean_x = np.mean(x)
-    z = x - mean_x
-    corr_x = []
-    T = len(x)
-    corr_x = np.array(
-        [
-            np.dot(z[: T - tau], np.roll(z, -tau)[: T - tau])
-            / np.dot(z[: T - tau], z[: T - tau])
-            for tau in range(T)
-        ]
-    )
-    return corr_x
-
-
-def estimated_autocorrelation(x):
-    n = len(x)
-    variance = x.var()
-    x = x - x.mean()
-    r = correlate(x, x, mode="full")[-n:]
-    # assert np.allclose(r, np.array([(x[:n-k]*x[-(n-k):]).sum() for k in range(n)]))
-    result = r / (variance * (np.arange(n, 0, -1)))
-    return result
-
-
-def autocor(x):
-    # x_exp = sum(x) / len(x)
-    x_exp = np.mean(x)
-    z = x - x_exp
-    lag = np.array([h for h in range(1 - len(z), len(z))])
-    cor = np.array(
-        [np.sum([z[n] * z[n + abs(h)] for n in range(len(z) - abs(h))]) for h in lag]
-    ) / np.dot(z, z)
-    # return lag, cor
-    return cor
-
-
-def autocor_lag(x):
-    x_exp = sum(x) / len(x)
-    z = x - x_exp
-    lag = np.array([h for h in range(1 - len(z), len(z))])
-    return lag
-
-
-# cor = get_auto_corr(big_volume) - get_auto_corr3(big_volume)
-cor = get_auto_corr(big_volume)[: Nt // 2]
-_ = plt.plot(cor)
-_ = plt.plot(cor * 0 + 1 / np.e)
-
-# %%
-# cor_sqr_Un = np.array([estimated_autocorrelation(u) for u in big_sqr_Un.T])
-cor_sqr_Un = np.array([get_auto_corr(u) for u in big_sqr_Un.T])
-cor_sqr_Ulm = [
-    [cor_sqr_Un[spherical_harmonic_index_n_LM(l, m)] for m in range(-l, l + 1)]
-    for l in range(l_max)
+L_paths = [
+    f"{output_dir}/fluctuations_test_{_:0>6}_no_graph/raw_data/envelope_average_edge_length.dat"
+    for _ in Nf
+]
+H_paths = [
+    f"{output_dir}/fluctuations_test_{_:0>6}_no_graph/raw_data/envelope_mean_curvature_V.dat"
+    for _ in Nf
+]
+lapH_paths = [
+    f"{output_dir}/fluctuations_test_{_:0>6}_no_graph/raw_data/envelope_lap_mean_curvature_V.dat"
+    for _ in Nf
+]
+K_paths = [
+    f"{output_dir}/fluctuations_test_{_:0>6}_no_graph/raw_data/envelope_gaussian_curvature_V.dat"
+    for _ in Nf
+]
+A_paths = [
+    f"{output_dir}/fluctuations_test_{_:0>6}_no_graph/raw_data/envelope_area_V.dat"
+    for _ in Nf
 ]
 
-l_plot = 5
-m_plot = 1
-plt.plot(cor_sqr_Ulm[l_plot][m_plot + l_plot][:1000])
-plt.plot(cor_sqr_Ulm[l_plot][m_plot + l_plot][:1000] * 0 + 1 / np.e)
-
-# %%
-mean_sqr_Un = np.mean(big_sqr_Un, axis=0)
-
-# std_sqr_Un = np.std(big_sqr_Un, axis=0)
-
-mean_sqr_Ulm = [[0.0 for m in range(-l, l + 1)] for l in range(l_max + 1)]
-
-# std_sqr_Ulm = [[0.0 for m in range(-l, l + 1)] for l in range(l_max + 1)]
-
-for l in range(l_max + 1):
-    for m in range(-l, l + 1):
-        n = spherical_harmonic_index_n_LM(l, m)
-        mean_sqr_Ulm[l][m] = mean_sqr_Un[n]
-        # std_sqr_Ulm[l][m] = std_sqr_Un[n]
-
-mean_sqr_Ul = np.array([np.mean(mean_sqr_Ulm[l]) for l in range(l_max + 1)])
-
-# std_sqr_Ul = np.array([np.mean(std_sqr_Ulm[l]) for l in range(l_max + 1)])
-#
-# std_sqr_Ul / mean_sqr_Ul
-
-#
-from scipy.optimize import least_squares
-
-ell_range = [l for l in range(2, l_max + 1)]
-
-X = np.array(ell_range)
-Y = mean_sqr_Ul[X]
-kBT = 1.0291e-2
-beta0 = np.array([1.0, 32.5])
-beta_actual = np.array([1.0, 32.5])
-tol = 1e-15
-gamma0 = np.array([32.5])
-gamma_actual = np.array([32.5])
+Ne = 3 * Nf / 2
+Nv = 2 + Nf / 2
+L = np.array([read_time_series(path)[0] for path in L_paths])
+1 / L
 
 
-def fun(beta):
-    B, gamma = beta
-    return np.array(
-        [
-            y - kBT / (B * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
-            for l, y in zip(X, Y)
-        ]
-    )
+big_H = [read_time_series(path)[0] for path in H_paths]
+big_A = [read_time_series(path)[0] for path in A_paths]
+big_lapH = [read_time_series(path)[0] for path in lapH_paths]
+big_K = [read_time_series(path)[0] for path in K_paths]
+big_F = [-2 * (laph + 2 * h * (h**2 - k)) for h, laph, k in zip(H, lapH, K)]
 
-
-# def fun(beta):
-#     B, gamma = beta
-#     return np.array(
-#         [
-#             y * (B * (l - 1) * (l + 2) * (gamma + l * (l + 1))) - kBT
-#             for l, y in zip(X, Y)
-#         ]
-#     )
-
-
-lsqr_out = least_squares(
-    fun,
-    beta0,
-    ftol=tol,
-    gtol=tol,
-    xtol=tol,
-    max_nfev=100000,
-)
-beta = lsqr_out.x
-fun(beta)
-(beta - beta_actual) / beta_actual
-
-
-def fun_tension(gamma):
-    B = 1.0
-    return np.array(
-        [
-            y - kBT / (B * (l - 1) * (l + 2) * (gamma[0] + l * (l + 1)))
-            for l, y in zip(X, Y)
-        ]
-    )
-
-
-lsqr_out = least_squares(
-    fun_tension,
-    gamma0,
-    ftol=tol,
-    gtol=tol,
-    xtol=tol,
-    max_nfev=100000,
-)
-
-gamma = lsqr_out.x
-fun_tension(gamma)
-(gamma - gamma_actual) / gamma_actual
-
-# %%
-##
-kBT = 1.0291e-2
 B = 1.0
-l = np.arange(l_max + 1)
-gamma = kBT / (B * (l - 1) * (l + 2) * mean_sqr_Ul) - l * (l + 1)
-gamma[2:]
-##
 
-##
-kBT = 1.0291e-2
-gamma = 32.5
-l = np.arange(l_max + 1)
-B = kBT / (mean_sqr_Ul * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
-B[2:]
-# ##
+E_actual = 8 * np.pi * B
 
-# %%
-#
-# ######
-# gamma, kBT, B = sp.symbols(r"\gamma k_{B}T B")
-# # eqns = [
-# #     mean_sqr_Ul[l] - kBT / (B * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
-# #     for l in range(2, 5)
-# # ]
-# eqns = sp.Array(
-#     [
-#         mean_sqr_Ul[l] * (B * (l - 1) * (l + 2) * (gamma + l * (l + 1))) - kBT
-#         for l in range(2, 5)
-#     ]
-# )
-# vars = sp.Array([B, gamma, kBT])
-# #
-# sp.solve(eqns, vars)
-# #######
-#
-#
-# B, gamma = sp.symbols(r"B \gamma")
-# kBT = 1.0291e-2
-# eqns = sp.Array(
-#     [
-#         mean_sqr_Ul[l] * (B * (l - 1) * (l + 2) * (gamma + l * (l + 1))) - kBT
-#         for l in range(5, 7)
-#     ]
-# )
-# vars = sp.Array([B, gamma])
-# sp.solve(eqns, vars)
+E = np.array([2 * B * np.einsum("v, v", H**2, dA) for H, dA in zip(big_H, big_A)])
+
+err_E = abs(E - E_actual) / E_actual
+
+
+plot_log_log_fit(Nf, err_E)

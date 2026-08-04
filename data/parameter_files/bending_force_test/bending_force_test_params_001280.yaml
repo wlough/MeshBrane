@@ -8,6 +8,7 @@ dt_save: 1e-5
 T_run: 1e-3
 kBT: 1.0291e-2 # ***
 bulk_viscosity: 1.0
+no_graph: true
 viewer:
   eye: [0.00000001, 6.8125, 0]
   center: [0.0, 0.0, 0.0]

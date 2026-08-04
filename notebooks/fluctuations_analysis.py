@@ -20,7 +20,7 @@ from src_python.time_series import read_time_series, plot_log_log_fit
 import sympy as sp
 from scipy.optimize import least_squares
 
-#
+# %%
 
 
 def get_auto_corr(x):
@@ -169,10 +169,17 @@ def get_fluctuation_fit_data(output_dir):
     # output_dir = "../output/fluctuations_test_005120_no_graph"
     # output_dir = "../output/fluctuations_test_020480_no_graph"
 
-    l_max = 5
+    l_max = 20
     t_start = 0.01
     t_stop = 2.5
     nt_skip = 25
+    tol = 1e-15
+
+    l_max = 20
+    t_start = 0.01 + 2
+    t_stop = 2.5 + 2
+    nt_skip = 25
+    tol = 1e-15
 
     xyz_coord_V_path = f"{output_dir}/raw_data/envelope_xyz_coord_V.dat"
     area_V_path = f"{output_dir}/raw_data/envelope_area_V.dat"
@@ -192,6 +199,7 @@ def get_fluctuation_fit_data(output_dir):
 
     Nt, Nv, _ = big_xyz_coord_V.shape
     n_max = spherical_harmonic_index_n_LM(l_max, l_max)
+    print(f"dt={big_t[1]-big_t[0]:.2g}, Nt={Nt}")
 
     R0 = (3 * big_volume[0] / (4 * np.pi)) ** (1 / 3)
 
@@ -243,6 +251,12 @@ def get_fluctuation_fit_data(output_dir):
 
     mean_sqr_Ul = np.array([np.mean(mean_sqr_Ulm[l]) for l in range(l_max + 1)])
 
+    ell_range = [l for l in range(2, l_max + 1)]
+
+    X = np.array(ell_range)
+    Y = mean_sqr_Ul[X]
+    kBT = 1.0291e-2
+
     def res_B_gamma(beta):
         B, gamma = beta
         return np.array(
@@ -271,9 +285,6 @@ def get_fluctuation_fit_data(output_dir):
                 for l, y in zip(X, Y)
             ]
         )
-
-    B_actual = 1.0
-    gamma_actual = 32.5
 
     B_guess = 0.8
     gamma_guess = 25.0
@@ -326,7 +337,7 @@ Nf = np.array(
         320,
         1280,
         5120,
-        20480,
+        # 20480,
     ]
 )
 Ne = 3 * Nf / 2
@@ -350,11 +361,12 @@ fit_B_gamma = np.array([data["fit_B_gamma"] for data in fluctuation_fit_data])
 fit_B = np.array([data["fit_B"] for data in fluctuation_fit_data])
 fit_gamma = np.array([data["fit_gamma"] for data in fluctuation_fit_data])
 
+# %%
 err_B = np.abs(fit_B - B_actual) / B_actual
 err_gamma = np.abs(fit_gamma - gamma_actual) / gamma_actual
 err_B_gamma = np.linalg.norm((fit_B_gamma - B_gamma_actual) / B_gamma_actual, axis=1)
-plot_log_log_fit(Nf, err_B_gamma)
-plot_log_log_fit(Nf, err_B_gamma)
+plot_log_log_fit(Nf, err_B)
+plot_log_log_fit(Nf, err_gamma)
 plot_log_log_fit(Nf, err_B_gamma)
 
 err_B = np.abs(fit_B[:-1] - fit_B[-1]) / fit_B[-1]

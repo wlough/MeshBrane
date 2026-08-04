@@ -564,9 +564,12 @@ void RigidSpindleSim::draw_scene() {
 
 void RigidSpindleSim::run_no_graph() {
   printf("Running RigidSpindleSim::run_no_graph\n");
-  while (t_ < T_run_) {
+  while (true) {
     print_info();
     write_outputs();
+    if (t_ >= T_run_) {
+      return;
+    }
     evolve_until_next_frame();
     add_data_samples();
   }
