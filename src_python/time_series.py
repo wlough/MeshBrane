@@ -2,6 +2,126 @@ import struct
 import numpy as np
 import matplotlib.pyplot as plt
 
+MATPLOTLIB_COLORS = (
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "b",  # Blue
+    "g",  # Green
+    "r",  # Red
+    "c",  # Cyan
+    "m",  # Magenta
+    "y",  # Yellow
+    "k",  # Black
+    "orange",  # Orange
+    "purple",  # Purple
+    "brown",  # Brown
+    "pink",  # Pink
+    "gray",  # Gray
+    "olive",  # Olive
+    "cyan",  # Cyan
+    "navy",  # Navy
+    "teal",  # Teal
+    "lime",  # Lime
+    "indigo",  # Indigo
+    "gold",  # Gold
+    "coral",  # Coral
+    "turquoise",  # Turquoise
+    "violet",  # Violet
+    "plum",  # Plum
+    "salmon",  # Salmon
+    "chocolate",  # Chocolate
+    "tan",  # Tan
+    "orchid",  # Orchid
+    "azure",  # Azure
+    "lavender",  # Lavender
+)
+MATPLOTLIB_MARKERS = (
+    "o",
+    "^",
+    "s",
+    "D",
+    "v",
+    "p",
+    "*",
+    "h",
+    "H",
+    "+",
+    "x",
+    "d",
+    "|",
+    "_",
+)
+MATPLOTLIB_HATCHSTYLES = (
+    "/",
+    ".",
+    "\\",
+    "O",
+    "x",
+    "*",
+    "+",
+    "|",
+    "-",
+    "O",
+    "/o",
+    "\\|",
+    "|*",
+    "-\\",
+    "+o",
+    "x*",
+    "o-",
+    "O|",
+    "O.",
+    "*-",
+)
+MATPLOTLIB_LINESTYLES = (
+    "-",
+    "--",
+    ":",
+    "-.",
+    (0, (3, 1, 1, 1)),
+    (0, (5, 10)),
+    (0, (5, 1)),
+    (0, (3, 5, 1, 5)),
+    (0, (1, 1)),  # Dotted line
+    (0, (1, 10)),  # Dotted line with large gaps
+    (0, (1, 1, 1, 1)),  # Dotted line with small gaps
+    (0, (5, 5)),  # Dashed line with equal gaps
+    (0, (5, 1, 1, 1, 1, 1)),  # Dash-dot-dot line
+    (0, (3, 5, 1, 5, 1, 5)),  # Dash-dot-dash-dot line
+    (0, (1, 2, 3, 4)),  # Custom pattern
+    (0, (2, 2, 10, 2)),  # Custom pattern with long dash
+)
+
+
+def to_scinotation_tex(X, decimals=3, mode="inline"):
+    """
+    Makes a list of numbers into a list of strings
+    in latex scientific notation.
+    """
+    if mode == "inline":
+        left, right = r"$", r"$"
+    if mode == "plain":
+        left, right = r"", r""
+    x = np.abs(X)
+    pow = np.array([int(np.log10(_)) for _ in x])
+    coeff = [xx / 10.0**p for xx, p in zip(x, pow)]
+    for _ in range(len(coeff)):
+        if coeff[_] < 1:
+            coeff[_] *= 10
+            pow[_] -= 1
+        if X[_] < 0:
+            coeff[_] *= -1
+        if int(coeff[_]) == coeff[_]:
+            coeff[_] = int(coeff[_])
+        else:
+            coeff[_] = np.round(coeff[_], decimals=decimals)
+    xlabels = [
+        left + f"{c}" + r" \times " + r"10^{" + f"{p}" + r"}" + right
+        for c, p in zip(coeff, pow)
+    ]
+    return xlabels
+
 
 def read_time_series(filepath, verbose=False):
     """
