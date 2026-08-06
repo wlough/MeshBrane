@@ -1,5 +1,5 @@
 executable: ./build/bin/rigid_spindle_sim
-output_dir: output/area_volume_test_mitosis_001280_rp65_sweep
+output_dir: output/fluctuations_test_000320_sweep
 run_name: run
 spindle_type: rigid_spindle
 make_movie: true
@@ -7,7 +7,7 @@ clear_output_dir: true
 dt: 1e-5
 dt_frame: 1e-3
 dt_save: 1e-2
-T_run: 2.5
+T_run: 0.01 # 5.0
 kBT: 1.0291e-2 # ***
 bulk_viscosity: 1.0
 no_graph: true
@@ -24,7 +24,6 @@ envelope:
   list_keys: []
   bending_modulus: 1.0
   area_stiffness: 8.125e1 # ***
-  # surface_tension_constant: 1.625e1 # ***
   surface_tension_constant: 3.25e1 # ***
   volume_stiffness: 2.5e4 # ***
   tether_stiffness: 1.605e-1 # ***
@@ -33,8 +32,8 @@ envelope:
   wca_sigma: 3.25e-2 # ***
   # ply_path: data/example_ply/unit_sphere_020480_he.ply
   # ply_path: data/example_ply/unit_sphere_005120_he.ply
-  ply_path: data/example_ply/unit_sphere_001280_he.ply
-  # ply_path: data/example_ply/unit_sphere_000320_he.ply
+  # ply_path: data/example_ply/unit_sphere_001280_he.ply
+  ply_path: data/example_ply/unit_sphere_000320_he.ply
   use_surface_tension_constant: true
   use_surface_tension_penalty_local: true
   enable_fluctuations: true
@@ -74,28 +73,28 @@ spindle:
   draw_axes: false
   symmetric: true
   spb1:
-    contact_radius: [0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65]
-    num_refinements: 4
+    contact_radius: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+    num_refinements: 0
     wca_epsilon: 1.25e1
     wca_sigma: 3.25e-2
-    enable_fluctuations: true
+    enable_fluctuations: false
   spb2:
-    contact_radius: 0.65
-    num_refinements: 4
+    contact_radius: 0.1
+    num_refinements: 0
     wca_epsilon: 1.25e1
     wca_sigma: 3.25e-2
-    enable_fluctuations: true
+    enable_fluctuations: false
   mt_bundle:
     xyz_center: [0.0, 0.0, 0.0]
     axis: [0.0, 0.0, 1.0]
-    overlap_length: 0.65
-    length: 0.69
+    overlap_length: 0.0
+    length: 0.0
     radius: 9.5e-2
-    motor_force_per_length: 1.5e2
-    max_force: [2e2]
-    max_length: 3e0
+    motor_force_per_length: 0.0
+    max_force: [0.0]
+    max_length: 0.0
     wca_epsilon: 1.25e1
     wca_sigma: 3.25e-2
-    v_grow: 2.54065
+    v_grow: 0.0
     num_mts: 20
-    enable_fluctuations: true
+    enable_fluctuations: false

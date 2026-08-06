@@ -74,7 +74,7 @@ spindle:
   draw_axes: false
   symmetric: true
   spb1:
-    contact_radius: [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
+    contact_radius: [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
     num_refinements: 4
     wca_epsilon: 1.25e1
     wca_sigma: 3.25e-2

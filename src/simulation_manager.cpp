@@ -326,9 +326,9 @@ std::string SimulationManager::vstack_movie_command() {
 
 std::string SimulationManager::grid_movie_command() {
   printf("grid_movie_command\n");
-  if (no_graph_) {
-    return "";
-  }
+  // if (no_graph_) {
+  //   return "";
+  // }
   std::vector<int> run_index = run_indices_[0];
   if (num_lists_ != 2) {
     return "";

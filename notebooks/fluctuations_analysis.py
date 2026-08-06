@@ -282,8 +282,11 @@ def get_concatenated_run_mean_sqr_Ul_data(
             mean_sqr_Ulm[l][m] = mean_sqr_Un[n]
             serror_sqr_Ulm[l][m] = serror_sqr_Un[n]
 
-    mean_sqr_Ul = np.array([np.mean(mean_sqr_Ulm[l]) for l in range(l_max + 1)])
-    serror_sqr_Ul = np.array([np.mean(serror_sqr_Ulm[l]) for l in range(l_max + 1)])
+    mean_sqr_Ul = np.array([np.mean(mean_sqr_Ulm[l][l:]) for l in range(l_max + 1)])
+    # serror_sqr_Ul = np.array([np.mean(serror_sqr_Ulm[l][l:]) for l in range(l_max + 1)])
+    serror_sqr_Ul = np.array(
+        [np.linalg.norm(serror_sqr_Ulm[l]) / (l + 1) for l in range(l_max + 1)]
+    )
 
     return {
         "mean_sqr_Ul": mean_sqr_Ul,

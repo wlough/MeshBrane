@@ -35,7 +35,9 @@ int main(int argc, char *argv[]) {
 
   std::string grid_movie_command = m.grid_movie_command();
 
-  command += " && " + grid_movie_command;
+  if (!m.no_graph_) {
+    command += " && " + grid_movie_command;
+  }
 
   std::system(command.c_str());
 

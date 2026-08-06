@@ -1,0 +1,2 @@
+build/bin/param_sweep data/parameter_files/area_volume_test/area_volume_test_mitosis_001280_rp25_sweep.yaml &&
+build/bin/param_sweep data/parameter_files/area_volume_test/area_volume_test_mitosis_001280_rp45_sweep.yaml && build/bin/param_sweep data/parameter_files/area_volume_test/area_volume_test_mitosis_001280_rp65_sweep.yaml
