@@ -122,9 +122,6 @@ def get_curvature_and_bending_convergence_data():
     return data_dict
 
 
-err_dict = get_curvature_and_bending_convergence_data()
-
-
 def average_mean_curvature_error_plot(err_dict):
     rcparams0 = dict(plt.rcParams)  # save original rcparams
     textsize = 12
@@ -584,6 +581,9 @@ def average_combined_error_plot(err_dict):
     plt.savefig(fig_path, dpi=600)
     plt.show()
     plt.rcParams.update(rcparams0)
+
+
+err_dict = get_curvature_and_bending_convergence_data()
 
 
 average_mean_curvature_error_plot(err_dict)

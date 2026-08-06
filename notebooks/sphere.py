@@ -243,3 +243,29 @@ a2 = area_form_actual.diff(h, 2).subs({h: 0}).simplify()
 
 area_form_ = a0 + a1 * h + a2 * h**2
 area_form = area_form_actual.subs(u_subs).series(x=h, x0=0, n=3).removeO().subs({h: 1})
+# %%
+import sympy as sp
+import numpy as np
+from sympy.abc import l, m, n
+
+l = sp.symbols("n", poitive=True, integer=True)
+q = sp.symbols("q", poitive=True, integer=True)
+
+theta = sp.pi / 2
+phi = 0
+g = sp.Ynm(l, q, theta, phi)
+
+expr = g * g.conjugate()
+X = sp.simplify(expr.expand(func=True))
+
+l_max = 100
+
+nums = [
+    [X.subs({l: ll, q: qq}) for qq in range(0, ll + 1)] for ll in range(0, l_max + 1)
+]
+
+nums = [X.subs({l: ll, q: qq}) for ll in range(0, l_max + 1) for qq in range(0, ll + 1)]
+
+[(ll, qq) for ll in range(0, l_max + 1) for qq in range(0, ll + 1)]
+
+max(nums).evalf()

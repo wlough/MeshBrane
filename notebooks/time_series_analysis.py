@@ -102,8 +102,8 @@ mean_eps_lapH = np.array([np.mean(e) for e in eps_lapH])
 mean_eps_K = np.array([np.mean(e) for e in eps_K])
 mean_eps_F = np.array([np.mean(e) for e in eps_F])
 
-plot_log_log_fit(Nf[:-1], mean_eps_lapH[:-1])
-plot_log_log_fit(Nf, mean_eps_lapH)
+# plot_log_log_fit(Nf[:-1], mean_eps_lapH[:-1])
+plot_log_log_fit(Nf, mean_eps_H)
 
 # %%
 #######################################
@@ -163,26 +163,38 @@ plt.show()
 ########################################
 
 output_dir = "../output/area_volume_test_mitosis"
-rows = [
-    0,
-    1,
-    2,
-    3,
-]
+output_dir = "../output/area_volume_test_mitosis_sweep_001280"
+output_dir = "../output/area_volume_test_mitosis_sweep_001280_rp45"
+
+
+# rows = [
+#     0,
+#     1,
+#     2,
+#     3,
+# ]
+# cols = [0]
+# t_max = 2.0
+# nt_skip = 1
+# err_min = 0.001
+
+# R_contact = np.array(
+#     [
+#         0.65,
+#         0.45,
+#         0.25,
+#         0.15,
+#     ]
+# )
+
+rows = list(range(12))
 cols = [0]
-num_rows = 4
-num_cols = 1
 t_max = 2.0
+nt_skip = 1
 err_min = 0.001
 
-R_contact = np.array(
-    [
-        0.65,
-        0.45,
-        0.25,
-        0.15,
-    ]
-)
+
+R_contact = np.array(12 * [0.45])
 
 time_paths = [
     f"{output_dir}/run_{row:0>2}_{col:0>2}/raw_data/t.dat"
@@ -200,14 +212,14 @@ volume_paths = [
     for col in cols
 ]
 
-time = [read_time_series(path) for path in time_paths]
-area = [read_time_series(path) for path in area_paths]
-volume = [read_time_series(path) for path in volume_paths]
+time = [read_time_series(path)[::nt_skip] for path in time_paths]
+area = [read_time_series(path)[::nt_skip] for path in area_paths]
+volume = [read_time_series(path)[::nt_skip] for path in volume_paths]
 
 
-A_tube = 2 * np.pi * 0.1 * 2
-dA_A = [(A - A_tube - A[0]) / A[0] for A in area]
-# dA_A = [(A - A[0]) / A[0] for A in area]
+# A_tube = 2 * np.pi * 0.1 * 2
+# dA_A = [(A - A_tube - A[0]) / A[0] for A in area]
+dA_A = [(A - A[0]) / A[0] for A in area]
 dV_V = [(V - V[0]) / V[0] for V in volume]
 
 
@@ -216,12 +228,13 @@ fig, axes = plt.subplots(
     nrows=1,
     ncols=2,
     figsize=(8, 4),
-    sharey=True,
+    # sharey=True,
 )
 axes[0].set_title(r"$\Delta A/A_0$")
 axes[1].set_title(r"$\Delta V/V_0$")
 
 for r, t, da_a, dv_v in zip(R_contact, time, dA_A, dV_V):
+    # print(f"dt={t[1]-t[0]:.2g}")
     t_mask = t <= t_max
     err_mask = da_a >= err_min
     plot_mask = np.logical_and(t_mask, err_mask)
@@ -234,11 +247,16 @@ for r, t, da_a, dv_v in zip(R_contact, time, dA_A, dV_V):
     axes[0].plot(tt, a_err, label=r"$\rho=" + f"{r}" + r"$")
     axes[1].plot(tt, v_err, label=r"$\rho=" + f"{r}" + r"$")
 plt.legend()
+# plt.xlim([0, 2])
+# plt.ylim([0, 0.46])
+axes[0].set_xlim([0, 2])
+axes[1].set_xlim([0, 2])
+axes[0].set_ylim([-0.01, 0.46])
+axes[1].set_ylim([-0.01, 0.46])
+
 
 fig.savefig("../output/area_volume_test_mitosis.png", dpi=600)
 plt.show()
-
-
 # %%
 ################
 ################
