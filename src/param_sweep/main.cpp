@@ -33,14 +33,12 @@ int main(int argc, char *argv[]) {
   command += " & wait";
   printf("command = %s\n", command.c_str());
 
-  std::string vstack_movie_command = m.vstack_movie_command();
   std::string grid_movie_command = m.grid_movie_command();
 
-  // command += " && " + vstack_movie_command;
   command += " && " + grid_movie_command;
 
   std::system(command.c_str());
-  printf("vstack_movie_command = %s\n", vstack_movie_command.c_str());
+
   printf("grid_movie_command = %s\n", grid_movie_command.c_str());
 
   if (success == 0) {

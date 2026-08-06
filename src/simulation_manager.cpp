@@ -149,6 +149,10 @@ void SimulationManager::loadParameters(const std::string &file_path) {
   YAML::Node parameters = YAML::LoadFile(file_path);
   parameters_ = parameters;
 
+  if (parameters_["no_graph"]) {
+    no_graph_ = parameters_["no_graph"].as<bool>();
+  }
+
   if (parameters_["spindle_type"]) {
     spindle_type_ = parameters_["spindle_type"].as<std::string>();
   }
@@ -322,6 +326,9 @@ std::string SimulationManager::vstack_movie_command() {
 
 std::string SimulationManager::grid_movie_command() {
   printf("grid_movie_command\n");
+  if (no_graph_) {
+    return "";
+  }
   std::vector<int> run_index = run_indices_[0];
   if (num_lists_ != 2) {
     return "";

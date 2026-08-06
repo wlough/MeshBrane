@@ -15,6 +15,8 @@ public:
   std::string spindle_type_ = "simple";
   YAML::Node parameters_;
 
+  bool no_graph_ = false;
+
   bool make_six_six_movie = false;
   bool make_vstack_movie = false;
   bool make_four_three_movie = false;

@@ -12,6 +12,9 @@ from src_python.time_series import (
     plot_log_log_fit,
     log_log_fit,
     round_to,
+)
+
+from src_python.pretty_pictures import (
     MATPLOTLIB_COLORS,
     MATPLOTLIB_MARKERS,
     MATPLOTLIB_LINESTYLES,
@@ -553,8 +556,16 @@ def average_combined_error_plot(err_dict):
     #     r"$\varepsilon_f$",
     #     r"$\varepsilon_U$",
     # ]
-    err_keys = ["mean_eps_H", "mean_eps_F"]
-    err_labels = [r"$\varepsilon_H$", r"$\varepsilon_f$"]
+    err_keys = [
+        "mean_eps_F",
+        # "mean_eps_K",
+        "mean_eps_H",
+    ]
+    err_labels = [
+        r"$\varepsilon_f$",
+        # r"$\varepsilon_K$",
+        r"$\varepsilon_H$",
+    ]
 
     for _ in range(len(err_keys)):
         err_key = err_keys[_]
