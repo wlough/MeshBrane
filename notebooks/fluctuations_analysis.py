@@ -162,13 +162,14 @@ def plot_autocors():
 # plot_autocors()
 
 
-def get_run_data(
+def get_run_data0(
     output_dir,
     l_max=20,
     t_start=0.01,
     dt_sample=0.01,
     R0=None,
 ):
+    print(f"get_run_data0 for {output_dir}")
     output_dir = Path(output_dir)
     big_t = read_time_series(output_dir / "raw_data/t.dat")
     dt0 = big_t[1] - big_t[0]
@@ -239,13 +240,324 @@ def get_run_data(
     }
 
 
-def get_concatenated_run_mean_sqr_Ul_data(
+def get_run_Qlj_data(
+    output_dir,
+    l_max=20,
+    t_start=0.01,
+    dt_sample=0.01,
+    R0=None,
+):
+    print(f"get_run_Qlj_data for {output_dir}")
+    output_dir = Path(output_dir)
+    big_t = read_time_series(output_dir / "raw_data/t.dat")
+    dt0 = big_t[1] - big_t[0]
+    nt_skip = int(dt_sample / dt0) + 1
+    nt_start = int(t_start / dt0) + 1
+    big_t = big_t[nt_start::nt_skip]
+    dt = big_t[1] - big_t[0]
+
+    big_xyz_coord_V = read_time_series(
+        output_dir / "raw_data/envelope_xyz_coord_V.dat"
+    )[nt_start::nt_skip]
+    big_area_V = read_time_series(output_dir / "raw_data/envelope_area_V.dat")[
+        nt_start::nt_skip
+    ]
+    big_normal_V = read_time_series(output_dir / "raw_data/envelope_normal_V.dat")[
+        nt_start::nt_skip
+    ]
+
+    Nt, Nv, _ = big_xyz_coord_V.shape
+
+    if R0 is None:
+        initial_volume = read_time_series(output_dir / "raw_data/envelope_volume.dat")[
+            nt_start
+        ]
+        R0 = (3 * initial_volume / (4 * np.pi)) ** (1 / 3)
+    big_xyz_coord_V_com = np.einsum(
+        "tv, tvx->tx",
+        big_area_V / np.sum(big_area_V, axis=1, keepdims=True),
+        big_xyz_coord_V,
+    )
+
+    big_xyz_coord_V = np.array(
+        [
+            [xyz - xyz_com for xyz in XYZt]
+            for XYZt, xyz_com in zip(big_xyz_coord_V, big_xyz_coord_V_com)
+        ]
+    )
+
+    big_R = np.linalg.norm(big_xyz_coord_V, axis=2)
+    big_r = big_R / R0 - 1.0
+
+    big_solid_angle_V = np.einsum(
+        "tvx, tvx, tv, tv -> tv",
+        big_xyz_coord_V,
+        big_normal_V,
+        big_area_V,
+        1 / big_R**3,
+    )
+
+    big_thetaphi_coord_V = np.array([thetaphi_from_xyz(xyz) for xyz in big_xyz_coord_V])
+
+    big_Un = []
+    for solid_angle_V, r, thetaphi_coord_V in zip(
+        big_solid_angle_V, big_r, big_thetaphi_coord_V
+    ):
+        Yn = compute_all_Ylm(l_max, thetaphi_coord_V)
+        big_Un.append(np.einsum("v,v,vn->n", solid_angle_V, r, Yn.conjugate()))
+    big_Un = np.array(big_Un)
+
+    big_sqr_Un = np.abs(big_Un) ** 2
+    big_Q = np.zeros((Nt, l_max + 1))
+
+    for l in range(l_max + 1):
+        n_l0 = spherical_harmonic_index_n_LM(l, 0)
+        n_ll = spherical_harmonic_index_n_LM(l, l)
+        big_Q[:, l] = np.sum(big_sqr_Un[:, n_l0 : n_ll + 1], axis=1) / (l + 1)
+
+    return {
+        "big_Q": big_Q,
+        "R0": R0,
+        "dt": dt,
+        "Nt": Nt,
+        "Nv": Nv,
+    }
+
+
+def get_concatenated_run_Qlj_data(
     output_dirs,
     l_max=20,
     t_start=0.01,
     dt_sample=0.01,
 ):
-    data0 = get_run_data(
+    data0 = get_run_Qlj_data(
+        output_dirs[0],
+        l_max=l_max,
+        t_start=t_start,
+        dt_sample=dt_sample,
+        R0=None,
+    )
+    R0 = data0["R0"]
+    Nv = data0["Nv"]
+
+    big_Q = data0["big_Q"]
+
+    for output_dir in output_dirs[1:]:
+        data = get_run_Qlj_data(
+            output_dir,
+            l_max=l_max,
+            t_start=t_start,
+            dt_sample=dt_sample,
+            R0=R0,
+        )
+        if Nv != data["Nv"]:
+            raise ValueError("runs have different number of vertices")
+        big_Q = np.concatenate([big_Q, data["big_Q"]], axis=0)
+
+    Nt = len(big_Q)
+
+    return {
+        "big_Q": big_Q,
+        "R0": R0,
+        "Nv": Nv,
+        "Nt": Nt,
+    }
+
+
+def get_samples_and_weights_from_concatenated_runs(
+    output_dirs,
+    l_max=20,
+    t_start=0.01,
+    dt_sample=0.01,
+):
+    # data0 = get_run_Qlj_data(
+    #     output_dirs[0],
+    #     l_max=l_max,
+    #     t_start=t_start,
+    #     dt_sample=dt_sample,
+    #     R0=None,
+    # )
+    # R0 = data0["R0"]
+    # Nv = data0["Nv"]
+    #
+    # big_Q = data0["big_Q"]
+    #
+    # for output_dir in output_dirs[1:]:
+    #     data = get_run_Qlj_data(
+    #         output_dir,
+    #         l_max=l_max,
+    #         t_start=t_start,
+    #         dt_sample=dt_sample,
+    #         R0=R0,
+    #     )
+    #     if Nv != data["Nv"]:
+    #         raise ValueError("runs have different number of vertices")
+    #     big_Q = np.concatenate([big_Q, data["big_Q"]], axis=0)
+    concatenated_run_Qlj_data = get_concatenated_run_Qlj_data(
+        output_dirs,
+        l_max=l_max,
+        t_start=t_start,
+        dt_sample=dt_sample,
+    )
+    big_Q = concatenated_run_Qlj_data["big_Q"]
+    Nv = concatenated_run_Qlj_data["Nv"]
+    R0 = concatenated_run_Qlj_data["R0"]
+    Nt = len(big_Q)
+    y = np.sum(big_Q, axis=0) / Nt
+
+    s = np.array(
+        [
+            np.sqrt(np.sum((big_Q[:, l] - y[l]) ** 2) / (Nt * (Nt - 1)))
+            for l in range(l_max + 1)
+        ]
+    )
+
+    return {
+        "y": y,
+        "s": s,
+        "R0": R0,
+        "Nv": Nv,
+        "Nt": Nt,
+    }
+
+
+def fit_concatenated_runs(
+    output_dirs,
+    l_max=20,
+    t_start=0.01,
+    dt_sample=0.01,
+    B_actual=1.0,
+    gamma_actual=32.5,
+    B_guess=1.0,
+    gamma_guess=32.5,
+    tol=1e-15,
+    inverse_variance_weights=True,
+):
+    print("Computing samples and weights")
+    samples_and_weights_data = get_samples_and_weights_from_concatenated_runs(
+        output_dirs,
+        l_max=l_max,
+        t_start=t_start,
+        dt_sample=dt_sample,
+    )
+    print("Computing samples and weights -done")
+
+    R0 = samples_and_weights_data["R0"]
+    Nv = samples_and_weights_data["Nv"]
+    Nt = samples_and_weights_data["Nt"]
+
+    l_range_for_fit = range(2, l_max + 1)
+
+    X = np.array(l_range_for_fit)
+    Y = samples_and_weights_data["y"][X]
+
+    if inverse_variance_weights:
+        S = samples_and_weights_data["s"][X]
+    else:
+        S = np.ones_like(X)
+    kBT = 1.0291e-2
+
+    def res_B_gamma_red(beta):
+        B, gamma_red = beta
+        return (
+            np.array(
+                [
+                    y - kBT / (B * (l - 1) * (l + 2) * (gamma_red + l * (l + 1)))
+                    for l, y in zip(X, Y)
+                ]
+            )
+            / S
+        )
+
+    def res_B(beta):
+        (B,) = beta
+        gamma_red = gamma_actual * R0**2 / B_actual
+        return (
+            np.array(
+                [
+                    y - kBT / (B * (l - 1) * (l + 2) * (gamma_red + l * (l + 1)))
+                    for l, y in zip(X, Y)
+                ]
+            )
+            / S
+        )
+
+    def res_gamma_red(beta):
+        (gamma_red,) = beta
+        B = 1.0
+        return (
+            np.array(
+                [
+                    y - kBT / (B * (l - 1) * (l + 2) * (gamma_red + l * (l + 1)))
+                    for l, y in zip(X, Y)
+                ]
+            )
+            / S
+        )
+
+    gamma_red_guess = gamma_guess * R0**2 / B_guess
+
+    print("fitting (B, gamma)")
+    lsqr_out_B_gamma_red = least_squares(
+        res_B_gamma_red,
+        np.array([B_guess, gamma_red_guess]),
+        ftol=tol,
+        gtol=tol,
+        xtol=tol,
+        max_nfev=100000,
+    )
+    fit_B_gamma_red = lsqr_out_B_gamma_red.x
+    fit_B_gamma = np.array(
+        [fit_B_gamma_red[0], fit_B_gamma_red[1] * fit_B_gamma_red[0] / R0**2]
+    )
+    B_gamma_actual = np.array([B_actual, gamma_actual])
+    err_B_gamma = np.abs(fit_B_gamma - B_gamma_actual) / B_gamma_actual
+    print("fitting (B, gamma) -done")
+
+    print("fitting B")
+    lsqr_out_B = least_squares(
+        res_B,
+        np.array([B_guess]),
+        ftol=tol,
+        gtol=tol,
+        xtol=tol,
+        max_nfev=100000,
+    )
+    fit_B = lsqr_out_B.x[0]
+    err_B = np.abs(fit_B - B_actual) / B_actual
+    print("fitting B -done")
+
+    print("fitting gamma")
+    lsqr_out_gamma_red = least_squares(
+        res_gamma_red,
+        np.array([gamma_red_guess]),
+        ftol=tol,
+        gtol=tol,
+        xtol=tol,
+        max_nfev=100000,
+    )
+    fit_gamma_red = lsqr_out_gamma_red.x[0]
+    fit_gamma = fit_gamma_red * B_actual / R0**2
+    err_gamma = np.abs(fit_gamma - gamma_actual) / gamma_actual
+    print("fitting gamma -done")
+
+    return {
+        "err_B_gamma": err_B_gamma,
+        "err_B": err_B,
+        "err_gamma": err_gamma,
+        "fit_B_gamma": fit_B_gamma,
+        "fit_B": fit_B,
+        "fit_gamma": fit_gamma,
+    } | samples_and_weights_data
+
+
+def get_concatenated_run_data0(
+    output_dirs,
+    l_max=20,
+    t_start=0.01,
+    dt_sample=0.01,
+):
+    data0 = get_run_data0(
         output_dirs[0],
         l_max=l_max,
         t_start=t_start,
@@ -258,7 +570,7 @@ def get_concatenated_run_mean_sqr_Ul_data(
     big_sqr_Un = data0["big_sqr_Un"]
 
     for output_dir in output_dirs[1:]:
-        data = get_run_data(
+        data = get_run_data0(
             output_dir,
             l_max=l_max,
             t_start=t_start,
@@ -283,10 +595,10 @@ def get_concatenated_run_mean_sqr_Ul_data(
             serror_sqr_Ulm[l][m] = serror_sqr_Un[n]
 
     mean_sqr_Ul = np.array([np.mean(mean_sqr_Ulm[l][l:]) for l in range(l_max + 1)])
-    # serror_sqr_Ul = np.array([np.mean(serror_sqr_Ulm[l][l:]) for l in range(l_max + 1)])
-    serror_sqr_Ul = np.array(
-        [np.linalg.norm(serror_sqr_Ulm[l]) / (l + 1) for l in range(l_max + 1)]
-    )
+    serror_sqr_Ul = np.array([np.mean(serror_sqr_Ulm[l][l:]) for l in range(l_max + 1)])
+    # serror_sqr_Ul = np.array(
+    #     [np.linalg.norm(serror_sqr_Ulm[l]) / (l + 1) for l in range(l_max + 1)]
+    # )
 
     return {
         "mean_sqr_Ul": mean_sqr_Ul,
@@ -299,7 +611,7 @@ def get_concatenated_run_mean_sqr_Ul_data(
     }
 
 
-def fit_concatenated_run_samples_no_m_average(
+def fit_concatenated_run_samples0(
     output_dirs,
     l_max=20,
     t_start=0.01,
@@ -311,161 +623,19 @@ def fit_concatenated_run_samples_no_m_average(
     tol=1e-15,
     inverse_variance_weights=True,
 ):
-    concatenated_run_mean_sqr_Ul_data = get_concatenated_run_mean_sqr_Ul_data(
+    concatenated_run_data = get_concatenated_run_data0(
         output_dirs,
         l_max=l_max,
         t_start=t_start,
         dt_sample=dt_sample,
     )
 
-    R0 = concatenated_run_mean_sqr_Ul_data["R0"]
-    Nv = concatenated_run_mean_sqr_Ul_data["Nv"]
-    Nt = concatenated_run_mean_sqr_Ul_data["Nt"]
+    R0 = concatenated_run_data["R0"]
+    Nv = concatenated_run_data["Nv"]
+    Nt = concatenated_run_data["Nt"]
 
-    mean_sqr_Un = concatenated_run_mean_sqr_Ul_data["mean_sqr_Un"]
-    serror_sqr_Un = concatenated_run_mean_sqr_Ul_data["serror_sqr_Un"]
-
-    n_max = spherical_harmonic_index_n_LM(l_max, l_max)
-    l_of_n = lambda n: spherical_harmonic_index_lm_N(n)[0]
-    n_range_for_fit = range(4, n_max + 1)
-
-    X = np.array(n_range_for_fit)
-    Y = mean_sqr_Un[X]
-    if inverse_variance_weights:
-        W = 1 / serror_sqr_Un[X]
-    else:
-        W = np.ones_like(X)
-    kBT = 1.0291e-2
-
-    def res_B_gamma_red(beta):
-        B, gamma_red = beta
-        return (
-            np.array(
-                [
-                    y
-                    - kBT
-                    / (
-                        B
-                        * (l_of_n(n) - 1)
-                        * (l_of_n(n) + 2)
-                        * (gamma_red + l_of_n(n) * (l_of_n(n) + 1))
-                    )
-                    for n, y in zip(X, Y)
-                ]
-            )
-            * W
-        )
-
-    def res_B(beta):
-        (B,) = beta
-        gamma_red = gamma_actual * R0**2 / B_actual
-        return (
-            np.array(
-                [
-                    y
-                    - kBT
-                    / (
-                        B
-                        * (l_of_n(n) - 1)
-                        * (l_of_n(n) + 2)
-                        * (gamma_red + l_of_n(n) * (l_of_n(n) + 1))
-                    )
-                    for n, y in zip(X, Y)
-                ]
-            )
-            * W
-        )
-
-    def res_gamma_red(beta):
-        (gamma_red,) = beta
-        B = 1.0
-        return (
-            np.array(
-                [
-                    y
-                    - kBT
-                    / (
-                        B
-                        * (l_of_n(n) - 1)
-                        * (l_of_n(n) + 2)
-                        * (gamma_red + l_of_n(n) * (l_of_n(n) + 1))
-                    )
-                    for n, y in zip(X, Y)
-                ]
-            )
-            * W
-        )
-
-    gamma_red_guess = gamma_guess * R0**2 / B_guess
-
-    lsqr_out_B_gamma_red = least_squares(
-        res_B_gamma_red,
-        np.array([B_guess, gamma_red_guess]),
-        ftol=tol,
-        gtol=tol,
-        xtol=tol,
-        max_nfev=100000,
-    )
-    fit_B_gamma_red = lsqr_out_B_gamma_red.x
-    fit_B_gamma = np.array(
-        [fit_B_gamma_red[0], fit_B_gamma_red[1] * fit_B_gamma_red[0] / R0**2]
-    )
-
-    lsqr_out_B = least_squares(
-        res_B,
-        np.array([B_guess]),
-        ftol=tol,
-        gtol=tol,
-        xtol=tol,
-        max_nfev=100000,
-    )
-    fit_B = lsqr_out_B.x[0]
-
-    lsqr_out_gamma_red = least_squares(
-        res_gamma_red,
-        np.array([gamma_red_guess]),
-        ftol=tol,
-        gtol=tol,
-        xtol=tol,
-        max_nfev=100000,
-    )
-    fit_gamma_red = lsqr_out_gamma_red.x[0]
-    fit_gamma = fit_gamma_red * B_actual / R0**2
-
-    return {
-        "fit_B_gamma": fit_B_gamma,
-        "fit_B": fit_B,
-        "fit_gamma": fit_gamma,
-        "Nv": Nv,
-        "Nt": Nt,
-    }
-
-
-def fit_concatenated_run_samples(
-    output_dirs,
-    l_max=20,
-    t_start=0.01,
-    dt_sample=0.01,
-    B_actual=1.0,
-    gamma_actual=32.5,
-    B_guess=1.0,
-    gamma_guess=32.5,
-    tol=1e-15,
-    inverse_variance_weights=True,
-):
-    concatenated_run_mean_sqr_Ul_data = get_concatenated_run_mean_sqr_Ul_data(
-        output_dirs,
-        l_max=l_max,
-        t_start=t_start,
-        dt_sample=dt_sample,
-    )
-
-    R0 = concatenated_run_mean_sqr_Ul_data["R0"]
-    Nv = concatenated_run_mean_sqr_Ul_data["Nv"]
-    Nt = concatenated_run_mean_sqr_Ul_data["Nt"]
-
-    mean_sqr_Ul = concatenated_run_mean_sqr_Ul_data["mean_sqr_Ul"]
-    serror_sqr_Ul = concatenated_run_mean_sqr_Ul_data["serror_sqr_Ul"]
+    mean_sqr_Ul = concatenated_run_data["mean_sqr_Ul"]
+    serror_sqr_Ul = concatenated_run_data["serror_sqr_Ul"]
 
     l_range_for_fit = range(2, l_max + 1)
 
@@ -555,9 +725,7 @@ def fit_concatenated_run_samples(
         "fit_B_gamma": fit_B_gamma,
         "fit_B": fit_B,
         "fit_gamma": fit_gamma,
-        "Nv": Nv,
-        "Nt": Nt,
-    }
+    } | concatenated_run_data
 
 
 # get_run_data(
@@ -569,23 +737,61 @@ def fit_concatenated_run_samples(
 # )
 
 output_dirs_000320 = [f"../output/fluctuations_test_000320_no_graph"]
+output_dirs_000320 += [
+    f"../output/fluctuations_test_000320_sweep/run_{_:0>2}_00" for _ in range(16)
+]
 output_dirs_001280 = [f"../output/fluctuations_test_001280_no_graph"]
+output_dirs_001280 += [
+    f"../output/fluctuations_test_001280_sweep/run_{_:0>2}_00" for _ in range(16)
+]
 output_dirs_005120 = [f"../output/fluctuations_test_005120_no_graph"]
+output_dirs_005120 += [
+    f"../output/fluctuations_test_005120_sweep/run_{_:0>2}_00" for _ in range(16)
+]
 
 # %%
-# get_concatenated_run_mean_sqr_Ul_data(
-#     output_dirs_000320,
-#     l_max=20,
-#     t_start=0.01,
-#     dt_sample=0.01,
-# )
 
+output_dirs = output_dirs_001280
+l_max = 20
+t_start = 0.1
 
-fit_data_000320_weighted = fit_concatenated_run_samples_no_m_average(
-    output_dirs_000320,
+# dt_samples = np.linspace(1.0, 0.03, 10)
+# dt_samples = np.logspace(np.log10(1.0), np.log10(0.03), 10)
+dt_samples = 1 / np.linspace(1 / 1.0, 1 / 0.015, 20)
+B_guess = 1.5
+gamma_guess = 20.0
+weighted = False
+tol = 1e-15
+
+Nt_list = []
+err_B_list = []
+
+for dt_sample in dt_samples:
+    print(f"{dt_sample=}")
+    fit_data = fit_concatenated_runs(
+        output_dirs,
+        l_max=l_max,
+        t_start=t_start,
+        dt_sample=dt_sample,
+        B_actual=1.0,
+        gamma_actual=32.5,
+        B_guess=B_guess,
+        gamma_guess=gamma_guess,
+        tol=tol,
+        inverse_variance_weights=weighted,
+    )
+
+    Nt_list.append(fit_data["Nt"])
+    err_B_list.append(fit_data["err_B_gamma"][0])
+
+plt.plot(Nt_list, err_B_list, "-o")
+# %%
+
+fit_data_001280_weighted = fit_concatenated_runs(
+    output_dirs_001280,
     l_max=20,
-    t_start=0.01,
-    dt_sample=0.01,
+    t_start=0.1,
+    dt_sample=1.0,
     B_actual=1.0,
     gamma_actual=32.5,
     B_guess=1.0,
@@ -593,11 +799,11 @@ fit_data_000320_weighted = fit_concatenated_run_samples_no_m_average(
     tol=1e-15,
     inverse_variance_weights=True,
 )
-fit_data_000320_not_weighted = fit_concatenated_run_samples_no_m_average(
-    output_dirs_000320,
+fit_data_001280_not_weighted = fit_concatenated_runs(
+    output_dirs_001280,
     l_max=20,
-    t_start=0.01,
-    dt_sample=0.01,
+    t_start=0.03,
+    dt_sample=0.03,
     B_actual=1.0,
     gamma_actual=32.5,
     B_guess=1.0,
@@ -606,11 +812,11 @@ fit_data_000320_not_weighted = fit_concatenated_run_samples_no_m_average(
     inverse_variance_weights=False,
 )
 
-fit_data_001280_weighted = fit_concatenated_run_samples_no_m_average(
-    output_dirs_001280,
+fit_data_005120_weighted = fit_concatenated_runs(
+    output_dirs_005120,
     l_max=20,
-    t_start=0.01,
-    dt_sample=0.01,
+    t_start=0.03,
+    dt_sample=0.3,
     B_actual=1.0,
     gamma_actual=32.5,
     B_guess=1.0,
@@ -618,36 +824,11 @@ fit_data_001280_weighted = fit_concatenated_run_samples_no_m_average(
     tol=1e-15,
     inverse_variance_weights=True,
 )
-fit_data_001280_not_weighted = fit_concatenated_run_samples_no_m_average(
-    output_dirs_001280,
-    l_max=20,
-    t_start=0.01,
-    dt_sample=0.01,
-    B_actual=1.0,
-    gamma_actual=32.5,
-    B_guess=1.0,
-    gamma_guess=32.5,
-    tol=1e-15,
-    inverse_variance_weights=False,
-)
-
-fit_data_005120_weighted = fit_concatenated_run_samples(
+fit_data_005120_not_weighted = fit_concatenated_runs(
     output_dirs_005120,
     l_max=20,
-    t_start=0.02,
-    dt_sample=0.02,
-    B_actual=1.0,
-    gamma_actual=32.5,
-    B_guess=1.0,
-    gamma_guess=32.5,
-    tol=1e-15,
-    inverse_variance_weights=True,
-)
-fit_data_005120_not_weighted = fit_concatenated_run_samples(
-    output_dirs_005120,
-    l_max=20,
-    t_start=0.02,
-    dt_sample=0.02,
+    t_start=0.1,
+    dt_sample=1.0,
     B_actual=1.0,
     gamma_actual=32.5,
     B_guess=1.0,

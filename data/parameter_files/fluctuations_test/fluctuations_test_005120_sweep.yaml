@@ -7,7 +7,7 @@ clear_output_dir: true
 dt: 1e-5
 dt_frame: 1e-3
 dt_save: 1e-2
-T_run: 0.01 # 5.0
+T_run: 5.0
 kBT: 1.0291e-2 # ***
 bulk_viscosity: 1.0
 no_graph: true
