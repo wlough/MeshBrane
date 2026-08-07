@@ -670,7 +670,7 @@ plot_multiruns_area_change_minmaxmean(
 # )
 
 plot_ne_point_cloud2d_sweep(
-    "../output/area_volume_test_mitosis_001280_rp25_sweep",
+    "../output/area_volume_test_mitosis_001280_rp25_sweep0",
     t_start=0.01,
     dt_sample=0.25,
     markersize=2.5,

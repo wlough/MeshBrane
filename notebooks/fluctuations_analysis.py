@@ -342,6 +342,8 @@ def get_concatenated_run_Qlj_data(
 
     big_Q = data0["big_Q"]
 
+    dt_list = [data0["dt"]]
+
     for output_dir in output_dirs[1:]:
         data = get_run_Qlj_data(
             output_dir,
@@ -353,14 +355,16 @@ def get_concatenated_run_Qlj_data(
         if Nv != data["Nv"]:
             raise ValueError("runs have different number of vertices")
         big_Q = np.concatenate([big_Q, data["big_Q"]], axis=0)
+        dt_list.append(data["dt"])
 
     Nt = len(big_Q)
-
+    dt_list = np.array(dt_list)
     return {
         "big_Q": big_Q,
         "R0": R0,
         "Nv": Nv,
         "Nt": Nt,
+        "dt_list": dt_list,
     }
 
 
@@ -419,6 +423,178 @@ def get_samples_and_weights_from_concatenated_runs(
         "Nv": Nv,
         "Nt": Nt,
     }
+
+
+def save_samples_and_weights_from_concatenated_runs(
+    output_dirs,
+    l_max=20,
+    t_start=0.01,
+    dt_sample=0.01,
+    save_path=None,
+):
+    concatenated_run_Qlj_data = get_concatenated_run_Qlj_data(
+        output_dirs,
+        l_max=l_max,
+        t_start=t_start,
+        dt_sample=dt_sample,
+    )
+    big_Q = concatenated_run_Qlj_data["big_Q"]
+    Nv = concatenated_run_Qlj_data["Nv"]
+    R0 = concatenated_run_Qlj_data["R0"]
+    Nt = len(big_Q)
+    # y = np.sum(big_Q, axis=0) / Nt
+    y = np.mean(big_Q, axis=0)
+
+    # s = np.array(
+    #     [
+    #         np.sqrt(np.sum((big_Q[:, l] - y[l]) ** 2) / (Nt * (Nt - 1)))
+    #         for l in range(l_max + 1)
+    #     ]
+    # )
+    s = np.std(big_Q, axis=0, ddof=1) / np.sqrt(Nt)
+    # print(1 / s**2)
+    # print(np.linalg.norm(s - ss))
+    # print(np.linalg.norm(y - yy))
+
+    data = concatenated_run_Qlj_data | {
+        "y": y,
+        "s": s,
+        "l_max": l_max,
+        "t_start": t_start,
+        "dt_sample": dt_sample,
+        "output_dirs": output_dirs,
+    }
+    np.savez(save_path, **data)
+
+
+def fit_saved_samples_and_weights_data(
+    path,
+    B_actual=1.0,
+    gamma_actual=32.5,
+    B_guess=1.0,
+    gamma_guess=32.5,
+    tol=1e-15,
+    inverse_variance_weights=True,
+    l_max=20,
+):
+    samples_and_weights_data = dict(np.load(path))
+
+    R0 = samples_and_weights_data["R0"]
+    Nv = samples_and_weights_data["Nv"]
+    Nt = samples_and_weights_data["Nt"]
+    l_max_data = samples_and_weights_data["l_max"]
+    if l_max > l_max_data:
+        raise ValueError("l_max > l_max_data")
+
+    l_range_for_fit = range(2, l_max + 1)
+
+    X = np.array(l_range_for_fit)
+    Y = samples_and_weights_data["y"][X]
+
+    if inverse_variance_weights:
+        S = samples_and_weights_data["s"][X]
+    else:
+        S = np.ones_like(X)
+    kBT = 1.0291e-2
+
+    def res_B_gamma_red(beta):
+        B, gamma_red = beta
+        return (
+            np.array(
+                [
+                    y - kBT / (B * (l - 1) * (l + 2) * (gamma_red + l * (l + 1)))
+                    for l, y in zip(X, Y)
+                ]
+            )
+            / S
+        )
+
+    def res_B(beta):
+        (B,) = beta
+        gamma_red = gamma_actual * R0**2 / B_actual
+        return (
+            np.array(
+                [
+                    y - kBT / (B * (l - 1) * (l + 2) * (gamma_red + l * (l + 1)))
+                    for l, y in zip(X, Y)
+                ]
+            )
+            / S
+        )
+
+    def res_gamma_red(beta):
+        (gamma_red,) = beta
+        B = 1.0
+        return (
+            np.array(
+                [
+                    y - kBT / (B * (l - 1) * (l + 2) * (gamma_red + l * (l + 1)))
+                    for l, y in zip(X, Y)
+                ]
+            )
+            / S
+        )
+
+    gamma_red_guess = gamma_guess * R0**2 / B_guess
+    B_gamma_red_guess = np.array([B_guess, gamma_red_guess])
+    print("fitting (B, gamma)")
+    print(f"{B_gamma_red_guess=}")
+    lsqr_out_B_gamma_red = least_squares(
+        res_B_gamma_red,
+        B_gamma_red_guess,
+        ftol=tol,
+        gtol=tol,
+        xtol=tol,
+        max_nfev=100000,
+    )
+    fit_B_gamma_red = lsqr_out_B_gamma_red.x
+    print(f"{fit_B_gamma_red=}")
+    fit_B_gamma = np.array(
+        [fit_B_gamma_red[0], fit_B_gamma_red[1] * fit_B_gamma_red[0] / R0**2]
+    )
+    print(f"{fit_B_gamma=}")
+    B_gamma_actual = np.array([B_actual, gamma_actual])
+    err_B_gamma = np.abs(fit_B_gamma - B_gamma_actual) / B_gamma_actual
+    resids_B_gamma_red = res_B_gamma_red(fit_B_gamma_red)
+    print(f"{resids_B_gamma_red=}")
+    print("fitting (B, gamma) -done")
+
+    # print("fitting B")
+    # lsqr_out_B = least_squares(
+    #     res_B,
+    #     np.array([B_guess]),
+    #     ftol=tol,
+    #     gtol=tol,
+    #     xtol=tol,
+    #     max_nfev=100000,
+    # )
+    # fit_B = lsqr_out_B.x[0]
+    # err_B = np.abs(fit_B - B_actual) / B_actual
+    # print("fitting B -done")
+    #
+    # print("fitting gamma")
+    # lsqr_out_gamma_red = least_squares(
+    #     res_gamma_red,
+    #     np.array([gamma_red_guess]),
+    #     ftol=tol,
+    #     gtol=tol,
+    #     xtol=tol,
+    #     max_nfev=100000,
+    # )
+    # fit_gamma_red = lsqr_out_gamma_red.x[0]
+    # fit_gamma = fit_gamma_red * B_actual / R0**2
+    # err_gamma = np.abs(fit_gamma - gamma_actual) / gamma_actual
+    # print("fitting gamma -done")
+
+    return {
+        "err_B_gamma": err_B_gamma,
+        # "err_B": err_B,
+        # "err_gamma": err_gamma,
+        "fit_B_gamma": fit_B_gamma,
+        # "fit_B": fit_B,
+        # "fit_gamma": fit_gamma,
+        "lsqr_out_B_gamma_red": lsqr_out_B_gamma_red,
+    } | samples_and_weights_data
 
 
 def fit_concatenated_runs(
@@ -728,6 +904,25 @@ def fit_concatenated_run_samples0(
     } | concatenated_run_data
 
 
+def save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
+    output_dirs,
+    save_paths,
+    dt_samples,
+    l_max=20,
+    t_start=0.1,
+):
+
+    for dt_sample, save_path in zip(dt_samples, save_paths):
+        print(f"{dt_sample=}")
+        save_samples_and_weights_from_concatenated_runs(
+            output_dirs,
+            l_max=l_max,
+            t_start=t_start,
+            dt_sample=dt_sample,
+            save_path=save_path,
+        )
+
+
 # get_run_data(
 #     f"../output/fluctuations_test_000320_no_graph",
 #     l_max=20,
@@ -735,7 +930,7 @@ def fit_concatenated_run_samples0(
 #     dt_sample=0.01,
 #     R0=None,
 # )
-
+# %%
 output_dirs_000320 = [f"../output/fluctuations_test_000320_no_graph"]
 output_dirs_000320 += [
     f"../output/fluctuations_test_000320_sweep/run_{_:0>2}_00" for _ in range(16)
@@ -749,42 +944,113 @@ output_dirs_005120 += [
     f"../output/fluctuations_test_005120_sweep/run_{_:0>2}_00" for _ in range(16)
 ]
 
-# %%
 
-output_dirs = output_dirs_001280
+dt_samples = 1 / np.linspace(1 / 1.0, 1 / 0.02, 20)
 l_max = 20
 t_start = 0.1
 
-# dt_samples = np.linspace(1.0, 0.03, 10)
-# dt_samples = np.logspace(np.log10(1.0), np.log10(0.03), 10)
-dt_samples = 1 / np.linspace(1 / 1.0, 1 / 0.015, 20)
-B_guess = 1.5
+save_paths_000320 = [
+    f"../output/fluctuations_test_analysis/samples_and_weights_data_Nf_{320:0>6}_l_max_{l_max}_dt_{n_dt}.npz"
+    for n_dt in range(len(dt_samples))
+]
+save_paths_001280 = [
+    f"../output/fluctuations_test_analysis/samples_and_weights_data_Nf_{1280:0>6}_l_max_{l_max}_dt_{n_dt}.npz"
+    for n_dt in range(len(dt_samples))
+]
+save_paths_005120 = [
+    f"../output/fluctuations_test_analysis/samples_and_weights_data_Nf_{5120:0>6}_l_max_{l_max}_dt_{n_dt}.npz"
+    for n_dt in range(len(dt_samples))
+]
+
+
+save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
+    output_dirs_000320,
+    save_paths_000320,
+    dt_samples,
+    l_max=l_max,
+    t_start=t_start,
+)
+
+save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
+    output_dirs_001280,
+    save_paths_001280,
+    dt_samples,
+    l_max=l_max,
+    t_start=t_start,
+)
+
+save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
+    output_dirs_005120,
+    save_paths_005120,
+    dt_samples,
+    l_max=l_max,
+    t_start=t_start,
+)
+
+# %%
+Nf = np.array([320, 1280, 5120, 20480])
+radius_over_edge_length = np.array([3.34077128, 6.63439233, 13.2451913, 26.4785837])
+L_max = np.array([3, 6, 13])
+# save_paths = save_paths_001280
+save_paths = save_paths_005120
+B_guess = 1.2
 gamma_guess = 20.0
 weighted = False
 tol = 1e-15
+l_max = 10
 
 Nt_list = []
 err_B_list = []
-
-for dt_sample in dt_samples:
-    print(f"{dt_sample=}")
-    fit_data = fit_concatenated_runs(
-        output_dirs,
-        l_max=l_max,
-        t_start=t_start,
-        dt_sample=dt_sample,
+for path in save_paths:
+    fit_data = fit_saved_samples_and_weights_data(
+        path,
         B_actual=1.0,
         gamma_actual=32.5,
         B_guess=B_guess,
         gamma_guess=gamma_guess,
         tol=tol,
-        inverse_variance_weights=weighted,
+        inverse_variance_weights=False,
+        l_max=l_max,
     )
-
     Nt_list.append(fit_data["Nt"])
     err_B_list.append(fit_data["err_B_gamma"][0])
 
-plt.plot(Nt_list, err_B_list, "-o")
+plt.plot(Nt_list, err_B_list, "-o", label="unweighted")
+
+Nt_list = []
+err_B_list = []
+for path in save_paths:
+    fit_data = fit_saved_samples_and_weights_data(
+        path,
+        B_actual=1.0,
+        gamma_actual=32.5,
+        B_guess=B_guess,
+        gamma_guess=gamma_guess,
+        tol=tol,
+        inverse_variance_weights=True,
+        l_max=l_max,
+    )
+    Nt_list.append(fit_data["Nt"])
+    err_B_list.append(fit_data["err_B_gamma"][0])
+
+plt.plot(Nt_list, err_B_list, "-o", label="weighted")
+
+plt.legend()
+# %%
+
+fit_concatenated_run_samples0(
+    output_dirs_001280,
+    l_max=20,
+    t_start=0.1,
+    dt_sample=0.5,
+    B_actual=1.0,
+    gamma_actual=32.5,
+    B_guess=B_guess,
+    gamma_guess=gamma_guess,
+    tol=tol,
+    inverse_variance_weights=True,
+)
+
 # %%
 
 fit_data_001280_weighted = fit_concatenated_runs(
