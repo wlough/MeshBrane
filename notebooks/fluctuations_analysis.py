@@ -23,8 +23,7 @@ from scipy.optimize import least_squares
 import yaml
 
 
-#
-def compute_run_average_surface_tension_time_series(
+def compute_run_spatial_average_surface_tension_time_series(
     output_dir,
     t_start=0.1,
     dt_sample=0.03,
@@ -59,41 +58,65 @@ def compute_run_average_surface_tension_time_series(
     # )[nt_start::nt_skip]
     big_surface_tension_F = gamma0 + k * (big_area_F - A0) / A0
 
-    big_average_surface_tension = np.einsum(
+    big_spatial_average_surface_tension = np.einsum(
         "tf,tf,t->t", big_surface_tension_F, big_area_F, 1 / big_area
     )
     big_unweighted_average_surface_tension = np.mean(big_surface_tension_F, axis=1)
 
     return {
-        "big_average_surface_tension": big_average_surface_tension,
+        "big_spatial_average_surface_tension": big_spatial_average_surface_tension,
         "big_unweighted_average_surface_tension": big_unweighted_average_surface_tension,
+        "dt": dt,
+        "Nf": Nf,
     }
 
 
-compute_run_average_surface_tension_time_series(
-    "../output/fluctuations_test_000320_sweep/run_00_00",
-    t_start=0.0,
-    dt_sample=0.03,
-)
-# compute_run_average_surface_tension_time_series(
-#     "../output/fluctuations_test_001280_sweep/run_00_00",
-#     t_start=0.1,
-#     dt_sample=0.03,
-# )
-compute_run_average_surface_tension_time_series(
-    "../output/fluctuations_test_005120_sweep/run_00_00",
-    t_start=0.0,
-    dt_sample=0.03,
-)
-
-
-# %%
 def compute_concatenated_run_average_surface_tension_stats(
     output_dirs,
     t_start=0.1,
     dt_sample=0.03,
 ):
-    pass
+
+    data0 = compute_run_spatial_average_surface_tension_time_series(
+        output_dirs[0],
+        t_start=t_start,
+        dt_sample=dt_sample,
+    )
+
+    dt_list = [data0["dt"]]
+    Nf = data0["Nf"]
+
+    big_spatial_average_surface_tension = data0["big_spatial_average_surface_tension"]
+
+    for path in output_dirs[1:]:
+        data = compute_run_spatial_average_surface_tension_time_series(
+            path,
+            t_start=t_start,
+            dt_sample=dt_sample,
+        )
+        if Nf != data["Nf"]:
+            raise ValueError("runs have different number of faces")
+        dt_list.append(data["dt"])
+        big_spatial_average_surface_tension = np.concatenate(
+            [
+                big_spatial_average_surface_tension,
+                data["big_spatial_average_surface_tension"],
+            ],
+            axis=0,
+        )
+
+    mean_gamma = np.mean(big_spatial_average_surface_tension)
+    Nt = len(big_spatial_average_surface_tension)
+    std_gamma = np.std(big_spatial_average_surface_tension)
+    dt_list = np.array(dt_list)
+
+    return {
+        "average_surface_tension": mean_gamma,
+        "std_surface_tension": std_gamma,
+        "Nt": Nt,
+        "dt_list": dt_list,
+        "Nf": Nf,
+    }
 
 
 def get_auto_corr(x):
@@ -230,9 +253,6 @@ def plot_autocors():
             print(30 * "-")
             print(f"l, m = {l_plot}, {m_plot}")
             print(f"    tau={tau:.2g}")
-
-
-# plot_autocors()
 
 
 def get_run_data0(
@@ -535,7 +555,7 @@ def save_samples_and_weights_from_concatenated_runs(
         "l_max": l_max,
         "t_start": t_start,
         "dt_sample": dt_sample,
-        "output_dirs": output_dirs,
+        # "output_dirs": output_dirs,
     }
     np.savez(save_path, **data)
 
@@ -550,7 +570,7 @@ def fit_saved_samples_and_weights_data(
     inverse_variance_weights=True,
     l_max=20,
 ):
-    samples_and_weights_data = dict(np.load(path))
+    samples_and_weights_data = dict(np.load(path, allow_pickle=True))
 
     R0 = samples_and_weights_data["R0"]
     Nv = samples_and_weights_data["Nv"]
@@ -996,6 +1016,394 @@ def save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
         )
 
 
+t_start = 0.1  # let system thermalize for t_start before sampling
+dt_sample_stats = 0.03  # dt between samples for surface tension stats
+dt_samples_save = 1 / np.linspace(
+    1 / 1.0,
+    1 / 0.02,
+    20,
+)  # dt's between samples
+l_max_save = 20  # max spherical harmonic index to compute samples for
+
+
+fluctuations_analysis_dir = Path("../output/fluctuations_test_analysis")
+
+# runs used to compute actual surface tension stats
+surface_tension_stats_runs_000320 = [
+    fluctuations_analysis_dir / f"fluctuations_test_000320_sweep1/run_{_:0>2}_00"
+    for _ in range(16)
+]
+surface_tension_stats_runs_001280 = [
+    fluctuations_analysis_dir / f"fluctuations_test_001280_sweep1/run_{_:0>2}_00"
+    for _ in range(16)
+]
+surface_tension_stats_runs_005120 = [
+    fluctuations_analysis_dir / f"fluctuations_test_005120_sweep1/run_{_:0>2}_00"
+    for _ in range(16)
+]
+
+# path to save surface_tension_stats
+surface_tension_stats_path = fluctuations_analysis_dir / "surface_tension_stats.npz"
+
+# runs used to compute samples and weights used for fits
+samples_and_weights_runs_000320 = [
+    fluctuations_analysis_dir / "fluctuations_test_000320_no_graph"
+]
+samples_and_weights_runs_000320 += [
+    fluctuations_analysis_dir / f"fluctuations_test_000320_sweep0/run_{_:0>2}_00"
+    for _ in range(16)
+]
+samples_and_weights_runs_000320 += [
+    fluctuations_analysis_dir / f"fluctuations_test_000320_sweep1/run_{_:0>2}_00"
+    for _ in range(16)
+]
+
+samples_and_weights_runs_001280 = [
+    fluctuations_analysis_dir / "fluctuations_test_001280_no_graph"
+]
+samples_and_weights_runs_001280 += [
+    fluctuations_analysis_dir / f"fluctuations_test_001280_sweep0/run_{_:0>2}_00"
+    for _ in range(16)
+]
+samples_and_weights_runs_001280 += [
+    fluctuations_analysis_dir / f"fluctuations_test_001280_sweep1/run_{_:0>2}_00"
+    for _ in range(16)
+]
+
+samples_and_weights_runs_005120 = [
+    fluctuations_analysis_dir / "fluctuations_test_005120_no_graph"
+]
+samples_and_weights_runs_005120 += [
+    fluctuations_analysis_dir / f"fluctuations_test_005120_sweep0/run_{_:0>2}_00"
+    for _ in range(16)
+]
+samples_and_weights_runs_005120 += [
+    fluctuations_analysis_dir / f"fluctuations_test_005120_sweep1/run_{_:0>2}_00"
+    for _ in range(16)
+]
+
+# paths to save samples and weights data
+samples_and_weights_paths_000320 = [
+    fluctuations_analysis_dir
+    / f"samples_and_weights_data_Nf_{320:0>6}_l_max_{l_max_save}_dt_{n_dt}.npz"
+    for n_dt in range(len(dt_samples_save))
+]
+samples_and_weights_paths_001280 = [
+    fluctuations_analysis_dir
+    / f"samples_and_weights_data_Nf_{1280:0>6}_l_max_{l_max_save}_dt_{n_dt}.npz"
+    for n_dt in range(len(dt_samples_save))
+]
+samples_and_weights_paths_005120 = [
+    fluctuations_analysis_dir
+    / f"samples_and_weights_data_Nf_{5120:0>6}_l_max_{l_max_save}_dt_{n_dt}.npz"
+    for n_dt in range(len(dt_samples_save))
+]
+
+# %%
+##############################
+# Save surface tension stats #
+##############################
+
+
+def save_final_surface_tension_stats():
+    surface_tension_stats_000320 = (
+        compute_concatenated_run_average_surface_tension_stats(
+            surface_tension_stats_runs_000320,
+            t_start=t_start,
+            dt_sample=dt_sample_stats,
+        )
+    )
+
+    surface_tension_stats_001280 = (
+        compute_concatenated_run_average_surface_tension_stats(
+            surface_tension_stats_runs_001280,
+            t_start=t_start,
+            dt_sample=dt_sample_stats,
+        )
+    )
+
+    surface_tension_stats_005120 = (
+        compute_concatenated_run_average_surface_tension_stats(
+            surface_tension_stats_runs_005120,
+            t_start=t_start,
+            dt_sample=dt_sample_stats,
+        )
+    )
+
+    Nf = np.array(
+        [
+            surface_tension_stats_000320["Nf"],
+            surface_tension_stats_001280["Nf"],
+            surface_tension_stats_005120["Nf"],
+        ]
+    )
+    Nt = np.array(
+        [
+            surface_tension_stats_000320["Nt"],
+            surface_tension_stats_001280["Nt"],
+            surface_tension_stats_005120["Nt"],
+        ]
+    )
+    average_surface_tension = np.array(
+        [
+            surface_tension_stats_000320["average_surface_tension"],
+            surface_tension_stats_001280["average_surface_tension"],
+            surface_tension_stats_005120["average_surface_tension"],
+        ]
+    )
+    std_surface_tension = np.array(
+        [
+            surface_tension_stats_000320["std_surface_tension"],
+            surface_tension_stats_001280["std_surface_tension"],
+            surface_tension_stats_005120["std_surface_tension"],
+        ]
+    )
+    surface_tension_stats_data = {
+        "Nf": Nf,
+        "Nt": Nt,
+        "average_surface_tension": average_surface_tension,
+        "std_surface_tension": std_surface_tension,
+    }
+
+    np.savez(surface_tension_stats_path, **surface_tension_stats_data)
+
+
+# save_final_surface_tension_stats()
+# %%
+#########################################
+# Save fluctuations samples and weights #
+#########################################
+
+
+def save_final_samples_and_weights_for_dt_samples_range():
+
+    save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
+        samples_and_weights_runs_000320,
+        samples_and_weights_paths_000320,
+        dt_samples_save,
+        l_max=l_max_save,
+        t_start=t_start,
+    )
+
+    save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
+        samples_and_weights_runs_001280,
+        samples_and_weights_paths_001280,
+        dt_samples_save,
+        l_max=l_max_save,
+        t_start=t_start,
+    )
+
+    save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
+        samples_and_weights_runs_005120,
+        samples_and_weights_paths_005120,
+        dt_samples_save,
+        l_max=l_max_save,
+        t_start=t_start,
+    )
+
+
+# save_final_samples_and_weights_for_dt_samples_range()
+# %%
+B_guess = 1.2
+gamma_guess = 23.0
+fit_tol = 1e-15
+L_max = np.array([5, 5, 10])
+#
+surface_tension_stats = np.load(surface_tension_stats_path)
+Nf_list = surface_tension_stats["Nf"]
+
+
+# {k: v for k, v in np.load(samples_and_weights_paths_000320[0]).items()}
+# list(np.load(samples_and_weights_paths_000320[0]).keys())
+#
+#
+# data = np.load(samples_and_weights_paths_000320[0], allow_pickle=True)
+# data["big_Q"]
+# data["R0"]
+# data["Nv"]
+# data["Nt"]
+# data["dt_list"]
+# data["y"]
+# data["s"]
+# data["l_max"]
+# data["t_start"]
+# data["dt_sample"]
+# data["output_dirs"]
+
+fit_saved_samples_and_weights_data(
+    samples_and_weights_paths_000320[0],
+    B_actual=1.0,
+    gamma_actual=surface_tension_stats["average_surface_tension"][0],
+    B_guess=B_guess,
+    gamma_guess=gamma_guess,
+    tol=fit_tol,
+    inverse_variance_weights=False,
+    l_max=L_max[0],
+)
+fit_data_unweighted_000320 = [
+    fit_saved_samples_and_weights_data(
+        path,
+        B_actual=1.0,
+        gamma_actual=surface_tension_stats["average_surface_tension"][0],
+        B_guess=B_guess,
+        gamma_guess=gamma_guess,
+        tol=fit_tol,
+        inverse_variance_weights=False,
+        l_max=L_max[0],
+    )
+    for path in samples_and_weights_paths_000320
+]
+fit_data_weighted_000320 = [
+    fit_saved_samples_and_weights_data(
+        path,
+        B_actual=1.0,
+        gamma_actual=surface_tension_stats["average_surface_tension"][0],
+        B_guess=B_guess,
+        gamma_guess=gamma_guess,
+        tol=fit_tol,
+        inverse_variance_weights=True,
+        l_max=L_max[0],
+    )
+    for path in samples_and_weights_paths_000320
+]
+
+fit_data_unweighted_001280 = [
+    fit_saved_samples_and_weights_data(
+        path,
+        B_actual=1.0,
+        gamma_actual=surface_tension_stats["average_surface_tension"][1],
+        B_guess=B_guess,
+        gamma_guess=gamma_guess,
+        tol=fit_tol,
+        inverse_variance_weights=False,
+        l_max=L_max[1],
+    )
+    for path in samples_and_weights_paths_001280
+]
+fit_data_weighted_001280 = [
+    fit_saved_samples_and_weights_data(
+        path,
+        B_actual=1.0,
+        gamma_actual=surface_tension_stats["average_surface_tension"][1],
+        B_guess=B_guess,
+        gamma_guess=gamma_guess,
+        tol=fit_tol,
+        inverse_variance_weights=True,
+        l_max=L_max[1],
+    )
+    for path in samples_and_weights_paths_001280
+]
+
+fit_data_unweighted_005120 = [
+    fit_saved_samples_and_weights_data(
+        path,
+        B_actual=1.0,
+        gamma_actual=surface_tension_stats["average_surface_tension"][2],
+        B_guess=B_guess,
+        gamma_guess=gamma_guess,
+        tol=fit_tol,
+        inverse_variance_weights=False,
+        l_max=L_max[2],
+    )
+    for path in samples_and_weights_paths_005120
+]
+fit_data_weighted_005120 = [
+    fit_saved_samples_and_weights_data(
+        path,
+        B_actual=1.0,
+        gamma_actual=surface_tension_stats["average_surface_tension"][2],
+        B_guess=B_guess,
+        gamma_guess=gamma_guess,
+        tol=fit_tol,
+        inverse_variance_weights=True,
+        l_max=L_max[2],
+    )
+    for path in samples_and_weights_paths_005120
+]
+
+fit_data_weighted_Nf = [
+    fit_data_weighted_000320,
+]
+
+[dat["err_B_gamma"] for dat in fit_data_weighted_005120]
+
+
+fig, axes = plt.subplots(
+    nrows=3,
+    ncols=2,
+    figsize=(3.25, 3.25),
+    # sharey=True,
+)
+
+
+for n in range(3):
+    Nt_list = fit
+    ax_B, ax_gamma = axes[n]
+    # ax.set_title("Area change during mitosis")
+    # ax.set_xlabel("$t$")
+    # ax.set_ylabel(r"$(A-A_0)/A_0$")
+# %%
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+
 # get_run_data(
 #     f"../output/fluctuations_test_000320_no_graph",
 #     l_max=20,
@@ -1004,70 +1412,70 @@ def save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
 #     R0=None,
 # )
 # %%
-output_dirs_000320 = [f"../output/fluctuations_test_000320_no_graph"]
-output_dirs_000320 += [
-    f"../output/fluctuations_test_000320_sweep0/run_{_:0>2}_00" for _ in range(16)
-]
-output_dirs_000320 += [
-    f"../output/fluctuations_test_000320_sweep/run_{_:0>2}_00" for _ in range(16)
-]
-output_dirs_001280 = [f"../output/fluctuations_test_001280_no_graph"]
-output_dirs_001280 += [
-    f"../output/fluctuations_test_001280_sweep0/run_{_:0>2}_00" for _ in range(16)
-]
+# output_dirs_000320 = [f"../output/fluctuations_test_000320_no_graph"]
+# output_dirs_000320 += [
+#     f"../output/fluctuations_test_000320_sweep0/run_{_:0>2}_00" for _ in range(16)
+# ]
+# output_dirs_000320 += [
+#     f"../output/fluctuations_test_000320_sweep/run_{_:0>2}_00" for _ in range(16)
+# ]
+# output_dirs_001280 = [f"../output/fluctuations_test_001280_no_graph"]
 # output_dirs_001280 += [
-#     f"../output/fluctuations_test_001280_sweep/run_{_:0>2}_00" for _ in range(16)
+#     f"../output/fluctuations_test_001280_sweep0/run_{_:0>2}_00" for _ in range(16)
 # ]
-output_dirs_005120 = [f"../output/fluctuations_test_005120_no_graph"]
-output_dirs_005120 += [
-    f"../output/fluctuations_test_005120_sweep0/run_{_:0>2}_00" for _ in range(16)
-]
+# # output_dirs_001280 += [
+# #     f"../output/fluctuations_test_001280_sweep/run_{_:0>2}_00" for _ in range(16)
+# # ]
+# output_dirs_005120 = [f"../output/fluctuations_test_005120_no_graph"]
 # output_dirs_005120 += [
-#     f"../output/fluctuations_test_005120_sweep/run_{_:0>2}_00" for _ in range(16)
+#     f"../output/fluctuations_test_005120_sweep0/run_{_:0>2}_00" for _ in range(16)
 # ]
-
-
-dt_samples = 1 / np.linspace(1 / 1.0, 1 / 0.02, 20)
-l_max = 20
-t_start = 0.1
-
-save_paths_000320 = [
-    f"../output/fluctuations_test_analysis/samples_and_weights_data_Nf_{320:0>6}_l_max_{l_max}_dt_{n_dt}.npz"
-    for n_dt in range(len(dt_samples))
-]
-save_paths_001280 = [
-    f"../output/fluctuations_test_analysis/samples_and_weights_data_Nf_{1280:0>6}_l_max_{l_max}_dt_{n_dt}.npz"
-    for n_dt in range(len(dt_samples))
-]
-save_paths_005120 = [
-    f"../output/fluctuations_test_analysis/samples_and_weights_data_Nf_{5120:0>6}_l_max_{l_max}_dt_{n_dt}.npz"
-    for n_dt in range(len(dt_samples))
-]
-
-
-save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
-    output_dirs_000320,
-    save_paths_000320,
-    dt_samples,
-    l_max=l_max,
-    t_start=t_start,
-)
-
-save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
-    output_dirs_001280,
-    save_paths_001280,
-    dt_samples,
-    l_max=l_max,
-    t_start=t_start,
-)
-
-save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
-    output_dirs_005120,
-    save_paths_005120,
-    dt_samples,
-    l_max=l_max,
-    t_start=t_start,
-)
+# # output_dirs_005120 += [
+# #     f"../output/fluctuations_test_005120_sweep/run_{_:0>2}_00" for _ in range(16)
+# # ]
+#
+#
+# dt_samples = 1 / np.linspace(1 / 1.0, 1 / 0.02, 20)
+# l_max = 20
+# t_start = 0.1
+#
+# save_paths_000320 = [
+#     f"../output/fluctuations_test_analysis/samples_and_weights_data_Nf_{320:0>6}_l_max_{l_max}_dt_{n_dt}.npz"
+#     for n_dt in range(len(dt_samples))
+# ]
+# save_paths_001280 = [
+#     f"../output/fluctuations_test_analysis/samples_and_weights_data_Nf_{1280:0>6}_l_max_{l_max}_dt_{n_dt}.npz"
+#     for n_dt in range(len(dt_samples))
+# ]
+# save_paths_005120 = [
+#     f"../output/fluctuations_test_analysis/samples_and_weights_data_Nf_{5120:0>6}_l_max_{l_max}_dt_{n_dt}.npz"
+#     for n_dt in range(len(dt_samples))
+# ]
+#
+#
+# save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
+#     output_dirs_000320,
+#     save_paths_000320,
+#     dt_samples,
+#     l_max=l_max,
+#     t_start=t_start,
+# )
+#
+# save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
+#     output_dirs_001280,
+#     save_paths_001280,
+#     dt_samples,
+#     l_max=l_max,
+#     t_start=t_start,
+# )
+#
+# save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
+#     output_dirs_005120,
+#     save_paths_005120,
+#     dt_samples,
+#     l_max=l_max,
+#     t_start=t_start,
+# )
 
 # %%
 Nf = np.array([320, 1280, 5120, 20480])
@@ -1404,611 +1812,7 @@ plot_log_log_fit(Nf[:-1], err_B)
 plot_log_log_fit(Nf[:-1], err_gamma)
 plot_log_log_fit(Nf[:-1], err_B_gamma)
 # %%
-################
-################
-# Fluctuations #
-################
-################
-# output_dir = "../output/fluctuations_test_000320_no_graph"
-# output_dir = "../output/fluctuations_test_001280_no_graph"
-output_dir = "../output/fluctuations_test_005120_no_graph"
-# output_dir = "../output/fluctuations_test_020480_no_graph"
 
-# output_dir = "../output/fluctuations_test/fluctuations_test_000320"
-# output_dir = "../output/fluctuations_test/fluctuations_test_001280"
-# output_dir = "../output/fluctuations_test/fluctuations_test_005120"
-
-l_max = 20
-t_start = 0.01
-t_stop = 2.5
-nt_skip = 25
-
-# l_max = 20
-# t_start = 0.01
-# t_stop = 1.5
-# nt_skip = 15
-
-
-xyz_coord_V_path = f"{output_dir}/raw_data/envelope_xyz_coord_V.dat"
-area_V_path = f"{output_dir}/raw_data/envelope_area_V.dat"
-volume_path = f"{output_dir}/raw_data/envelope_volume.dat"
-normal_V_path = f"{output_dir}/raw_data/envelope_normal_V.dat"
-t_path = f"{output_dir}/raw_data/t.dat"
-
-big_t = read_time_series(t_path)
-
-
-t_mask = np.logical_and(big_t >= t_start, big_t <= t_stop)
-#
-big_t = big_t[t_mask][::nt_skip]
-big_xyz_coord_V = read_time_series(xyz_coord_V_path)[t_mask][::nt_skip]
-big_area_V = read_time_series(area_V_path)[t_mask][::nt_skip]
-big_volume = read_time_series(volume_path)[t_mask][::nt_skip]  # ***
-big_normal_V = read_time_series(normal_V_path)[t_mask][::nt_skip]
-
-
-Nt, Nv, _ = big_xyz_coord_V.shape
-n_max = spherical_harmonic_index_n_LM(l_max, l_max)
-
-Nt
-# %%
-
-R0 = (3 * big_volume[0] / (4 * np.pi)) ** (1 / 3)
-# big_xyz_coord_V_com = np.mean(big_xyz_coord_V, axis=1)
-#
-big_xyz_coord_V_com = np.einsum(
-    "tv, tvx->tx",
-    big_area_V / np.sum(big_area_V, axis=1, keepdims=True),
-    big_xyz_coord_V,
-)
-
-
-big_xyz_coord_V = np.array(
-    [
-        [xyz - xyz_com for xyz in XYZt]
-        for XYZt, xyz_com in zip(big_xyz_coord_V, big_xyz_coord_V_com)
-    ]
-)
-
-big_R = np.linalg.norm(big_xyz_coord_V, axis=2)
-big_r = big_R / R0 - 1.0
-# big_solid_angle_V = big_area_V / big_R**2
-
-big_solid_angle_V = np.einsum(
-    "tvx, tvx, tv, tv -> tv", big_xyz_coord_V, big_normal_V, big_area_V, 1 / big_R**3
-)
-
-
-big_thetaphi_coord_V = np.array([thetaphi_from_xyz(xyz) for xyz in big_xyz_coord_V])
-
-
-# tvn
-# big_Yn = np.array([compute_all_Ylm(l_max, th_ph) for th_ph in big_thetaphi_coord_V])
-# big_Un = np.einsum("tv, tv, tvn->tn", big_area_V, big_r, big_Yn.conjugate())
-
-big_Un = []
-for solid_angle_V, r, thetaphi_coord_V in zip(
-    big_solid_angle_V, big_r, big_thetaphi_coord_V
-):
-    Yn = compute_all_Ylm(l_max, thetaphi_coord_V)
-    big_Un.append(np.einsum("v,v,vn->n", solid_angle_V, r, Yn.conjugate()))
-big_Un = np.array(big_Un)
-
-# np.abs(big_Un.mean(axis=0))
-big_sqr_Un = np.abs(big_Un) ** 2
-# var_sqr_Un = np.var(big_sqr_Un, axis=0)
-
-
-# %%
-
-mean_sqr_Un = np.mean(big_sqr_Un, axis=0)
-
-# std_sqr_Un = np.std(big_sqr_Un, axis=0)
-
-mean_sqr_Ulm = [[0.0 for m in range(-l, l + 1)] for l in range(l_max + 1)]
-
-# std_sqr_Ulm = [[0.0 for m in range(-l, l + 1)] for l in range(l_max + 1)]
-
-for l in range(l_max + 1):
-    for m in range(-l, l + 1):
-        n = spherical_harmonic_index_n_LM(l, m)
-        mean_sqr_Ulm[l][m] = mean_sqr_Un[n]
-        # std_sqr_Ulm[l][m] = std_sqr_Un[n]
-
-mean_sqr_Ul = np.array([np.mean(mean_sqr_Ulm[l]) for l in range(l_max + 1)])
-
-# std_sqr_Ul = np.array([np.mean(std_sqr_Ulm[l]) for l in range(l_max + 1)])
-#
-# std_sqr_Ul / mean_sqr_Ul
-
-#
-
-
-ell_range = [l for l in range(2, l_max + 1)]
-
-X = np.array(ell_range)
-Y = mean_sqr_Ul[X]
-kBT = 1.0291e-2
-beta0 = np.array([1.0, 32.5]) / 1.03
-beta_actual = np.array([1.0, 32.5])
-tol = 1e-15
-gamma0 = np.array([32.5]) / 13
-gamma_actual = np.array([32.5])
-B0 = np.array([1.0]) / 13
-B_actual = np.array([1.0])
-
-
-def fun(beta):
-    B, gamma = beta
-    return np.array(
-        [
-            y - kBT / (B * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
-            for l, y in zip(X, Y)
-        ]
-    )
-
-
-# def fun(beta):
-#     B, gamma = beta
-#     return np.array(
-#         [
-#             y - kBT / ((l - 1) * (l + 2) * (R0**2 * gamma + B * l * (l + 1)))
-#             for l, y in zip(X, Y)
-#         ]
-#     )
-
-
-lsqr_out = least_squares(
-    fun,
-    beta0,
-    ftol=tol,
-    gtol=tol,
-    xtol=tol,
-    max_nfev=100000,
-)
-beta = lsqr_out.x
-beta[1] *= beta[0] / R0**2
-(beta - beta_actual) / beta_actual
-
-
-def fun_tension(gamma):
-    B = 1.0
-    return np.array(
-        [
-            y - kBT / (B * (l - 1) * (l + 2) * (gamma[0] + l * (l + 1)))
-            for l, y in zip(X, Y)
-        ]
-    )
-
-
-def fun_tension(gamma):
-    B = 1.0
-    return np.array(
-        [
-            y - kBT / ((l - 1) * (l + 2) * (R0**2 * gamma[0] + B * l * (l + 1)))
-            for l, y in zip(X, Y)
-        ]
-    )
-
-
-def fun_stiffness(B):
-    gamma = 32.5
-    return np.array(
-        [
-            y - kBT / (B[0] * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
-            for l, y in zip(X, Y)
-        ]
-    )
-
-
-def fun_stiffness(B):
-    gamma = 32.5
-    return np.array(
-        [
-            y - kBT / ((l - 1) * (l + 2) * (R0**2 * gamma + B[0] * l * (l + 1)))
-            for l, y in zip(X, Y)
-        ]
-    )
-
-
-lsqr_out = least_squares(
-    fun_tension,
-    gamma0,
-    ftol=tol,
-    gtol=tol,
-    xtol=tol,
-    max_nfev=100000,
-)
-
-gamma = lsqr_out.x
-fun_tension(gamma)
-(gamma - gamma_actual) / gamma_actual
-
-
-lsqr_out = least_squares(
-    fun_stiffness,
-    B0,
-    ftol=tol,
-    gtol=tol,
-    xtol=tol,
-    max_nfev=100000,
-)
-
-B = lsqr_out.x
-fun_stiffness(B)
-(B - B_actual) / B_actual
-
-# %%
-##
-kBT = 1.0291e-2
-B = 1.0
-l = np.arange(l_max + 1)
-gamma = kBT / (B * (l - 1) * (l + 2) * mean_sqr_Ul) - l * (l + 1)
-gamma[2:]
-##
-
-##
-kBT = 1.0291e-2
-gamma = 32.5
-l = np.arange(l_max + 1)
-B = kBT / (mean_sqr_Ul * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
-B[2:]
-# ##
-
-# %%
-#
-# ######
-# gamma, kBT, B = sp.symbols(r"\gamma k_{B}T B")
-# # eqns = [
-# #     mean_sqr_Ul[l] - kBT / (B * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
-# #     for l in range(2, 5)
-# # ]
-# eqns = sp.Array(
-#     [
-#         mean_sqr_Ul[l] * (B * (l - 1) * (l + 2) * (gamma + l * (l + 1))) - kBT
-#         for l in range(2, 5)
-#     ]
-# )
-# vars = sp.Array([B, gamma, kBT])
-# #
-# sp.solve(eqns, vars)
-# #######
-#
-#
-# B, gamma = sp.symbols(r"B \gamma")
-# kBT = 1.0291e-2
-# eqns = sp.Array(
-#     [
-#         mean_sqr_Ul[l] * (B * (l - 1) * (l + 2) * (gamma + l * (l + 1))) - kBT
-#         for l in range(5, 7)
-#     ]
-# )
-# vars = sp.Array([B, gamma])
-# sp.solve(eqns, vars)
-
-t_stop = 1.0
-nt_skip = 1
-
-xyz_coord_V_path = f"{output_dir}/raw_data/envelope_xyz_coord_V.dat"
-area_V_path = f"{output_dir}/raw_data/envelope_area_V.dat"
-volume_path = f"{output_dir}/raw_data/envelope_volume.dat"
-normal_V_path = f"{output_dir}/raw_data/envelope_normal_V.dat"
-t_path = f"{output_dir}/raw_data/t.dat"
-
-big_t = read_time_series(t_path)
-
-t_mask = np.logical_and(big_t >= t_start, big_t <= t_stop)
-big_t = big_t[t_mask][::nt_skip]
-big_xyz_coord_V = read_time_series(xyz_coord_V_path)[t_mask][::nt_skip]
-big_area_V = read_time_series(area_V_path)[t_mask][::nt_skip]
-big_volume = read_time_series(volume_path)[t_mask][::nt_skip]  # ***
-Nt, Nv, _ = big_xyz_coord_V.shape
-n_max = spherical_harmonic_index_n_LM(l_max, l_max)
-
-
-R0 = (3 * big_volume[0] / (4 * np.pi)) ** (1 / 3)
-# big_xyz_coord_V_com = np.mean(big_xyz_coord_V, axis=1)
-#
-big_xyz_coord_V_com = np.einsum(
-    "tv, tvx->tx",
-    big_area_V / np.sum(big_area_V, axis=1, keepdims=True),
-    big_xyz_coord_V,
-)
-
-
-big_xyz_coord_V = np.array(
-    [
-        [xyz - xyz_com for xyz in XYZt]
-        for XYZt, xyz_com in zip(big_xyz_coord_V, big_xyz_coord_V_com)
-    ]
-)
-
-big_R = np.linalg.norm(big_xyz_coord_V, axis=2)
-big_r = big_R / R0 - 1.0
-big_solid_angle_V = big_area_V / big_R**2
-
-
-big_thetaphi_coord_V = np.array([thetaphi_from_xyz(xyz) for xyz in big_xyz_coord_V])
-
-
-# tvn
-# big_Yn = np.array([compute_all_Ylm(l_max, th_ph) for th_ph in big_thetaphi_coord_V])
-# big_Un = np.einsum("tv, tv, tvn->tn", big_area_V, big_r, big_Yn.conjugate())
-
-big_Un = []
-for area_V, r, thetaphi_coord_V in zip(big_area_V, big_r, big_thetaphi_coord_V):
-    Yn = compute_all_Ylm(l_max, thetaphi_coord_V)
-    big_Un.append(np.einsum("v,v,vn->n", area_V, r, Yn.conjugate()))
-big_Un = np.array(big_Un)
-
-# np.abs(big_Un.mean(axis=0))
-big_sqr_Un = np.abs(big_Un) ** 2
-# var_sqr_Un = np.var(big_sqr_Un, axis=0)
-
-
-# %%
-from scipy.signal import correlate
-from scipy.fft import fft
-
-
-def get_auto_corr0(x):
-    mean_x = np.mean(x)
-    z = x - mean_x
-    corr_x = []
-    T = len(x)
-    for tau in range(T):
-        corr_x_tau = np.sum([z[t] * z[t + tau] for t in range(T - tau)]) / np.sum(
-            z[: T - tau] ** 2
-        )
-        corr_x.append(corr_x_tau)
-    return np.array(corr_x)
-
-
-def get_auto_corr1(x):
-    mean_x = np.mean(x)
-    z = x - mean_x
-    corr_x = []
-    T = len(x)
-    for tau in range(T):
-        corr_x_tau = (z[: T - tau] @ np.roll(z, -tau)[: T - tau]) / (
-            z[: T - tau] @ z[: T - tau]
-        )
-        corr_x.append(corr_x_tau)
-    return np.array(corr_x)
-
-
-def get_auto_corr2(x):
-    mean_x = np.mean(x)
-    z = x - mean_x
-    corr_x = []
-    T = len(x)
-    for tau in range(T):
-        corr_x_tau = np.dot(z[: T - tau], np.roll(z, -tau)[: T - tau]) / np.dot(
-            z[: T - tau], z[: T - tau]
-        )
-        corr_x.append(corr_x_tau)
-    return np.array(corr_x)
-
-
-def get_auto_corr3(x):
-    mean_x = np.mean(x)
-    z = x - mean_x
-    var_x = np.mean(z**2)
-    corr_x = []
-    T = len(x)
-    corr_x = (
-        np.array(
-            [np.mean(z[: T - tau] * np.roll(z, -tau)[: T - tau]) for tau in range(T)]
-        )
-        / var_x
-    )
-    return corr_x
-
-
-def get_auto_corr(x):
-    mean_x = np.mean(x)
-    z = x - mean_x
-    corr_x = []
-    T = len(x)
-    corr_x = np.array(
-        [
-            np.dot(z[: T - tau], np.roll(z, -tau)[: T - tau])
-            / np.dot(z[: T - tau], z[: T - tau])
-            for tau in range(T)
-        ]
-    )
-    return corr_x
-
-
-def estimated_autocorrelation(x):
-    n = len(x)
-    variance = x.var()
-    x = x - x.mean()
-    r = correlate(x, x, mode="full")[-n:]
-    # assert np.allclose(r, np.array([(x[:n-k]*x[-(n-k):]).sum() for k in range(n)]))
-    result = r / (variance * (np.arange(n, 0, -1)))
-    return result
-
-
-def autocor(x):
-    # x_exp = sum(x) / len(x)
-    x_exp = np.mean(x)
-    z = x - x_exp
-    lag = np.array([h for h in range(1 - len(z), len(z))])
-    cor = np.array(
-        [np.sum([z[n] * z[n + abs(h)] for n in range(len(z) - abs(h))]) for h in lag]
-    ) / np.dot(z, z)
-    # return lag, cor
-    return cor
-
-
-def autocor_lag(x):
-    x_exp = sum(x) / len(x)
-    z = x - x_exp
-    lag = np.array([h for h in range(1 - len(z), len(z))])
-    return lag
-
-
-# cor = get_auto_corr(big_volume) - get_auto_corr3(big_volume)
-# N_plot = Nt // 2
-N_plot = 10
-
-cor = get_auto_corr(big_volume)[:N_plot]
-_ = plt.plot(cor)
-_ = plt.plot(cor * 0 + 1 / np.e)
-
-# %%
-# cor_sqr_Un = np.array([estimated_autocorrelation(u) for u in big_sqr_Un.T])
-cor_sqr_Un = np.array([get_auto_corr(u) for u in big_sqr_Un.T])
-cor_sqr_Ulm = [
-    [cor_sqr_Un[spherical_harmonic_index_n_LM(l, m)] for m in range(-l, l + 1)]
-    for l in range(l_max)
-]
-
-l_plot = 5
-m_plot = 1
-plt.plot(cor_sqr_Ulm[l_plot][m_plot + l_plot][:1000])
-plt.plot(cor_sqr_Ulm[l_plot][m_plot + l_plot][:1000] * 0 + 1 / np.e)
-
-# %%
-mean_sqr_Un = np.mean(big_sqr_Un, axis=0)
-
-# std_sqr_Un = np.std(big_sqr_Un, axis=0)
-
-mean_sqr_Ulm = [[0.0 for m in range(-l, l + 1)] for l in range(l_max + 1)]
-
-# std_sqr_Ulm = [[0.0 for m in range(-l, l + 1)] for l in range(l_max + 1)]
-
-for l in range(l_max + 1):
-    for m in range(-l, l + 1):
-        n = spherical_harmonic_index_n_LM(l, m)
-        mean_sqr_Ulm[l][m] = mean_sqr_Un[n]
-        # std_sqr_Ulm[l][m] = std_sqr_Un[n]
-
-mean_sqr_Ul = np.array([np.mean(mean_sqr_Ulm[l]) for l in range(l_max + 1)])
-
-# std_sqr_Ul = np.array([np.mean(std_sqr_Ulm[l]) for l in range(l_max + 1)])
-#
-# std_sqr_Ul / mean_sqr_Ul
-
-#
-from scipy.optimize import least_squares
-
-ell_range = [l for l in range(2, l_max + 1)]
-
-X = np.array(ell_range)
-Y = mean_sqr_Ul[X]
-kBT = 1.0291e-2
-beta0 = np.array([1.0, 32.5])
-beta_actual = np.array([1.0, 32.5])
-tol = 1e-15
-gamma0 = np.array([32.5])
-gamma_actual = np.array([32.5])
-
-
-def fun(beta):
-    B, gamma = beta
-    return np.array(
-        [
-            y - kBT / (B * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
-            for l, y in zip(X, Y)
-        ]
-    )
-
-
-# def fun(beta):
-#     B, gamma = beta
-#     return np.array(
-#         [
-#             y * (B * (l - 1) * (l + 2) * (gamma + l * (l + 1))) - kBT
-#             for l, y in zip(X, Y)
-#         ]
-#     )
-
-
-lsqr_out = least_squares(
-    fun,
-    beta0,
-    ftol=tol,
-    gtol=tol,
-    xtol=tol,
-    max_nfev=100000,
-)
-beta = lsqr_out.x
-fun(beta)
-(beta - beta_actual) / beta_actual
-
-
-def fun_tension(gamma):
-    B = 1.0
-    return np.array(
-        [
-            y - kBT / (B * (l - 1) * (l + 2) * (gamma[0] + l * (l + 1)))
-            for l, y in zip(X, Y)
-        ]
-    )
-
-
-lsqr_out = least_squares(
-    fun_tension,
-    gamma0,
-    ftol=tol,
-    gtol=tol,
-    xtol=tol,
-    max_nfev=100000,
-)
-
-gamma = lsqr_out.x
-fun_tension(gamma)
-(gamma - gamma_actual) / gamma_actual
-
-# %%
-##
-kBT = 1.0291e-2
-B = 1.0
-l = np.arange(l_max + 1)
-gamma = kBT / (B * (l - 1) * (l + 2) * mean_sqr_Ul) - l * (l + 1)
-gamma[2:]
-##
-
-##
-kBT = 1.0291e-2
-gamma = 32.5
-l = np.arange(l_max + 1)
-B = kBT / (mean_sqr_Ul * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
-B[2:]
-# ##
-
-# %%
-#
-# ######
-# gamma, kBT, B = sp.symbols(r"\gamma k_{B}T B")
-# # eqns = [
-# #     mean_sqr_Ul[l] - kBT / (B * (l - 1) * (l + 2) * (gamma + l * (l + 1)))
-# #     for l in range(2, 5)
-# # ]
-# eqns = sp.Array(
-#     [
-#         mean_sqr_Ul[l] * (B * (l - 1) * (l + 2) * (gamma + l * (l + 1))) - kBT
-#         for l in range(2, 5)
-#     ]
-# )
-# vars = sp.Array([B, gamma, kBT])
-# #
-# sp.solve(eqns, vars)
-# #######
-#
-#
-# B, gamma = sp.symbols(r"B \gamma")
-# kBT = 1.0291e-2
-# eqns = sp.Array(
-#     [
-#         mean_sqr_Ul[l] * (B * (l - 1) * (l + 2) * (gamma + l * (l + 1))) - kBT
-#         for l in range(5, 7)
-#     ]
-# )
-# vars = sp.Array([B, gamma])
-# sp.solve(eqns, vars)
 # %%
 Nf = np.array(
     [
