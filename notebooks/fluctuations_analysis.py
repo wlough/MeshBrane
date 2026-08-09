@@ -20,7 +20,80 @@ from src_python.time_series import read_time_series, plot_log_log_fit
 import sympy as sp
 from scipy.optimize import least_squares
 
+import yaml
+
+
 #
+def compute_run_average_surface_tension_time_series(
+    output_dir,
+    t_start=0.1,
+    dt_sample=0.03,
+):
+    print(f"compute_run_average_surface_tension_time_series for {output_dir}")
+    output_dir = Path(output_dir)
+
+    with open(output_dir / "parameters.yaml", "r") as file:
+        params = yaml.safe_load(file)
+        k = float(params["envelope"]["area_stiffness"])
+        gamma0 = float(params["envelope"]["surface_tension_constant"])
+
+    big_t = read_time_series(output_dir / "raw_data/t.dat")
+    dt0 = big_t[1] - big_t[0]
+    nt_skip = int(dt_sample / dt0) + 1
+    nt_start = int(t_start / dt0)
+    big_t = big_t[nt_start::nt_skip]
+    dt = big_t[1] - big_t[0]
+
+    big_area_F = read_time_series(output_dir / "raw_data/envelope_area_F.dat")[
+        nt_start::nt_skip
+    ]
+    Nt, Nf = big_area_F.shape
+    big_area = read_time_series(output_dir / "raw_data/envelope_area.dat")
+    A0 = big_area[0] / Nf
+    big_area = big_area[nt_start::nt_skip]
+
+    # should_be_zeros = big_area - np.sum(big_area_F, axis=1)
+    # return should_be_zeros
+    # big_surface_tension_F = read_time_series(
+    #     output_dir / "raw_data/envelope_surface_tension_F.dat"
+    # )[nt_start::nt_skip]
+    big_surface_tension_F = gamma0 + k * (big_area_F - A0) / A0
+
+    big_average_surface_tension = np.einsum(
+        "tf,tf,t->t", big_surface_tension_F, big_area_F, 1 / big_area
+    )
+    big_unweighted_average_surface_tension = np.mean(big_surface_tension_F, axis=1)
+
+    return {
+        "big_average_surface_tension": big_average_surface_tension,
+        "big_unweighted_average_surface_tension": big_unweighted_average_surface_tension,
+    }
+
+
+compute_run_average_surface_tension_time_series(
+    "../output/fluctuations_test_000320_sweep/run_00_00",
+    t_start=0.0,
+    dt_sample=0.03,
+)
+# compute_run_average_surface_tension_time_series(
+#     "../output/fluctuations_test_001280_sweep/run_00_00",
+#     t_start=0.1,
+#     dt_sample=0.03,
+# )
+compute_run_average_surface_tension_time_series(
+    "../output/fluctuations_test_005120_sweep/run_00_00",
+    t_start=0.0,
+    dt_sample=0.03,
+)
+
+
+# %%
+def compute_concatenated_run_average_surface_tension_stats(
+    output_dirs,
+    t_start=0.1,
+    dt_sample=0.03,
+):
+    pass
 
 
 def get_auto_corr(x):
@@ -933,16 +1006,25 @@ def save_samples_and_weights_from_concatenated_runs_for_dt_samples_range(
 # %%
 output_dirs_000320 = [f"../output/fluctuations_test_000320_no_graph"]
 output_dirs_000320 += [
+    f"../output/fluctuations_test_000320_sweep0/run_{_:0>2}_00" for _ in range(16)
+]
+output_dirs_000320 += [
     f"../output/fluctuations_test_000320_sweep/run_{_:0>2}_00" for _ in range(16)
 ]
 output_dirs_001280 = [f"../output/fluctuations_test_001280_no_graph"]
 output_dirs_001280 += [
-    f"../output/fluctuations_test_001280_sweep/run_{_:0>2}_00" for _ in range(16)
+    f"../output/fluctuations_test_001280_sweep0/run_{_:0>2}_00" for _ in range(16)
 ]
+# output_dirs_001280 += [
+#     f"../output/fluctuations_test_001280_sweep/run_{_:0>2}_00" for _ in range(16)
+# ]
 output_dirs_005120 = [f"../output/fluctuations_test_005120_no_graph"]
 output_dirs_005120 += [
-    f"../output/fluctuations_test_005120_sweep/run_{_:0>2}_00" for _ in range(16)
+    f"../output/fluctuations_test_005120_sweep0/run_{_:0>2}_00" for _ in range(16)
 ]
+# output_dirs_005120 += [
+#     f"../output/fluctuations_test_005120_sweep/run_{_:0>2}_00" for _ in range(16)
+# ]
 
 
 dt_samples = 1 / np.linspace(1 / 1.0, 1 / 0.02, 20)
@@ -993,11 +1075,11 @@ radius_over_edge_length = np.array([3.34077128, 6.63439233, 13.2451913, 26.47858
 L_max = np.array([3, 6, 13])
 # save_paths = save_paths_001280
 save_paths = save_paths_005120
-B_guess = 1.2
-gamma_guess = 20.0
+B_guess = 1.0
+gamma_guess = 32.5
 weighted = False
 tol = 1e-15
-l_max = 10
+l_max = 15
 
 Nt_list = []
 err_B_list = []
@@ -1032,11 +1114,13 @@ for path in save_paths:
     )
     Nt_list.append(fit_data["Nt"])
     err_B_list.append(fit_data["err_B_gamma"][0])
+    # print(f"dt={fit_data["dt_list"]}")
 
 plt.plot(Nt_list, err_B_list, "-o", label="weighted")
 
 plt.legend()
 # %%
+
 
 fit_concatenated_run_samples0(
     output_dirs_001280,

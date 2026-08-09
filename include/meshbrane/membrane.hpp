@@ -188,6 +188,24 @@ public:
 
   int monte_flip_sweep();
   double monte_flip_probability(int e) const;
+
+  void test_surface_tension() {
+    printf("test_surface_tension");
+    double surface_tension_mean = 0.0;
+    size_t Nf = get_num_faces();
+    // Samples1d gamma_F(Nf);
+    double A0 = target_face_area_;
+    double k = area_stiffness_;
+    double gamma0 = surface_tension_constant_;
+    for (size_t f = 0; f < Nf; f++) {
+      double gamma_f = surface_tension_F_[f];
+      double A = area_F_[f];
+      double gamma = gamma0 + k * (A - A0) / A0;
+      if (std::abs(gamma - gamma_f) > 1e-6) {
+        throw std::runtime_error("bad surface tension");
+      }
+    }
+  }
 };
 
 } // namespace meshbrane

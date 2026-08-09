@@ -437,6 +437,8 @@ public:
   TimeSeries<Samples3d> envelope_xyz_coord_V_;
   TimeSeries<Samples1d> envelope_area_V_;
   TimeSeries<Samples3d> envelope_normal_V_;
+  TimeSeries<Samples1d> envelope_surface_tension_F_;
+  TimeSeries<Samples1d> envelope_area_F_;
 
   RigidSpindleSimData() = default;
   RigidSpindleSimData(const std::filesystem::path &data_dir) {
@@ -477,6 +479,9 @@ public:
     envelope_area_V_ = TimeSeries<Samples1d>(data_dir / "envelope_area_V.dat");
     envelope_normal_V_ =
         TimeSeries<Samples3d>(data_dir / "envelope_normal_V.dat");
+    envelope_surface_tension_F_ =
+        TimeSeries<Samples1d>(data_dir / "envelope_surface_tension_F.dat");
+    envelope_area_F_ = TimeSeries<Samples1d>(data_dir / "envelope_area_F.dat");
   }
   void save_file() {
     t_.save_file();
@@ -504,6 +509,8 @@ public:
     envelope_xyz_coord_V_.save_file();
     envelope_area_V_.save_file();
     envelope_normal_V_.save_file();
+    envelope_surface_tension_F_.save_file();
+    envelope_area_F_.save_file();
   }
   void append_file() {
     t_.append_file();
@@ -531,6 +538,8 @@ public:
     envelope_xyz_coord_V_.append_file();
     envelope_area_V_.append_file();
     envelope_normal_V_.append_file();
+    envelope_surface_tension_F_.append_file();
+    envelope_area_F_.append_file();
   }
   void clear() {
     t_.samples_.clear();
@@ -557,6 +566,8 @@ public:
     envelope_xyz_coord_V_.samples_.clear();
     envelope_area_V_.samples_.clear();
     envelope_normal_V_.samples_.clear();
+    envelope_surface_tension_F_.samples_.clear();
+    envelope_area_F_.samples_.clear();
   }
 
   // void make_output_directory(const std::filesystem::path &output_dir) {
@@ -639,6 +650,8 @@ public:
     data_.envelope_xyz_coord_V_.add_sample(envelope_.xyz_coord_V_);
     data_.envelope_area_V_.add_sample(envelope_.area_V_);
     data_.envelope_normal_V_.add_sample(envelope_.normal_V_);
+    data_.envelope_surface_tension_F_.add_sample(envelope_.surface_tension_F_);
+    data_.envelope_area_F_.add_sample(envelope_.area_F_);
   }
 
   double dt_max();

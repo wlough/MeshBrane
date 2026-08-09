@@ -4,7 +4,7 @@ make_movie: false # Whether to make a movie of the simulation
 clear_output_dir: true # Whether to clear the output directory
 dt: 1e-5
 dt_frame: 5e-4
-dt_save: 0.25
+dt_save: 0.01
 T_run: 5.0
 kBT: 1.0291e-2 # ***
 bulk_viscosity: 1.0

@@ -642,17 +642,17 @@ plot_multiruns_area_change_minmaxmean(
                 "../output/area_volume_test_mitosis_001280_rp25_sweep0"
             ),
             *get_run_dirs_from_sweep_dir(
-                "../output/area_volume_test_mitosis_001280_rp25_sweep"
+                "../output/area_volume_test_mitosis_001280_rp25_sweep1"
             ),
         ],
         [
             *get_run_dirs_from_sweep_dir(
-                "../output/area_volume_test_mitosis_001280_rp45_sweep"
+                "../output/area_volume_test_mitosis_001280_rp45_sweep1"
             ),
         ],
         [
             *get_run_dirs_from_sweep_dir(
-                "../output/area_volume_test_mitosis_001280_rp65_sweep"
+                "../output/area_volume_test_mitosis_001280_rp65_sweep1"
             )
         ],
     ],

@@ -1307,17 +1307,17 @@ void MatrixMesh::flip_edge(int e) {
       v_origin_h(h_next_h(h_right_f(f1))),
       v_origin_h(h_next_h(h_next_h(h_right_f(f1))));
 
-  double L0 = length_E_[e];
-  vec_H_.row(h0) = xyz_coord_v(v1) - xyz_coord_v(v3);
-  vec_H_.row(h1) = -vec_H_.row(h0);
-  length_E_[e] = math::L2norm(vec_H_.row(h0));
-  double L1 = length_E_[e];
-  double L2 = length_E_[e_undirected_h(h2)];
-  double L3 = length_E_[e_undirected_h(h3)];
-  double L4 = length_E_[e_undirected_h(h4)];
-  double L5 = length_E_[e_undirected_h(h5)];
-  area_F_[f0] = math::heron_area(L1, L3, L4);
-  area_F_[f1] = math::heron_area(L1, L5, L2);
+  // double L0 = length_E_[e];
+  // vec_H_.row(h0) = xyz_coord_v(v1) - xyz_coord_v(v3);
+  // vec_H_.row(h1) = -vec_H_.row(h0);
+  // length_E_[e] = math::L2norm(vec_H_.row(h0));
+  // double L1 = length_E_[e];
+  // double L2 = length_E_[e_undirected_h(h2)];
+  // double L3 = length_E_[e_undirected_h(h3)];
+  // double L4 = length_E_[e_undirected_h(h4)];
+  // double L5 = length_E_[e_undirected_h(h5)];
+  // area_F_[f0] = math::heron_area(L1, L3, L4);
+  // area_F_[f1] = math::heron_area(L1, L5, L2);
 
   // int num_edges = get_num_edges();
   // average_edge_length_ =

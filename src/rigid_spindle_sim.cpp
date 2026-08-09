@@ -269,6 +269,7 @@ void RigidSpindleSim::apply_pair_interactions() {
 }
 
 void RigidSpindleSim::apply_internal_interactions() {
+  // envelope_.test_surface_tension();
   envelope_.apply_internal_interactions();
   spindle_.apply_internal_forces();
   spindle_.compute_velocities();

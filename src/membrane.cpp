@@ -110,6 +110,14 @@ void Membrane::print_info() {
   // surface_tension_mean /= A;
 
   std::cout << "  " << name_ << std::endl;
+  // printf("    target_face_area_=%.10f\n", target_face_area_);
+  // printf("    average_face_area_=%.10f\n", average_face_area_);
+  // printf("    initial_face_area_=%.10f\n", initial_area_ / get_num_faces());
+  // double gamma_actual = surface_tension_F_[17];
+  // double gamma =
+  //     32.5 + 81.25 * (area_F_[17] - target_face_area_) / target_face_area_;
+  // printf("    gamma=%.10f\n", gamma);
+  // printf("    gamma_actual=%.10f\n", gamma_actual);
   printf("    (A-A0)/A0=%.10f\n", (A - A0) / A0);
   printf("    (V-V0)/V0=%.10f\n", (V - V0) / V0);
   printf("    pressure=%.10f\n", pressure_);
