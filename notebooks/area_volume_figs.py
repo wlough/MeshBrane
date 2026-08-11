@@ -548,7 +548,7 @@ def plot_multiruns_area_change_minmaxmean(
     fig, ax = plt.subplots(
         nrows=1,
         ncols=1,
-        figsize=(3.25, 3.25),
+        figsize=(3.25, 2.25),
         # sharey=True,
     )
 
