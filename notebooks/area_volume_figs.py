@@ -15,6 +15,7 @@ from src_python.pretty_pictures import (
     get_cmap,
     MATPLOTLIB_COLORS,
     MATPLOTLIB_COLORMAPS,
+    MATPLOTLIB_LINESTYLES,
 )
 
 from src_python.time_series import (
@@ -179,7 +180,7 @@ def plot_area_change_sweep(
         da_a = dA_A[_]
         color = f"C{_}"  # MATPLOTLIB_COLORS[_]
 
-        err_mask = da_a >= err_min
+        err_mask = np.abs(da_a) >= err_min
         t_start = t[err_mask][0]
         t_mask = t <= t_plot_interval + t_start
         plot_mask = np.logical_and(t_mask, err_mask)
@@ -190,6 +191,114 @@ def plot_area_change_sweep(
         if color_by_contact_radius:
             color = cmap(r)
         ax.plot(t, da_a, label=r"$\rho=" + f"{r}" + r"$", color=color)
+    if show_legend:
+        plt.legend()
+
+    if xlims is not None:
+        ax.set_xlim(xlims)
+    if ylims is not None:
+        ax.set_ylim(ylims)
+
+    if fig_path is not None:
+        fig.savefig(fig_path, dpi=600)
+    plt.show()
+    plt.rcParams.update(rcparams0)
+
+
+def plot_volume_change_sweep(
+    sweep_dir,
+    t_plot_interval=2.0,
+    err_min=0.001,
+    show_legend=True,
+    xlims=None,
+    ylims=None,
+    fig_path=None,
+    color_by_contact_radius=False,
+):
+
+    sweep_data = load_sweep_data(sweep_dir)
+
+    time_list = sweep_data["time_list"]
+    # area_list = sweep_data["area_list"]
+    volume_list = sweep_data["volume_list"]
+    contact_radius_list = sweep_data["contact_radius_list"]
+
+    # dA_A = [(A - A[0]) / A[0] for A in area_list]
+    dV_V = [(V - V[0]) / V[0] for V in volume_list]
+
+    rcparams0 = dict(plt.rcParams)  # save original rcparams
+    textsize = 12
+    plt.rcParams.update(
+        {
+            "font.size": textsize,
+            "font.family": "serif",
+            "font.serif": ["CMU Serif", "Computer Modern Roman", "DejaVu Serif"],
+            "mathtext.fontset": "cm",
+            "text.latex.preamble": "",
+            "figure.dpi": 300.0,
+            "xtick.direction": "in",
+            "xtick.labelsize": textsize,
+            # "xtick.labeltop": False,
+            # "xtick.minor.ndivs": 4,
+            "xtick.minor.visible": True,
+            # "xtick.top": True,
+            "ytick.direction": "in",
+            "ytick.labelsize": textsize,
+            # "ytick.minor.ndivs": 4,
+            "ytick.minor.visible": True,
+            # "ytick.right": True,
+            # "text.usetex": False,
+            "figure.titlesize": textsize,
+            "axes.titlesize": textsize,
+            "axes.labelsize": textsize,
+            # "lines.linewidth": 5,
+            "lines.markersize": 6,
+            "legend.frameon": False,
+            "legend.fontsize": textsize,
+            # "legend.handletextpad": 0.2,
+            # "legend.loc": "upper right",
+            "legend.borderaxespad": 0.15,
+            # "legend.borderpad": 0.0,
+            "legend.handlelength": 0.75,
+            "legend.handletextpad": 0.1,
+            "legend.labelspacing": 0.0,
+            "axes.labelpad": 0.0,
+            "xtick.major.pad": 1.5,
+            "ytick.major.pad": 1.5,
+        }
+    )
+
+    cmap = get_cmap(0.15, 0.65, "coolwarm")
+    fig, ax = plt.subplots(
+        nrows=1,
+        ncols=1,
+        figsize=(3.25, 3.25),
+        # sharey=True,
+    )
+
+    ax.set_title("Volume change during mitosis")
+    ax.set_xlabel("$t$")
+    ax.set_ylabel(r"$(V-V_0)/V_0$")
+
+    num_things = len(time_list)
+    for _ in range(num_things):
+        r = contact_radius_list[_]
+        t = time_list[_]
+        dv_v = dV_V[_]
+        # print(dv_v)
+        color = f"C{_}"  # MATPLOTLIB_COLORS[_]
+
+        err_mask = np.abs(dv_v) >= err_min
+        t_start = t[err_mask][0]
+        t_mask = t <= t_plot_interval + t_start
+        plot_mask = np.logical_and(t_mask, err_mask)
+        t = t[plot_mask] - t_start
+        dv_v = dv_v[plot_mask]
+        # print(f"{len(t)=}")
+
+        if color_by_contact_radius:
+            color = cmap(r)
+        ax.plot(t, dv_v, label=r"$\rho=" + f"{r}" + r"$", color=color)
     if show_legend:
         plt.legend()
 
@@ -495,7 +604,7 @@ def plot_multiruns_area_change_minmaxmean(
             t_plot_interval=t_plot_interval,
             err_min=err_min,
         )
-        for run_dirs in run_dirs_lists
+        for run_dirs in run_dirs_lists[::-1]
     ]
     big_t = [data["t"] for data in minmaxmean_data]
     big_dA_A_min = [data["dA_A_min"] for data in minmaxmean_data]
@@ -534,25 +643,25 @@ def plot_multiruns_area_change_minmaxmean(
             "legend.fontsize": textsize,
             # "legend.handletextpad": 0.2,
             # "legend.loc": "upper right",
-            "legend.borderaxespad": 0.15,
+            # "legend.borderaxespad": 0.15,
             # "legend.borderpad": 0.0,
-            "legend.handlelength": 0.75,
-            "legend.handletextpad": 0.1,
-            "legend.labelspacing": 0.0,
-            "axes.labelpad": 0.0,
-            "xtick.major.pad": 1.5,
-            "ytick.major.pad": 1.5,
+            # "legend.handlelength": 0.75,
+            # "legend.handletextpad": 0.1,
+            # "legend.labelspacing": 0.0,
+            # "axes.labelpad": 0.0,
+            # "xtick.major.pad": 1.5,
+            # "ytick.major.pad": 1.5,
         }
     )
 
     fig, ax = plt.subplots(
         nrows=1,
         ncols=1,
-        figsize=(3.25, 2.25),
+        figsize=(3.25, 2.75),
         # sharey=True,
     )
 
-    ax.set_title("Area change during mitosis")
+    # ax.set_title("Area change during mitosis")
     ax.set_xlabel("$t$")
     ax.set_ylabel(r"$(A-A_0)/A_0$")
 
@@ -569,8 +678,9 @@ def plot_multiruns_area_change_minmaxmean(
         r = big_r[_]
         color = f"C{_}"
         label = r"$\rho=" + f"{r:.2g}" + r"$"
+        ls = MATPLOTLIB_LINESTYLES[_]
 
-        ax.plot(t, dA_A_mean, color=color, label=label)
+        ax.plot(t, dA_A_mean, color=color, label=label, ls=ls)
         ax.fill_between(t, dA_A_min, dA_A_max, color=color, alpha=0.3)
 
     plt.legend()
@@ -604,14 +714,14 @@ def plot_multiruns_area_change_minmaxmean(
 #     color_by_contact_radius=True,
 # )
 
-plot_area_change_sweep(
-    "../output/area_volume_test_mitosis_sweep_001280",
-    t_plot_interval=2.0,
-    err_min=0.001,
-    show_legend=True,
-    xlims=None,
-    ylims=[-0.01, 0.46],
-)
+# plot_area_change_sweep(
+#     "../output/area_volume_test_mitosis_sweep_001280",
+#     t_plot_interval=2.0,
+#     err_min=0.001,
+#     show_legend=True,
+#     xlims=None,
+#     ylims=[-0.01, 0.46],
+# )
 #
 # plot_area_change_sweep(
 #     "../output/area_volume_test_mitosis_001280_rp25_sweep",
@@ -622,18 +732,18 @@ plot_area_change_sweep(
 #     ylims=[-0.01, 0.46],
 # )
 #
-plot_multisweep_area_change_minmaxmean(
-    [
-        # "../output/area_volume_test_mitosis_sweep_001280_rp45",
-        "../output/area_volume_test_mitosis_001280_rp25_sweep0",
-        "../output/area_volume_test_mitosis_001280_rp25_sweep",
-        "../output/area_volume_test_mitosis_001280_rp45_sweep",
-        "../output/area_volume_test_mitosis_001280_rp65_sweep",
-    ],
-    t_plot_interval=2.0,
-    err_min=0.001,
-    fig_path=None,
-)
+# plot_multisweep_area_change_minmaxmean(
+#     [
+#         # "../output/area_volume_test_mitosis_sweep_001280_rp45",
+#         "../output/area_volume_test_mitosis_001280_rp25_sweep0",
+#         "../output/area_volume_test_mitosis_001280_rp25_sweep",
+#         "../output/area_volume_test_mitosis_001280_rp45_sweep",
+#         "../output/area_volume_test_mitosis_001280_rp65_sweep",
+#     ],
+#     t_plot_interval=2.0,
+#     err_min=0.001,
+#     fig_path=None,
+# )
 
 plot_multiruns_area_change_minmaxmean(
     [
@@ -658,7 +768,7 @@ plot_multiruns_area_change_minmaxmean(
     ],
     t_plot_interval=2.0,
     err_min=0.001,
-    fig_path=None,
+    fig_path="../output/area_change_during_mitosis.svg",
 )
 
 
@@ -669,12 +779,12 @@ plot_multiruns_area_change_minmaxmean(
 #     markersize=2.5,
 # )
 
-plot_ne_point_cloud2d_sweep(
-    "../output/area_volume_test_mitosis_001280_rp25_sweep0",
-    t_start=0.01,
-    dt_sample=0.25,
-    markersize=2.5,
-)
+# plot_ne_point_cloud2d_sweep(
+#     "../output/area_volume_test_mitosis_001280_rp25_sweep0",
+#     t_start=0.01,
+#     dt_sample=0.25,
+#     markersize=2.5,
+# )
 
 # plot_ne_point_cloud2d_run(
 #     "../output/area_volume_test_mitosis_001280_rp25_sweep/run_05_00",
@@ -685,3 +795,20 @@ plot_ne_point_cloud2d_sweep(
 
 
 # %%
+plot_area_change_sweep(
+    "../output/fluctuations_test_analysis/fluctuations_test_005120_sweep0",
+    t_plot_interval=5.0,
+    err_min=0.0,
+    show_legend=False,
+    # xlims=None,
+    # ylims=[-0.01, 0.46],
+)
+
+plot_volume_change_sweep(
+    "../output/fluctuations_test_analysis/fluctuations_test_005120_sweep0",
+    t_plot_interval=5.0,
+    err_min=0.0,
+    show_legend=False,
+    # xlims=None,
+    # ylims=[-0.01, 0.46],
+)

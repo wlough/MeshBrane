@@ -417,9 +417,12 @@ def get_run_Qlj_data(
     big_Q = np.zeros((Nt, l_max + 1))
 
     for l in range(l_max + 1):
-        n_l0 = spherical_harmonic_index_n_LM(l, 0)
-        n_ll = spherical_harmonic_index_n_LM(l, l)
-        big_Q[:, l] = np.sum(big_sqr_Un[:, n_l0 : n_ll + 1], axis=1) / (l + 1)
+        # n_l0 = spherical_harmonic_index_n_LM(l, 0)
+        # n_ll = spherical_harmonic_index_n_LM(l, l)
+        # big_Q[:, l] = np.sum(big_sqr_Un[:, n_l0 : n_ll + 1], axis=1) / (l + 1)
+        n_start = spherical_harmonic_index_n_LM(l, -l)
+        n_stop = spherical_harmonic_index_n_LM(l, l)
+        big_Q[:, l] = np.mean(big_sqr_Un[:, n_start : n_stop + 1], axis=1)
 
     return {
         "big_Q": big_Q,
@@ -1544,43 +1547,43 @@ def save_final_samples_and_weights_for_dt_samples_range():
 
 def save_final_chunked_samples_and_weights():
 
-    # save_chunked_samples_and_weights_from_concatenated_runs(
-    #     samples_and_weights_runs_000320,
-    #     l_max=l_max_save,
-    #     t_start=t_start,
-    #     dt_sample=dt_sample_chunked,
-    #     Nt_chunk=Nt_chunk,
-    #     save_path=chunked_samples_and_weights_path_000320,
-    # )
+    save_chunked_samples_and_weights_from_concatenated_runs(
+        samples_and_weights_runs_000320,
+        l_max=l_max_save,
+        t_start=t_start,
+        dt_sample=dt_sample_chunked,
+        Nt_chunk=Nt_chunk,
+        save_path=chunked_samples_and_weights_path_000320,
+    )
+
+    save_chunked_samples_and_weights_from_concatenated_runs(
+        samples_and_weights_runs_001280,
+        l_max=l_max_save,
+        t_start=t_start,
+        dt_sample=dt_sample_chunked,
+        Nt_chunk=Nt_chunk,
+        save_path=chunked_samples_and_weights_path_001280,
+    )
+
+    save_chunked_samples_and_weights_from_concatenated_runs(
+        samples_and_weights_runs_005120,
+        l_max=l_max_save,
+        t_start=t_start,
+        dt_sample=dt_sample_chunked,
+        Nt_chunk=Nt_chunk,
+        save_path=chunked_samples_and_weights_path_005120,
+    )
     #
-    # save_chunked_samples_and_weights_from_concatenated_runs(
-    #     samples_and_weights_runs_001280,
-    #     l_max=l_max_save,
-    #     t_start=t_start,
-    #     dt_sample=dt_sample_chunked,
-    #     Nt_chunk=Nt_chunk,
-    #     save_path=chunked_samples_and_weights_path_001280,
-    # )
-    #
-    # save_chunked_samples_and_weights_from_concatenated_runs(
-    #     samples_and_weights_runs_005120,
-    #     l_max=l_max_save,
-    #     t_start=t_start,
-    #     dt_sample=dt_sample_chunked,
-    #     Nt_chunk=Nt_chunk,
-    #     save_path=chunked_samples_and_weights_path_005120,
-    # )
     #
     #
-    #
-    # save_chunked_samples_and_weights_from_concatenated_runs(
-    #     samples_and_weights_runs_005120,
-    #     l_max=l_max_save,
-    #     t_start=t_start,
-    #     dt_sample=dt_sample_chunked,
-    #     Nt_chunk=100,
-    #     save_path=chunked_100_samples_and_weights_path_005120,
-    # )
+    save_chunked_samples_and_weights_from_concatenated_runs(
+        samples_and_weights_runs_005120,
+        l_max=l_max_save,
+        t_start=t_start,
+        dt_sample=dt_sample_chunked,
+        Nt_chunk=100,
+        save_path=chunked_100_samples_and_weights_path_005120,
+    )
 
     #
     #
@@ -1596,25 +1599,23 @@ def save_final_chunked_samples_and_weights():
     #
     #
     #
-    # save_chunked_samples_and_weights_from_concatenated_runs(
-    #     samples_and_weights_runs_005120,
-    #     l_max=l_max_save,
-    #     t_start=t_start,
-    #     dt_sample=dt_sample_chunked,
-    #     Nt_chunk=300,
-    #     save_path=chunked_300_samples_and_weights_path_005120,
-    # )
-    #
-    #
-    #
-    # save_chunked_samples_and_weights_from_concatenated_runs(
-    #     samples_and_weights_runs_005120,
-    #     l_max=l_max_save,
-    #     t_start=t_start,
-    #     dt_sample=dt_sample_chunked,
-    #     Nt_chunk=500,
-    #     save_path=chunked_500_samples_and_weights_path_005120,
-    # )
+    save_chunked_samples_and_weights_from_concatenated_runs(
+        samples_and_weights_runs_005120,
+        l_max=l_max_save,
+        t_start=t_start,
+        dt_sample=dt_sample_chunked,
+        Nt_chunk=300,
+        save_path=chunked_300_samples_and_weights_path_005120,
+    )
+
+    save_chunked_samples_and_weights_from_concatenated_runs(
+        samples_and_weights_runs_005120,
+        l_max=l_max_save,
+        t_start=t_start,
+        dt_sample=dt_sample_chunked,
+        Nt_chunk=500,
+        save_path=chunked_500_samples_and_weights_path_005120,
+    )
 
 
 save_final_chunked_samples_and_weights()
