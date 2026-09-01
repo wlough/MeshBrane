@@ -178,6 +178,7 @@ def plot_area_change_sweep(
         r = contact_radius_list[_]
         t = time_list[_]
         da_a = dA_A[_]
+
         color = f"C{_}"  # MATPLOTLIB_COLORS[_]
 
         err_mask = np.abs(da_a) >= err_min
@@ -812,3 +813,4 @@ plot_volume_change_sweep(
     # xlims=None,
     # ylims=[-0.01, 0.46],
 )
+# %%

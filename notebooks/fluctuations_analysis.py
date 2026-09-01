@@ -1618,7 +1618,7 @@ def save_final_chunked_samples_and_weights():
     )
 
 
-save_final_chunked_samples_and_weights()
+# save_final_chunked_samples_and_weights()
 
 
 # %%
@@ -1628,7 +1628,7 @@ def plot_unweighted_fit_B_gamma_vs_l_max():
     B_guess = 1.2
     gamma_guess = 23.0
     fit_tol = 1e-15
-    l_min = 4
+    l_min = 2
     l_max = 12
     l_max_range = np.arange(l_min, l_max + 1, dtype="int")
     n_Nf = 2
@@ -1737,17 +1737,17 @@ def plot_unweighted_fit_B_gamma_vs_l_max():
     Nf_str = f"{Nf}"
     dt_str = f"{dt_sample:.3g}"
     N_chunks_str = f"{N_chunks}"
-    # fig.suptitle(
-    #     r"$N_f="
-    #     + Nf_str
-    #     + r"$, "
-    #     + r"$N_{chunks}="
-    #     + N_chunks_str
-    #     + r"$, "
-    #     + r"$dt="
-    #     + dt_str
-    #     + r"$"
-    # )
+    fig.suptitle(
+        r"$N_f="
+        + Nf_str
+        + r"$, "
+        + r"$N_{chunks}="
+        + N_chunks_str
+        + r"$, "
+        + r"$dt="
+        + dt_str
+        + r"$"
+    )
 
     # axes[0].set_title("Stiffness")
     axes[0].errorbar(
@@ -1758,12 +1758,12 @@ def plot_unweighted_fit_B_gamma_vs_l_max():
         # label=r"$B_{\text{fit}}$",
         marker="o",
     )
-    # axes[0].plot(
-    #     l_max_range,
-    #     0 * l_max_range + 1.0,
-    #     "--",
-    #     label=r"$B$",
-    # )
+    axes[0].plot(
+        l_max_range,
+        0 * l_max_range + 0.0,
+        "--",
+        label=r"$B$",
+    )
     #
     # for c in range(N_chunks):
     #     # if c == 0 or c==3:
