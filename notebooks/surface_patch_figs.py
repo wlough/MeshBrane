@@ -10,8 +10,6 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-
-
 ##############
 # Fig options
 ##############
@@ -29,13 +27,18 @@ V2_TERM = 1.0
 # Outer displayed surface domain in parameter space
 U_MIN, U_MAX = -2.2, 2.2
 V_MIN, V_MAX = -1.8, 1.8
-NU, NV = 3*180, 3*160
+NU, NV = 3 * 180, 3 * 160
 
 # Patch P: ellipse in parameter space
-U0, V0 = 0.0, -0.7          # patch center
-A_PATCH = .95             # semi-axis in u
-B_PATCH = 0.70             # semi-axis in v
+U0, V0 = 0.0, -0.7  # patch center
+A_PATCH = 0.95  # semi-axis in u
+B_PATCH = 0.70  # semi-axis in v
 N_PATCH = 220
+
+# U0, V0 = 0.0, -0.07  # patch center
+# A_PATCH = 0.45  # semi-axis in u
+# B_PATCH = 0.30  # semi-axis in v
+# N_PATCH = 220
 
 # Boundary point at which to draw n, u, t
 THETA0 = -0.45 * np.pi
@@ -76,12 +79,13 @@ COLOR_SURFACE = "0.85"
 COLOR_PATCH = "C0"
 COLOR_BOUNDARY = "k"
 COLOR_N = "k"
-COLOR_U = "C3"       # red
-COLOR_T = "C2"       # green
+COLOR_U = "C3"  # red
+COLOR_T = "C2"  # green
 
 
 M_alpha = 0.9
 P_alpha = 0.65
+
 
 #
 ###########
@@ -137,7 +141,7 @@ def patch_levelset_grad(theta):
 def boundary_tangent_param(theta):
     """Derivative of the ellipse with respect to theta."""
     du = -A_PATCH * np.sin(theta)
-    dv =  B_PATCH * np.cos(theta)
+    dv = B_PATCH * np.cos(theta)
     return np.array([du, dv], dtype=float)
 
 
@@ -151,7 +155,16 @@ U, V = np.meshgrid(u, v, indexing="xy")
 R = surface(U, V)
 X, Y, Z = R[..., 0], R[..., 1], R[..., 2]
 # Mmask = (X/1.1)**2+(Y/.95)**2 <  1.8**2
-Mmask = (X/1.)**2+(Y/1.)**2 <  1.8**2
+Mmask = (X / 1.0) ** 2 + (Y / 1.0) ** 2 < 1.8**2
+#
+#
+#
+# a = 0.75
+# b = 1.2 * a
+# Mmask = ((X - a) ** 2 + Y**2) * ((X + a) ** 2 + Y**2) - b**4 <= 0
+#
+#
+#
 X = np.where(Mmask, X, np.nan)
 Y = np.where(Mmask, Y, np.nan)
 Z = np.where(Mmask, Z, np.nan)
@@ -191,7 +204,7 @@ u_vec = normalize(np.cross(t_vec, n_vec))
 
 # A few points
 pc = surface(U0, V0)
-pm = surface(-1.8, -0.95)   # point to place M label
+pm = surface(-1.8, -0.95)  # point to place M label
 pb = surface(0.90 * A_PATCH, -0.55 * B_PATCH)  # point near boundary label
 
 
@@ -203,18 +216,19 @@ fig = plt.figure(figsize=(7.6, 6.2))
 ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
 
 
-
 ##############
 # Main surface
 ax.plot_surface(
-    X, Y, Z,
+    X,
+    Y,
+    Z,
     # rstride=2, cstride=2,
     # rcount=50, ccount=50,
     color=COLOR_SURFACE,
     edgecolor="none",
     alpha=M_alpha,
     shade=True,
-    zorder=-100
+    zorder=-100,
 )
 ax.text(pm[0], pm[1], pm[2] + 0.03, r"$M$", fontsize=18, zorder=20)
 
@@ -225,46 +239,55 @@ ax.text(pm[0], pm[1], pm[2] + 0.03, r"$M$", fontsize=18, zorder=20)
 #########
 # Interior P
 ax.plot_surface(
-    XPm, YPm, ZPm,
-    rstride=1, cstride=1,
+    XPm,
+    YPm,
+    ZPm,
+    rstride=1,
+    cstride=1,
     color=COLOR_PATCH,
     edgecolor="none",
     alpha=P_alpha,
     shade=True,
-    zorder=2
+    zorder=2,
 )
 ax.text(pc[0] - 0.10, pc[1], pc[2] + 0.03, r"$P$", fontsize=18, zorder=20)
 
 ######################
 # Boundary P
-ax.plot(
-    Xb, Yb, Zb,
-    color=COLOR_BOUNDARY,
-    linewidth=2.6,
-    zorder=3
+ax.plot(Xb, Yb, Zb, color=COLOR_BOUNDARY, linewidth=2.6, zorder=3)
+ax.text(
+    pb[0] + 0.04, pb[1] - 0.02, pb[2] + 0.03, r"$\partial P$", fontsize=16, zorder=20
 )
-ax.text(pb[0] + 0.04, pb[1] - 0.02, pb[2] + 0.03, r"$\partial P$", fontsize=16, zorder=20)
 
 #########################
 # boundary point
 ax.scatter([p[0]], [p[1]], [p[2]], color="black", s=20, zorder=10)
 
+
 def draw_arrow(base, vec, length, color, lw=2.2):
     ax.quiver(
-        base[0], base[1], base[2],
-        vec[0], vec[1], vec[2],
+        base[0],
+        base[1],
+        base[2],
+        vec[0],
+        vec[1],
+        vec[2],
         length=length,
         normalize=True,
         arrow_length_ratio=0.14,
         color=color,
         linewidth=lw,
-        zorder=20
+        zorder=20,
     )
+
 
 def add_label(base, vec, length, text, offset=(0, 0, 0), color="black"):
     q = base + 1.10 * length * normalize(vec)
-    q = q.reshape(3,) + np.array(offset)
+    q = q.reshape(
+        3,
+    ) + np.array(offset)
     ax.text(q[0], q[1], q[2], text, color=color, fontsize=16, zorder=25)
+
 
 # Normal n
 draw_arrow(p, n_vec, N_LEN, COLOR_N)
@@ -279,14 +302,19 @@ draw_arrow(p, t_vec, T_LEN, COLOR_T)
 add_label(p, t_vec, T_LEN, r"$\mathbf{t}$", offset=(0.00, 0.00, 0.03), color=COLOR_T)
 
 
-
 # Plot view and axis lims
 ax.view_init(elev=ELEV, azim=AZIM)
 ax.set_axis_off()
 
-x_all = np.array([_ for _ in np.concatenate([X.ravel(), Xb.ravel()]) if not np.isnan(_)])
-y_all = np.array([_ for _ in np.concatenate([Y.ravel(), Yb.ravel()]) if not np.isnan(_)])
-z_all = np.array([_ for _ in np.concatenate([Z.ravel(), Zb.ravel()]) if not np.isnan(_)])
+x_all = np.array(
+    [_ for _ in np.concatenate([X.ravel(), Xb.ravel()]) if not np.isnan(_)]
+)
+y_all = np.array(
+    [_ for _ in np.concatenate([Y.ravel(), Yb.ravel()]) if not np.isnan(_)]
+)
+z_all = np.array(
+    [_ for _ in np.concatenate([Z.ravel(), Zb.ravel()]) if not np.isnan(_)]
+)
 
 xmid = 0.5 * (x_all.min() + x_all.max())
 ymid = 0.5 * (y_all.min() + y_all.max())
@@ -305,7 +333,9 @@ ax.set_aspect("equal")
 plt.tight_layout()
 
 
-
 fig.savefig(OUTPUT, bbox_inches="tight", pad_inches=-0.0)
 plt.show()
 plt.close(fig)
+
+
+# %%

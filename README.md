@@ -9,10 +9,10 @@ A library for modeling biological membranes.
 ```bash
 git clone --recursive git@github.com:wlough/MeshBrane.git
 cd MeshBrane
-python install.sh
+python install.py
 ```
 
-See `python install.sh -h` for a complete list of optional flags.
+See `python install.py -h` for a complete list of optional flags.
 
 ## Dependencies
 
