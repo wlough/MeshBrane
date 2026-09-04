@@ -1,5 +1,5 @@
 executable: ./build/bin/rigid_spindle_sim
-output_dir: output/biconcave_sweep3
+output_dir: output/biconcave_sweep
 run_name: run
 spindle_type: rigid_spindle
 make_movie: true

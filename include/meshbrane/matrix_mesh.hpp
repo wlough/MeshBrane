@@ -798,7 +798,7 @@ public:
                     const std::optional<int> &f_left = std::nullopt);
   void update_mat_f(int f, const std::optional<int> &h_left = std::nullopt);
   /**
-   * @brief Flips edge h.
+   * @brief Flips half-edge h.
    *
    * @param h
    *

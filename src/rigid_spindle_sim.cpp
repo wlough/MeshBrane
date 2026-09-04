@@ -158,6 +158,10 @@ void RigidSpindleSim::print_info() {
   // printf("  Spindle length: %.10f\n", spindle_.length_);
   spindle_.print_info();
   // viewer_.print_info();
+
+  // double dt = envelope_.dt_;
+  // double kBT = kBT_;
+  // envelope_.run_force_mag_test(dt, kBT, rng_);
 }
 
 void RigidSpindleSim::apply_pair_interactions() {

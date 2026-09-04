@@ -206,6 +206,75 @@ public:
       }
     }
   }
+
+  // void apply_thermal_drift_force_V() {
+  //   //
+  //   if (use_local_drag_coefficient_) {
+  //     force_V_ += kBT_ * mcvec_V_ / 3.0;
+  //   }
+  // }
+
+  void run_force_mag_test(double dt, double kBT,
+                          kmc::RandomNumberGenerator &rng) {
+
+    size_t Nv = get_num_vertices();
+
+    Samples3d F_bend(Nv, 3);
+    Samples3d F_tension(Nv, 3);
+    Samples3d F_pressure(Nv, 3);
+    Samples3d F_tether(Nv, 3);
+    Samples3d F_thermal(Nv, 3);
+    Samples3d F_drift = kBT_ * mcvec_V_ / 3.0;
+
+    for (int v = 0; v < Nv; v++) {
+      F_bend.row(v) = get_bending_force_v(v);
+      F_tension.row(v) = get_area_force_v(v);
+      F_pressure.row(v) = get_volume_force_v(v);
+      F_tether.row(v) = get_tether_force_v(v);
+      for (int i = 0; i < 3; i++) {
+        F_thermal(v, i) =
+            std::sqrt(2 * kBT * area_V_[v] * local_drag_coefficient_ / dt) *
+            rng.standard_normal();
+      }
+    }
+
+    Samples1d normF_bend = F_bend.rowwise().norm();
+    Samples1d normF_tension = F_tension.rowwise().norm();
+    Samples1d normF_pressure = F_pressure.rowwise().norm();
+    Samples1d normF_tether = F_tether.rowwise().norm();
+    Samples1d normF_thermal = F_thermal.rowwise().norm();
+    Samples1d normF_drift = F_drift.rowwise().norm();
+
+    double meanF_bend = normF_bend.mean();
+    double meanF_tension = normF_tension.mean();
+    double meanF_pressure = normF_pressure.mean();
+    double meanF_tether = normF_tether.mean();
+    double meanF_thermal = normF_thermal.mean();
+    double meanF_drift = normF_drift.mean();
+
+    double maxF_bend = normF_bend.maxCoeff();
+    double maxF_tension = normF_tension.maxCoeff();
+    double maxF_pressure = normF_pressure.maxCoeff();
+    double maxF_tether = normF_tether.maxCoeff();
+    double maxF_thermal = normF_thermal.maxCoeff();
+    double maxF_drift = normF_drift.maxCoeff();
+
+    printf("*** maxF_bend = %.10f\n", maxF_bend);
+    printf("*** maxF_tension = %.10f\n", maxF_tension);
+    printf("*** maxF_pressure = %.10f\n", maxF_pressure);
+    printf("*** maxF_tether = %.10f\n", maxF_tether);
+    printf("*** maxF_thermal = %.10f\n", maxF_thermal);
+    printf("*** maxF_drift = %.10f\n", maxF_drift);
+    printf("*** *** *** ***\n");
+    printf("*** meanF_bend = %.10f\n", meanF_bend);
+    printf("*** meanF_tension = %.10f\n", meanF_tension);
+    printf("*** meanF_pressure = %.10f\n", meanF_pressure);
+    printf("*** meanF_tether = %.10f\n", meanF_tether);
+    printf("*** meanF_thermal = %.10f\n", meanF_thermal);
+    printf("*** meanF_drift = %.10f\n", meanF_drift);
+  }
+  //
+  //
 };
 
 } // namespace meshbrane

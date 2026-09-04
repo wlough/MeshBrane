@@ -14,10 +14,36 @@ namespace meshbrane {
 ////////////////////////////////////////
 // stuff that actually gets used
 void Membrane::apply_internal_interactions() {
+  // TODO: use cached data to optimize force computations
+  //////////////////////////////////////////
   apply_tether_force_V();
+  // uses:
+  // * xyz_coord_V_ to recompute length_E_, vec_H_ data
+  // * target_edge_length_
+  //////////////////////////////////////////
+  //////////////////////////////////////////
   apply_bending_force_V();
+  // uses:
+  // * mean_curvature_V_
+  // * gaussian_curvature_V_
+  // * lap_mean_curvature_V_
+  // * area_V_
+  // * normal_V_
+  //////////////////////////////////////////
+  //////////////////////////////////////////
   apply_area_force_V();
+  // uses:
+  // * surface_tension_F_
+  // * xyz_coord_V_ to recompute vec_H_ data
+  // * normal_F_
+  //////////////////////////////////////////
+  //////////////////////////////////////////
   apply_volume_force_V();
+  // uses:
+  // * pressure_
+  // * area_F_
+  // * normal_F_
+  //////////////////////////////////////////
 }
 
 void Membrane::clear_interactions() {
@@ -30,6 +56,18 @@ void Membrane::apply_thermal_fluctuations_to_self(
   if (!enable_fluctuations_) {
     return;
   }
+
+  if (!use_local_drag_coefficient_) {
+    size_t Nv = get_num_vertices();
+    for (int v = 0; v < Nv; v++) {
+      for (int i = 0; i < 3; i++) {
+        force_V_(v, i) += std::sqrt(2 * kBT * node_drag_coefficient_ / dt) *
+                          rng.standard_normal();
+      }
+    }
+    return;
+  }
+
   size_t Nv = get_num_vertices();
   for (int v = 0; v < Nv; v++) {
     // Vec3d force;
@@ -39,17 +77,67 @@ void Membrane::apply_thermal_fluctuations_to_self(
           rng.standard_normal();
     }
   }
+  // thermal drift
+  force_V_ += kBT_ * mcvec_V_ / 3.0;
 }
 
 void Membrane::update_cached_data() {
+  // TODO: optimize computations of cached data
+  //////////////////////////////////////////
+  // inherited from MatrixMesh
   update_mesh_geometric_data();
-  update_geotargets();
+  // computes:
+  // * vec_H_ half-edge vectors
+  // * length_E_ edge lengths
+  // * average_edge_length_
+  //
+  // * area_F_ face areas
+  // * normal_F_ face unit normals
+  // * average_face_area_
+  //
+  // * area_V_ dual cell areas
+  // * normal_V_ vertex unit normals
+  //
+  // * total_volume_
+  //////////////////////////////////////////
 
+  //////////////////////////////////////////
+  // Membrane method
+  update_geotargets();
+  // sets:
+  // * target_face_area_ = average_face_area_
+  // * target_volume_ = total_volume_
+  //////////////////////////////////////////
+
+  //////////////////////////////////////////
+  // inherited from MatrixMesh
   update_laplacian_matrix();
+  //////////////////////////////////////////
+
+  //////////////////////////////////////////
+  // inherited from MatrixMesh
   update_mean_curvature(); // add_vertex in patch.cpp causes a problem here
+  // computes:
+  // * mcvec_V_ laplacian of vertex coords lap x_i
+  // * mean_curvature_V_ scalar mean curvature at vertices
+  // * lap_mean_curvature_V_ laplacian of scalar mean curvature at vertices
+  //
+  //////////////////////////////////////////
+
+  //////////////////////////////////////////
+  // inherited from MatrixMesh
   update_gaussian_curvature();
+  // computes:
+  // * gaussian_curvature_V_
+  //////////////////////////////////////////
+
+  //////////////////////////////////////////
+  // Membrane method
   update_surface_tension_and_pressure();
-  // update_internal_forces();
+  // computes:
+  // * surface_tension_F_
+  // * pressure_
+  //////////////////////////////////////////
 }
 
 void Membrane::update_own_state_variables(double dt) {
@@ -77,13 +165,23 @@ void Membrane::update_own_state_variables(double dt) {
 }
 
 double Membrane::dt_max() const {
+  // if (use_local_drag_coefficient_) {
+  //   double dx_max = std::min(0.1 * target_edge_length_, dx_max_);
+  //   double fmax = 0.0;
+  //   for (int v = 0; v < get_num_vertices(); v++) {
+  //     fmax = std::max(fmax, math::L2norm(force_V_.row(v) / area_V_[v]));
+  //   }
+  //   return dx_max * local_drag_coefficient_ / fmax;
+  // }
   if (use_local_drag_coefficient_) {
     double dx_max = std::min(0.1 * target_edge_length_, dx_max_);
-    double fmax = 0.0;
+    double dx_dt_max = 0.0;
     for (int v = 0; v < get_num_vertices(); v++) {
-      fmax = std::max(fmax, math::L2norm(force_V_.row(v) / area_V_[v]));
+      dx_dt_max = std::max(
+          dx_dt_max, math::L2norm(force_V_.row(v) /
+                                  (local_drag_coefficient_ * area_V_[v])));
     }
-    return dx_max * local_drag_coefficient_ / fmax;
+    return dx_max / dx_dt_max;
   }
   double dx_max = std::min(0.1 * target_edge_length_, dx_max_);
   double Fmax = 0.0;
@@ -606,9 +704,7 @@ Vec3d Membrane::get_bending_force_v(int v) const {
   double Fdensity = -2 * B * (lapH + 2 * (H - H0) * (H * H + H0 * H - K));
   double A = area_V_[v];
   Vec3d n = normal_V_.row(v);
-  // Vec3d n = normal_F_.row(f_left_h(h_out_v(v)));
   return Fdensity * A * n;
-  // return n;
 }
 
 void Membrane::apply_bending_force_V() {
@@ -631,11 +727,32 @@ void Membrane::update_mcvec_arrows() {
 }
 
 double Membrane::monte_flip_probability(int e) const {
-  // requires cached data to be up to date
-  // target_edge_length_
-  // length_E_
-  // area_F_
-  // target_face_area_
+  // ****
+  // Uses cached values for:
+  // * target_edge_length_
+  // * target_face_area_
+  // Does NOT use cached values for current edge lengths/face areas.
+  // Each edge flip will invalidate a portion of the cache and this is
+  // called multiple times during flip sweep.
+  // ****
+  // *
+  // *         v1                           v1
+  // *       /    \                       /  |  \
+  // *      /      \                     /   |   \
+  // *     /h3    h2\                   /h3  |  h2\
+  // *    /    f0    \                 /     |     \
+  // *   /            \               /  f0  |  f1  \
+  // *  /      h0      \             /       |       \
+  // * v2--------------v0  |----->  v2     h0|h1     v0
+  // *  \      h1      /             \       |       /
+  // *   \            /               \      |      /
+  // *    \    f1    /                 \     |     /
+  // *     \h4    h5/                   \h4  |  h5/
+  // *      \      /                     \   |   /
+  // *       \    /                       \  |  /
+  // *         v3                           v3
+  // *
+
   int h0 = h_directed_E_(e);
   int h1 = h_twin_h(h0);
   int h2 = h_next_h(h0);
@@ -652,35 +769,36 @@ double Membrane::monte_flip_probability(int e) const {
   Vec3d x;
   Vec3d xp;
   double norm_dx_pre, norm_dx_post;
-  double zpre;
-  double zpost;
-  double Upre = 0;
-  double Upost = 0;
 
-  //   x = xyz_coord_v(v0);
-  //   xp = xyz_coord_v(v2);
-  //   norm_dx = math::L2norm(x - xp);
-  norm_dx_pre = length_E_[e];               // ***
-  zpre = norm_dx_pre / target_edge_length_; // ***
+  ////////////////////////////////////////////
+  x = xyz_coord_v(v0);
+  xp = xyz_coord_v(v2);
+  norm_dx_pre = math::L2norm(x - xp);
+  // uses cached data
+  // norm_dx_pre = length_E_[e]; // ***
+  ////////////////////////////////////////////
+
+  double zpre = norm_dx_pre / target_edge_length_;
 
   double Utether_pre =
-      Utether(zpre, 1.0, 1.0, dimensionless_tether_repulsive_singularity_,
-              dimensionless_tether_repulsive_onset_,
-              dimensionless_tether_attractive_onset_,
-              dimensionless_tether_attractive_singularity_);
+      tether_stiffness_ * Utether(zpre, 1.0, 1.0,
+                                  dimensionless_tether_repulsive_singularity_,
+                                  dimensionless_tether_repulsive_onset_,
+                                  dimensionless_tether_attractive_onset_,
+                                  dimensionless_tether_attractive_singularity_);
 
   x = xyz_coord_v(v3);
   xp = xyz_coord_v(v1);
   norm_dx_post = math::L2norm(x - xp);
-  zpost = norm_dx_post / target_edge_length_;
+  double zpost = norm_dx_post / target_edge_length_;
 
   double Utether_post =
-      Utether(zpost, 1.0, 1.0, dimensionless_tether_repulsive_singularity_,
-              dimensionless_tether_repulsive_onset_,
-              dimensionless_tether_attractive_onset_,
-              dimensionless_tether_attractive_singularity_);
+      tether_stiffness_ * Utether(zpost, 1.0, 1.0,
+                                  dimensionless_tether_repulsive_singularity_,
+                                  dimensionless_tether_repulsive_onset_,
+                                  dimensionless_tether_attractive_onset_,
+                                  dimensionless_tether_attractive_singularity_);
 
-  // check if they are infinite
   if (std::isinf(Utether_post)) {
     // printf("Utether_post is infinite\n");
     return 0.0;
@@ -690,31 +808,45 @@ double Membrane::monte_flip_probability(int e) const {
     return 1.0;
   }
 
-  //   double L2 = math::L2norm(xyz_coord_v(v0) - xyz_coord_v(v1));
-  //   double L3 = math::L2norm(xyz_coord_v(v1) - xyz_coord_v(v2));
-  //   double L4 = math::L2norm(xyz_coord_v(v2) - xyz_coord_v(v3));
-  //   double L5 = math::L2norm(xyz_coord_v(v3) - xyz_coord_v(v0));
-  double L2 = length_E_[e_undirected_h(h2)];
-  double L3 = length_E_[e_undirected_h(h3)];
-  double L4 = length_E_[e_undirected_h(h4)];
-  double L5 = length_E_[e_undirected_h(h5)];
+  ////////////////////////////////////////////
+  // Lh = length of half-edge h
+  // L0 = norm_dx_pre before flip
+  double L2 = math::L2norm(xyz_coord_v(v0) - xyz_coord_v(v1));
+  double L3 = math::L2norm(xyz_coord_v(v1) - xyz_coord_v(v2));
+  double L4 = math::L2norm(xyz_coord_v(v2) - xyz_coord_v(v3));
+  double L5 = math::L2norm(xyz_coord_v(v3) - xyz_coord_v(v0));
+  double A201 = math::heron_area(norm_dx_pre, L2, L3);
+  double A023 = math::heron_area(norm_dx_pre, L4, L5);
+  // uses cached data
+  // double L2 = length_E_[e_undirected_h(h2)]; // ***
+  // double L3 = length_E_[e_undirected_h(h3)]; // ***
+  // double L4 = length_E_[e_undirected_h(h4)]; // ***
+  // double L5 = length_E_[e_undirected_h(h5)]; // ***
+  // double A201 = area_F_[f0]; // ***
+  // double A023 = area_F_[f1]; // ***
+  //////////////////////////////////////////////
 
-  double A201 = area_F_[f0]; // math::heron_area(norm_dx_pre, L2, L3);
-  double A023 = area_F_[f1]; // math::heron_area(norm_dx_pre, L4, L5);
-
+  // L0 = norm_dx_post after flip
   double A312 = math::heron_area(norm_dx_post, L3, L4);
   double A130 = math::heron_area(norm_dx_post, L5, L2);
 
-  double Uarea_pre =
-      math::POW2(A201 - target_face_area_) / (2 * target_face_area_) +
-      math::POW2(A023 - target_face_area_) / (2 * target_face_area_);
+  double Uarea_pre = area_stiffness_ *
+                     (math::POW2(A201 - target_face_area_) +
+                      math::POW2(A023 - target_face_area_)) /
+                     (2 * target_face_area_);
 
-  double Uarea_post =
-      math::POW2(A312 - target_face_area_) / (2 * target_face_area_) +
-      math::POW2(A130 - target_face_area_) / (2 * target_face_area_);
+  // Uarea_pre += surface_tension_constant_*A_other_faces; // cancels
+  Uarea_pre += surface_tension_constant_ * (A201 + A023);
 
-  double dEtot = tether_stiffness_ * (Utether_post - Utether_pre) +
-                 area_stiffness_ * (Uarea_post - Uarea_pre);
+  double Uarea_post = area_stiffness_ *
+                      (math::POW2(A312 - target_face_area_) +
+                       math::POW2(A130 - target_face_area_)) /
+                      (2 * target_face_area_);
+
+  // Uarea_post += surface_tension_constant_*A_other_faces; // cancels
+  Uarea_post += surface_tension_constant_ * (A312 + A130);
+
+  double dEtot = (Utether_post - Utether_pre) + (Uarea_post - Uarea_pre);
   return std::exp(-dEtot / kBT_);
 }
 
