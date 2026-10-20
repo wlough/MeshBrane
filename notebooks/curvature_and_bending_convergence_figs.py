@@ -21,6 +21,8 @@ from src_python.pretty_pictures import (
     to_scinotation_tex,
 )
 
+from matplotlib.ticker import LogLocator, NullFormatter
+
 
 def get_curvature_and_bending_convergence_data():
     output_dir = "../output/bending_force_test"
@@ -594,12 +596,125 @@ def average_combined_error_plot(err_dict):
     plt.rcParams.update(rcparams0)
 
 
+def average_combined_h_vs_error_plot(err_dict):
+    fig_path = "../output/average_combined_h_vs_error_plot.svg"
+    rcparams0 = dict(plt.rcParams)  # save original rcparams
+    textsize = 12
+    plt.rcParams.update(
+        {
+            "font.size": textsize,
+            "font.family": "serif",
+            "font.serif": ["CMU Serif", "Computer Modern Roman", "DejaVu Serif"],
+            "mathtext.fontset": "cm",
+            "text.latex.preamble": "",
+            "figure.dpi": 300.0,
+            "xtick.direction": "in",
+            "xtick.labelsize": textsize,
+            # "xtick.labeltop": False,
+            # "xtick.minor.ndivs": 4,
+            "xtick.minor.visible": True,
+            # "xtick.top": True,
+            "ytick.direction": "in",
+            "ytick.labelsize": textsize,
+            # "ytick.minor.ndivs": 4,
+            "ytick.minor.visible": True,
+            # "ytick.right": True,
+            # "text.usetex": False,
+            "figure.titlesize": textsize,
+            "axes.titlesize": textsize,
+            "axes.labelsize": textsize,
+            # "lines.linewidth": 5,
+            "lines.markersize": 6,
+            "legend.frameon": False,
+            "legend.fontsize": textsize,
+            # "legend.handletextpad": 0.2,
+            # "legend.loc": "upper right",
+            # "legend.borderaxespad": 0.15,
+            # "legend.borderpad": 0.0,
+            "legend.handlelength": 0.75,
+            "legend.handletextpad": 0.1,
+            "legend.labelspacing": 0.0,
+            "axes.labelpad": 0.0,
+            "xtick.major.pad": 1.5,
+            "ytick.major.pad": 1.5,
+        }
+    )
+
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3.25, 3.25))
+    fig.suptitle("Average combined error")
+    ax.set_xlabel(r"$h$")
+    ax.set_ylabel("error")
+
+    err_keys = [
+        "mean_eps_F",
+        "mean_eps_H",
+    ]
+    # err_labels = [
+    #     r"$\varepsilon_f$",
+    #     r"$\varepsilon_H$",
+    # ]
+    err_labels = [
+        r"$f_{\text{bend}}$",
+        r"$H$",
+    ]
+
+    for _ in range(len(err_keys)):
+        err_key = err_keys[_]
+        err_label = err_labels[_]
+        color = MATPLOTLIB_COLORS[_]
+        marker = MATPLOTLIB_MARKERS[_]
+        linestyle = MATPLOTLIB_LINESTYLES[_]
+
+        fit_dict = log_log_fit(err_dict["mean_edge_length"], err_dict[err_key])
+        m = fit_dict["slope"]
+        y_fit = fit_dict["fit_samples"]
+        y = fit_dict["logY"]
+        x = fit_dict["logX"]
+
+        fit_label = r"$O\left(" + "h" + r"^{" + f"{round_to(m, n=3)}" + r"}\right)$"
+
+        ax.loglog(
+            np.exp(x), np.exp(y_fit), linestyle=linestyle, color=color, label=fit_label
+        )
+        ax.loglog(np.exp(x), np.exp(y), marker, color=color, label=err_label)
+
+    # ax.set_xticks([0.05, 0.1, 0.2])
+    # ax.set_xticklabels(['0.05', '0.1', '0.2'])
+    # ax.xaxis.set_minor_formatter(NullFormatter())
+
+    # ax.set_xscale("log", base=2)
+    # ax.xaxis.set_minor_formatter(NullFormatter())
+    # ax.set_xlim(0.03, 0.35)
+
+    ax.set_xscale("log", base=2)
+    ax.xaxis.set_minor_locator(LogLocator(base=2, subs=np.arange(1.2, 2, 0.1)))
+    ax.xaxis.set_minor_formatter(NullFormatter())
+
+    # xticks = np.exp(fit_dict["logX"])
+    # xticklabels_data = err_dict["mean_edge_length"]
+    # xticklabels = to_scinotation_tex(xticklabels_data, decimals=1)
+    # ax.set_xticks(xticks)
+    # ax.set_xticklabels(xticklabels)
+    ax.tick_params(axis="x", which="minor", labelbottom=False)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(fig_path, dpi=600)
+    plt.show()
+    plt.rcParams.update(rcparams0)
+
+
+#
+
 err_dict = get_curvature_and_bending_convergence_data()
 
-
-average_mean_curvature_error_plot(err_dict)
 # average_gaussian_curvature_error_plot(err_dict)
 # average_bending_stress_error_plot(err_dict)
 # bending_energy_error_plot(err_dict)
-average_combined_error_plot(err_dict)
 # average_edge_length_vs_num_faces_plot(err_dict)
+
+# average_mean_curvature_error_plot(err_dict)
+#
+# average_combined_error_plot(err_dict)
+
+average_combined_h_vs_error_plot(err_dict)
+# np.log(err_dict["mean_edge_length"])

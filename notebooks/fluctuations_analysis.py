@@ -22,6 +22,39 @@ from scipy.optimize import least_squares
 
 import yaml
 
+######################################
+# required for surface tension stats #
+######################################
+# save_final_surface_tension_stats
+# compute_concatenated_run_average_surface_tension_stats
+# compute_run_spatial_average_surface_tension_time_series
+# read_time_series
+
+#################################################
+# required for fluctuations samples and weights #
+#################################################
+# save_final_samples_and_weights_for_dt_samples_range
+# save_samples_and_weights_from_concatenated_runs_for_dt_samples_range
+# save_samples_and_weights_from_concatenated_runs
+# get_concatenated_run_Qlj_data
+# get_run_Qlj_data
+# read_time_series
+
+#########################################################
+# required for chunked fluctuations samples and weights #
+#########################################################
+# save_final_chunked_samples_and_weights
+# save_chunked_samples_and_weights_from_concatenated_runs
+# get_concatenated_run_Qlj_data
+# get_run_Qlj_data
+# read_time_series
+
+#########################################
+# required for plotting unweighted fits #
+#########################################
+# plot_unweighted_fit_B_gamma_vs_l_max
+# fit_saved_chunked_samples_and_weights_data
+
 
 def compute_run_spatial_average_surface_tension_time_series(
     output_dir,
@@ -2079,9 +2112,11 @@ def plot_err_B_gamma_for_dt_samples_range():
         ax_gamma.set_xlabel(r"$N_t$")
         ax_gamma.set_ylabel("error")
         ax_gamma.legend()
+    plt.show()
 
 
 plot_err_B_gamma_for_dt_samples_range()
+
 # %%
 
 
@@ -2158,6 +2193,7 @@ def plot_mean_sqr_amplitudes_vs_l_for_Nf_range():
     plt.show()
 
 
+plot_mean_sqr_amplitudes_vs_l_for_Nf_range()
 # %%
 #
 #
