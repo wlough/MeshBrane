@@ -405,6 +405,7 @@ def get_run_dir_list_area_change_minmaxmean(
         "dA_A_max": dA_A_max,
         "dA_A_mean": dA_A_mean,
         "contact_radius": contact_radius,
+        "dA_A_list": shifted_dA_A_list,
     }
 
 
@@ -597,6 +598,9 @@ def plot_multiruns_area_change_minmaxmean(
     t_plot_interval=2.0,
     err_min=0.001,
     fig_path=None,
+    show_all_trajectories=False,
+    show_legend=True,
+    show_mean=False,
 ):
 
     minmaxmean_data = [
@@ -612,6 +616,8 @@ def plot_multiruns_area_change_minmaxmean(
     big_dA_A_max = [data["dA_A_max"] for data in minmaxmean_data]
     big_dA_A_mean = [data["dA_A_mean"] for data in minmaxmean_data]
     big_r = [data["contact_radius"] for data in minmaxmean_data]
+
+    big_dA_A_list = [data["dA_A_list"] for data in minmaxmean_data]
 
     rcparams0 = dict(plt.rcParams)  # save original rcparams
     textsize = 12
@@ -680,11 +686,32 @@ def plot_multiruns_area_change_minmaxmean(
         color = f"C{_}"
         label = r"$\rho=" + f"{r:.2g}" + r"$"
         ls = MATPLOTLIB_LINESTYLES[_]
-
-        ax.plot(t, dA_A_mean, color=color, label=label, ls=ls)
+        if show_mean:
+            ax.plot(t, dA_A_mean, color=color, label=label, ls=ls)
         ax.fill_between(t, dA_A_min, dA_A_max, color=color, alpha=0.3)
 
-    plt.legend()
+    if show_all_trajectories:
+        for _ in range(num_things):
+            t = big_t[_]
+
+            dA_A_list = big_dA_A_list[_]
+            r = big_r[_]
+            color = f"C{_}"
+            label = r"$\rho=" + f"{r:.2g}" + r"$"
+            ls = MATPLOTLIB_LINESTYLES[_]
+            lw = 0.5
+            for dA_A in dA_A_list:
+                ax.plot(
+                    t,
+                    dA_A,
+                    color=color,
+                    # label=label,
+                    ls=ls,
+                    lw=lw,
+                )
+
+    if show_legend:
+        plt.legend()
     if fig_path is not None:
         fig.savefig(fig_path, dpi=600)
 
@@ -769,7 +796,10 @@ plot_multiruns_area_change_minmaxmean(
     ],
     t_plot_interval=2.0,
     err_min=0.001,
-    fig_path="../output/area_change_during_mitosis.svg",
+    # fig_path="../output/area_change_during_mitosis.svg",
+    show_all_trajectories=True,
+    show_legend=True,
+    show_mean=True,
 )
 
 
@@ -781,7 +811,7 @@ plot_multiruns_area_change_minmaxmean(
 # )
 
 # plot_ne_point_cloud2d_sweep(
-#     "../output/area_volume_test_mitosis_001280_rp25_sweep0",
+#     "../output/area_volume_test_mitosis_001280_rp25_sweep1",
 #     t_start=0.01,
 #     dt_sample=0.25,
 #     markersize=2.5,

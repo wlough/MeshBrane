@@ -187,6 +187,30 @@ void Viewer::draw_wireframe(MatrixMesh &m) {
   // }
 };
 
+void Viewer::draw_chromatin_chain(ChromatinChain &m) {
+
+  auto *data = &iglviewer_.data();
+  data->point_size = m.radius_vertex_;
+  Eigen::Matrix<double, Eigen::Dynamic, 3> rgb_V =
+      m.rgba_V.block(0, 0, m.rgba_V.rows(), 3);
+  data->add_points(m.get_xyz_coord_V(), rgb_V);
+
+  int num_edges = m.get_num_edges();
+  Samples3d P0{num_edges, 3};
+  Samples3d P1{num_edges, 3};
+  for (int e = 0; e < num_edges; e++) {
+    int v0 = m.V_cycle_E_(e, 0);
+    int v1 = m.V_cycle_E_(e, 1);
+    P0.row(e) = m.xyz_coord_v(v0);
+    P1.row(e) = m.xyz_coord_v(v1);
+  }
+  Eigen::Matrix<double, Eigen::Dynamic, 3> rgb_E =
+      m.rgba_E_.block(0, 0, m.rgba_E_.rows(), 3);
+  data->add_edges(P0, P1, rgb_E);
+
+  data->line_width = 2.0;
+}
+
 void Viewer::draw_tube(Vec3d &p1, Vec3d &p2, double radius,
                        Eigen::Vector3d color, int Nphi) {
   // printf("Drawing tube\n");

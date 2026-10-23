@@ -6,6 +6,7 @@
  */
 
 #include "igl/opengl/glfw/Viewer.h" // igl::opengl::glfw::Viewer
+#include "meshbrane/chromatin_chain.hpp"
 #include "meshbrane/matrix_mesh.hpp"
 #include "meshbrane/membrane.hpp"
 #include "meshbrane/rigid_spindle.hpp"
@@ -57,6 +58,8 @@ struct Viewer {
   void draw_mesh(MatrixMesh &m);
 
   void draw_membrane(Membrane &envelope);
+
+  void draw_chromatin_chain(ChromatinChain &m);
 
   void draw_meshes(std::vector<MatrixMesh *> &meshes);
 

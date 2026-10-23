@@ -1,34 +1,71 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-phi = np.linspace(0, 2 * np.pi, 250)
-x0 = np.cos(phi)
-y0 = np.sin(phi)
+Ne = 4
+Nh = 8
 
 
-x_squish = 0.6
-y_squish = 0.8
-neck_radius = 0.2
-c = 1 - neck_radius
+# Ne =4, Nh=8
+#
+# .<-h7--.<-h6--.<-h5--.<-h4--.
+# .--h0->.--h1->.--h2->.--h3->.--h4->.--h5->.--h6->.--h7->
 
-# raw_point_cloud[:, 0] *= x_squish * (
-#     1 - c * np.cos(np.pi * raw_point_cloud[:, 2] / 2)
-# )  # Squish along x-axis
-# raw_point_cloud[:, 1] *= y_squish * (
-#     1 - c * np.cos(np.pi * raw_point_cloud[:, 2] / 2)
-# )  # Squish along y-axis
-a = 0.5
-x = x0
-y = y0
+h_twin_H0 = np.array([7, 6, 5, 4, 3, 2, 1, 0], dtype=int)
+h_rot_H0 = np.array([0, 7, 6, 5, 4, 3, 2, 1], dtype=int)
+
+h_twin_H = np.zeros(Nh, dtype=int)
+h_rot_H = np.zeros(Nh, dtype=int)
+
+for h in range(Nh):
+    ht = Nh - 1 - h
+    ht = -(h + 1) % Nh
+    hr = (Nh - h) % Nh
+    print(f"{h,ht,hr=}")
+    h_twin_H[h] = ht
+    h_rot_H[h] = hr
 
 
-fig, ax = plt.subplots(
-    nrows=1,
-    ncols=1,
-    figsize=(3.25, 3.25),
-)
+h_twin_H - h_twin_H0
+h_rot_H - h_rot_H0
+# %%
 
-ax.plot(x, y)
-ax.set_aspect("equal")
+Ne = 3
+Nh = 6
 
-plt.show()
+#
+# .<-h5--.<-h4--.<-h3--.
+# .--h0->.--h1->.--h2->.
+
+h_twin_H0 = np.array([5, 4, 3, 2, 1, 0], dtype=int)
+h_rot_H0 = np.array([3, 5, 4, 0, 2, 1], dtype=int)
+h_next_H0 = np.array([1, 2, 0, 5, 4, 3], dtype=int)
+
+h_twin_H = np.zeros(Nh, dtype=int)
+h_rot_H = np.zeros(Nh, dtype=int)
+h_next_H = np.zeros(Nh, dtype=int)
+
+
+for h in range(Ne):
+    # ht = -(h + 1) % Nh
+    ht = Nh - (h + 1)
+    hn = (h + 1) % Ne
+    h_twin_H[h] = ht
+    h_twin_H[ht] = h
+    h_next_H[h] = hn
+
+for h in range(Ne, Nh):
+    h_reduced = h - Ne
+    hn_reduced = (h_reduced + 1) % Ne
+    hn = hn_reduced + Ne
+    h_next_H[h] = hn
+
+for h in range(Nh):
+    hr = h_next_H[h_twin_H[h]]
+    h_rot_H[h] = hr
+
+# for h in range(Nh):
+#     ht = -(h + 1+Nh) % Nh
+#     hr = (Nh - h) % Nh
+#     print(f"{h,ht,hr=}")
+#     h_twin_H[h] = ht
+#     h_rot_H[h] = hr

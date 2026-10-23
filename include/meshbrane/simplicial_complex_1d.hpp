@@ -10,6 +10,7 @@
 #include "meshbrane/pretty_pictures.hpp"
 #include "meshbrane/simple_vector_field.hpp"
 #include <filesystem>
+#include <iostream>
 #include <string> // std::string
 #include <tuple>  // std::tuple
 #include <yaml-cpp/yaml.h>
@@ -62,7 +63,7 @@ public:
 
   Samples3d vec_H_;
   Samples1d length_E_;
-  // double average_edge_length_{0.0};
+  double average_edge_length_{0.0};
   // // Curvature
   Samples3d mcvec_V_;
   Samples1d curvature_V_;
@@ -120,9 +121,248 @@ public:
   }
 
   // void update_vector_field_arrows(Samples3d X, Samples3d U);
+  void init_straight_chain(size_t Nv, Vec3d axis, double edge_length) {
+    // Samples3d xyz_coord_V_;   //
+    // Samples2i V_cycle_E_;     //
+    //                           //
+    // Samplesi h_out_V_;        //
+    // Samplesi h_directed_E_;   //
+    // Samplesi h_ghost_B_;      //
+    //                           //
+    // Samplesi v_origin_H_;     //
+    // Samplesi e_undirected_H_; //
+    //                           //
+    // Samplesi h_twin_H_;       //
+    // Samplesi h_rot_H_;        //
+    size_t Ne = Nv - 1;
+    size_t Nh = 2 * Ne;
+    size_t Nb = 2;
+
+    xyz_coord_V_.resize(Nv, 3);
+    h_out_V_.resize(Nv);
+
+    V_cycle_E_.resize(Ne, 2);
+    h_directed_E_.resize(Ne);
+
+    h_ghost_B_.resize(Nb);
+
+    v_origin_H_.resize(Nh);
+    e_undirected_H_.resize(Nh);
+    h_twin_H_.resize(Nh);
+    h_rot_H_.resize(Nh);
+
+    for (int v = 0; v < Nv; v++) {
+      xyz_coord_V_.row(v) = v * edge_length * axis;
+      h_out_V_[v] = v;
+    }
+
+    for (int e = 0; e < Ne; e++) {
+      int v0 = e;
+      int v1 = v0 + 1;
+      int h = e;
+      int ht = h + (Ne - h) + (Ne - h - 1);
+      V_cycle_E_.row(e) << v0, v1;
+      h_directed_E_[e] = h;
+    }
+
+    for (int h = 0; h < Nh; h++) {
+
+      int ht = Nh - 1 - h;
+      // int ht = -(h+1) % Nh;
+      // ht = (ht+Nh) % Nh;
+      int hr = (Nh - h) % Nh;
+      // int hr = -h % Nh;
+      // hr = (hr+Nh) % Nh;
+      h_twin_H_[h] = ht;
+      h_rot_H_[h] = hr;
+    }
+    // Ne =4, Nh=8
+    //
+    // .<-h7--.<-h6--.<-h5--.<-h4--.
+    // .--h0->.--h1->.--h2->.--h3->.--h4->.--h5->.--h6->.--h7->
+  }
+
+  void init_single_loop(size_t Nv, Vec3d loop_center, Vec3d loop_normal,
+                        double loop_radius) {
+    size_t Ne = Nv;
+    size_t Nh = 2 * Ne;
+    size_t Nb = 0;
+
+    xyz_coord_V_.resize(Nv, 3);
+    h_out_V_.resize(Nv);
+
+    V_cycle_E_.resize(Ne, 2);
+    h_directed_E_.resize(Ne);
+
+    h_ghost_B_.resize(Nb);
+
+    v_origin_H_.resize(Nh);
+    e_undirected_H_.resize(Nh);
+    h_twin_H_.resize(Nh);
+    h_rot_H_.resize(Nh);
+
+    Samplesi h_next_H(Nh);
+
+    Vec3d Ez{0, 0, 1};
+    Vec3d Ey{0, 1, 0};
+    Vec3d Ex{1, 0, 0};
+
+    Vec3d ez = loop_normal / loop_normal.norm();
+    Vec3d ey = ez.cross(Ex);
+    double norm_ey = ey.norm();
+    if (norm_ey < 1e-6) {
+      ey = ez.cross(Ey);
+      norm_ey = ey.norm();
+    }
+    ey /= norm_ey;
+    Vec3d ex = ey.cross(ez);
+
+    // assign data to vertices
+    for (int v = 0; v < Nv; v++) {
+      int h = v;
+      double phi_v = 2 * M_PI * v / Nv;
+      xyz_coord_V_.row(v) =
+          loop_center + std::cos(phi_v) * ex + std::sin(phi_v) * ey;
+      h_out_V_[v] = h;
+    }
+    // assign data to edges
+    for (int e = 0; e < Ne; e++) {
+      int v0 = e;
+      int v1 = (v0 + 1) % Nv;
+      int h = e;
+
+      V_cycle_E_.row(e) << v0, v1;
+      h_directed_E_[e] = h;
+    }
+
+    // assign twin/edge data to half-edges
+    // assign vertex/next to inner/cw half-edges
+    for (int h = 0; h < Ne; h++) {
+      int v = h;
+      int e = h;
+      v_origin_H_[h] = v;
+      e_undirected_H_[h] = e;
+
+      int ht = Nh - (h + 1);
+      int hn = (h + 1) % Ne;
+      h_twin_H_[h] = ht;
+      h_next_H[h] = hn;
+      e_undirected_H_[ht] = e;
+    }
+    // assign next to outer/ccw half-edges
+    for (int h = Ne; h < Nh; h++) {
+      int h_reduced = h - Ne;
+      int hn_reduced = (h_reduced + 1) % Ne;
+      int hn = hn_reduced + Ne;
+      h_next_H[h] = hn;
+    }
+    // assign rot to half-edges
+    for (int h = 0; h < Nh; h++) {
+      int hr = h_next_H[h_twin_H_[h]];
+      h_rot_H_[h] = hr;
+    }
+    // assign vertex to outer/ccw half-edges
+    for (int h = Ne; h < Nh; h++) {
+      int hr = h_rot_H_[h];
+      int v = v_origin_H_[hr];
+      v_origin_H_[h] = v;
+    }
+
+    check_he_matrices();
+  }
+
+  void check_he_matrices() const {
+    printf("MatrixMesh::check_he_matrices\n");
+    int Nv = get_num_vertices();
+    int Ne = get_num_edges();
+    int Nh = get_num_half_edges();
+    int Nb = get_num_boundaries();
+
+    for (int v = 0; v < Nv; v++) {
+      int h_out = h_out_V_(v);
+      if (h_out < 0 || h_out >= Nh) {
+        std::cout << "v=" << v << '\n';
+        std::cout << "h_out=" << h_out << '\n';
+        throw std::out_of_range("h_out_V_[v]: Half-edge index out of range");
+      }
+    }
+    for (int e = 0; e < Ne; e++) {
+      int h_directed = h_directed_E_[e];
+      if (h_directed < 0 || h_directed >= Nh) {
+        std::cout << "e=" << e << '\n';
+        std::cout << "h_directed=" << h_directed << '\n';
+        throw std::out_of_range(
+            "h_directed_E_[e]: Half-edge index out of range");
+      }
+    }
+
+    for (int b = 0; b < Nb; b++) {
+      int h_ghost = h_ghost_B_[b];
+      if (h_ghost < 0 || h_ghost >= Nh) {
+        std::cout << "b=" << b << '\n';
+        std::cout << "h_ghost=" << h_ghost << '\n';
+        throw std::out_of_range("h_ghost_B_[b]: Half-edge index out of range");
+      }
+    }
+    for (int h = 0; h < Nh; h++) {
+      int v_origin = v_origin_H_[h];
+      if (v_origin < 0 || v_origin >= Nv) {
+        std::cout << "h=" << h << '\n';
+        std::cout << "v_origin=" << v_origin << '\n';
+        throw std::out_of_range("v_origin_H_[h]: Vertex index out of range");
+      }
+      int e_undirected = e_undirected_H_[h];
+      if (e_undirected < 0 || e_undirected >= Ne) {
+        std::cout << "h=" << h << '\n';
+        std::cout << "e_undirected=" << e_undirected << '\n';
+        throw std::out_of_range("e_undirected_H_[h]: Edge index out of range");
+      }
+      int h_rot = h_rot_H_[h];
+      if (h_rot < 0 || h_rot >= Nh) {
+        std::cout << "h=" << h << '\n';
+        std::cout << "hrott=" << h_rot << '\n';
+        throw std::out_of_range("h_rot_H_[h]: Half-edge index out of range");
+      }
+      int h_twin = h_twin_H_[h];
+      if (h_twin < 0 || h_twin >= Nh) {
+        std::cout << "h=" << h << '\n';
+        std::cout << "h_twin=" << h_twin << '\n';
+        throw std::out_of_range("h_twin_H_[h]: Half-edge index out of range");
+      }
+    }
+  }
+
   ////////////////////////////////////
   // Cache updaters //////////////////
   ////////////////////////////////////
+  void update_complex_geometric_data_V() {}
+  void update_complex_geometric_data_E() {
+    size_t num_edges = get_num_edges();
+    int num_half_edges = get_num_half_edges();
+    vec_H_.resize(num_half_edges, 3);
+    // resize the length vector
+    // length_E_.setZero();
+    length_E_.resize(num_edges);
+    average_edge_length_ = 0.0;
+    for (int e = 0; e < num_edges; e++) {
+      int h = h_directed_E_(e);
+      int ht = h_twin_h(h);
+      int v = v_origin_h(h);
+      int vt = v_origin_h(ht);
+      Vec3d x = xyz_coord_v(v);
+      Vec3d xt = xyz_coord_v(vt);
+      vec_H_.row(h) = xt - x;
+      vec_H_.row(ht) = -vec_H_.row(h);
+      // length_E_(e) = math::L2norm(vec_H_.row(h));
+      length_E_(e) = vec_H_.row(h).norm();
+      average_edge_length_ += length_E_(e);
+    }
+    average_edge_length_ /= num_edges;
+  }
+  void update_complex_geometric_data() {
+    update_complex_geometric_data_V();
+    update_complex_geometric_data_E();
+  }
 
   // void load_ply();
 
@@ -253,7 +493,11 @@ public:
   // bool some_negative_boundary_contains_h(int h) const;
   // bool some_positive_boundary_contains_h(int h) const;
   // bool some_boundary_contains_h(int h) const;
-  // bool some_boundary_contains_v(int v) const;
+  bool some_boundary_contains_v(int v) const {
+    int h = h_out_V_[v];
+    int hr = h_rot_H_[h];
+    return (h == hr);
+  }
 
   ///////////////////////////////////////////////////////
   // Generators /////////////////////////////////////////
@@ -262,6 +506,27 @@ public:
   //////////////////////////////////////////////
   // Visualization /////////////////////////////
   //////////////////////////////////////////////
+  void set_visual_defaults() {
+
+    int num_vertices = get_num_vertices();
+    int num_half_edges = get_num_half_edges();
+    int num_edges = get_num_edges();
+
+    radius_V.resize(num_vertices, 1);
+    rgba_V.resize(num_vertices, 4);
+    for (int i = 0; i < num_vertices; i++) {
+      radius_V(i) = radius_vertex_;
+      rgba_V.row(i) = rgba_vertex_;
+    }
+    rgba_H.resize(num_half_edges, 4);
+    for (int i = 0; i < num_half_edges; i++) {
+      rgba_H.row(i) = rgba_half_edge_;
+    }
+    rgba_E_.resize(num_edges, 4);
+    for (int i = 0; i < num_edges; i++) {
+      rgba_E_.row(i) = rgba_edge_;
+    }
+  }
 };
 
 } // namespace meshbrane

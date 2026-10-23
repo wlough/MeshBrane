@@ -641,7 +641,7 @@ def average_combined_h_vs_error_plot(err_dict):
     )
 
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(3.25, 3.25))
-    fig.suptitle("Average combined error")
+    fig.suptitle("Vertex-averaged bending traction and mean curvature error ")
     ax.set_xlabel(r"$h$")
     ax.set_ylabel("error")
 

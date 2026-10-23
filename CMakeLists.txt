@@ -34,6 +34,10 @@ endif()
 # These options can be overridden by the user with -D<option>=<value>
 option(BUILD_RIGID_SPINDLE_SIM "Build rigid spindle simulation executable" ON)
 option(BUILD_PARAM_SWEEP "Build param_sweep executable" ON)
+option(BUILD_CHROMATIN_TEST_SIM "Build chromatin_test_sim executable" ON)
+
+
+
 
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

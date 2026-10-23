@@ -329,7 +329,7 @@ def save_chunked_samples_and_weights_from_concatenated_runs(
 #########################################
 # required for plotting unweighted fits #
 #########################################
-# plot_unweighted_fit_B_gamma_vs_l_max
+# plot_fit_B_gamma_vs_l_max
 # fit_saved_chunked_samples_and_weights_data
 
 
@@ -396,6 +396,7 @@ def fit_saved_chunked_samples_and_weights_data(
             xtol=tol,
             max_nfev=100000,
         )
+        # print(lsqr_out_B_gamma_red)
         fit_B_gamma_red = lsqr_out_B_gamma_red.x
         fit_B_gamma = np.array(
             [fit_B_gamma_red[0], fit_B_gamma_red[1] * fit_B_gamma_red[0] / R0**2]
@@ -437,7 +438,6 @@ t_start = 0.06  # let system thermalize for t_start before sampling
 dt_sample_stats = 0.03  # dt between samples for surface tension stats
 
 dt_sample_chunked = 0.06
-Nt_chunk = 200
 l_max_save = 20  # max spherical harmonic index to compute samples for
 
 
@@ -452,6 +452,10 @@ surface_tension_stats_runs_005120 = [
     fluctuations_analysis_dir / f"fluctuations_test_005120_sweep0/run_{_:0>2}_00"
     for _ in range(16)
 ]
+surface_tension_stats_runs_005120 += [
+    fluctuations_analysis_dir / f"fluctuations_test_005120_sweep1/run_{_:0>2}_00"
+    for _ in range(16)
+]
 
 # path to save surface_tension_stats
 surface_tension_stats_path = fluctuations_analysis_dir / "surface_tension_stats.npz"
@@ -463,6 +467,10 @@ samples_and_weights_runs_001280 = [
 ]
 samples_and_weights_runs_005120 = [
     fluctuations_analysis_dir / f"fluctuations_test_005120_sweep0/run_{_:0>2}_00"
+    for _ in range(16)
+]
+samples_and_weights_runs_005120 += [
+    fluctuations_analysis_dir / f"fluctuations_test_005120_sweep1/run_{_:0>2}_00"
     for _ in range(16)
 ]
 
@@ -624,14 +632,19 @@ def save_final_chunked_samples_and_weights():
 
 
 # %%
-def plot_unweighted_fit_B_gamma_vs_l_max():
-    show_all_fits = False
+def plot_fit_B_gamma_vs_l_max():
+    show_all_fits = True
     inverse_variance_weights = False
+    show_error_bars = True
+    auto_limits = True
+
+    stiffness_y_lims = (-0.25, 0.25)
+    tension_y_lims = (-0.25, 0.25)
 
     fig_path = fluctuations_analysis_dir / "unweighted_fit_B_gamma_vs_l_max.svg"
 
     Nf = 5120
-    # chunked_samples_and_weights_path = chunked_50_samples_and_weights_path_005120
+    chunked_samples_and_weights_path = chunked_50_samples_and_weights_path_005120
     chunked_samples_and_weights_path = chunked_100_samples_and_weights_path_005120
     # chunked_samples_and_weights_path = chunked_200_samples_and_weights_path_005120
     # chunked_samples_and_weights_path = chunked_300_samples_and_weights_path_005120
@@ -639,7 +652,7 @@ def plot_unweighted_fit_B_gamma_vs_l_max():
     B_guess = 1.2
     gamma_guess = 23.0
     fit_tol = 1e-15
-    l_min = 2
+    l_min = 3
     l_max = 12
     l_max_range = np.arange(l_min, l_max + 1, dtype="int")
     surface_tension_stats = dict(np.load(surface_tension_stats_path))
@@ -661,6 +674,7 @@ def plot_unweighted_fit_B_gamma_vs_l_max():
 
     dt_sample = fits[0]["dt_sample"]
     N_chunks = fits[0]["N_chunks"]
+    Nt_chunk = fits[0]["Nt_chunk"]
 
     fit_B = np.array([fit["fit_B_gamma"][0] for fit in fits])
     fit_B_std = np.array([fit["fit_B_gamma_std"][0] for fit in fits])
@@ -736,33 +750,51 @@ def plot_unweighted_fit_B_gamma_vs_l_max():
     Nf_str = f"{Nf}"
     dt_str = f"{dt_sample:.3g}"
     N_chunks_str = f"{N_chunks}"
+    Nt_chunk_str = f"{Nt_chunk}"
+
     fig.suptitle(
         r"$N_f="
         + Nf_str
         + r"$, "
-        + r"$N_{chunks}="
+        + r"$N_{\text{runs}}="
         + N_chunks_str
+        + r"$, "
+        + r"$N_{t}="
+        + Nt_chunk_str
         + r"$, "
         + r"$dt="
         + dt_str
         + r"$"
     )
 
-    # axes[0].set_title("Stiffness")
-    axes[0].errorbar(
-        l_max_range,
-        (fit_B - B_actual) / B_actual,
-        yerr=fit_B_serror / B_actual,
-        capsize=3,
-        # label=r"$B_{\text{fit}}$",
-        marker="o",
-    )
-    # axes[0].plot(
-    #     l_max_range,
-    #     0 * l_max_range + 0.0 - 0.1,
-    #     "--",
-    #     label=r"$B$",
-    # )
+    if show_error_bars:
+        axes[0].errorbar(
+            l_max_range,
+            (fit_B - B_actual) / B_actual,
+            yerr=fit_B_serror / B_actual,
+            capsize=3,
+            # label=r"$B_{\text{fit}}$",
+            marker="o",
+        )
+        axes[1].errorbar(
+            l_max_range,
+            (fit_gamma - gamma_actual) / gamma_actual,
+            yerr=fit_gamma_serror / gamma_actual,
+            capsize=3,
+            # label=r"$\sigma_{\text{fit}}$",
+            marker="o",
+        )
+    else:
+        axes[0].plot(
+            l_max_range,
+            (fit_B - B_actual) / B_actual,
+            marker="o",
+        )
+        axes[1].plot(
+            l_max_range,
+            (fit_gamma - gamma_actual) / gamma_actual,
+            marker="o",
+        )
     if show_all_fits:
         for c in range(N_chunks):
             # if c == 0 or c==3:
@@ -779,28 +811,23 @@ def plot_unweighted_fit_B_gamma_vs_l_max():
                 "--",
                 # label=f"{c=}",
             )
-    #
-    axes[0].set_xticks([5, 10])
-    # ax.set_xticklabels(xticklabels, rotation=-45)
 
-    # axes[0].legend()
+    # axes[0].plot(
+    #     l_max_range,
+    #     0 * l_max_range + 0.0,
+    #     "--",
+    #     label=r"$B$",
+    # )
+    axes[0].set_xticks([4, 8, 12])
+    axes[1].set_xticks([4, 8, 12])
 
-    # axes[1].set_title("Tension")
-    axes[1].errorbar(
-        l_max_range,
-        (fit_gamma - gamma_actual) / gamma_actual,
-        yerr=fit_gamma_serror / gamma_actual,
-        capsize=3,
-        # label=r"$\sigma_{\text{fit}}$",
-        marker="o",
-    )
+    if not auto_limits:
+        axes[0].set_ylim(*stiffness_y_lims)
+        axes[1].set_ylim(*tension_y_lims)
 
-    axes[1].set_xticks([5, 10])
-    # axes[1].legend()
-    # plt.tight_layout()
     plt.savefig(fig_path, dpi=600)
     plt.show()
     plt.rcParams.update(rcparams0)
 
 
-plot_unweighted_fit_B_gamma_vs_l_max()
+plot_fit_B_gamma_vs_l_max()
