@@ -1,5 +1,5 @@
 executable: ./build/bin/rigid_spindle_sim
-output_dir: output/fluctuations_test_analysis_with_drift/fluctuations_test_005120_sweep1
+output_dir: output/fluctuations_test_analysis_with_drift/fluctuations_test_005120_sweep2
 run_name: run
 spindle_type: rigid_spindle
 make_movie: true

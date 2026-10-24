@@ -35,6 +35,11 @@ public:
     std::shuffle(perm.begin(), perm.end(), rng);
     return perm;
   }
+
+  int randint(int low, int high) {
+    std::uniform_int_distribution<int> dist(low, high - 1);
+    return dist(rng);
+  }
 };
 
 // class RandomNumberGenerator {

@@ -105,7 +105,193 @@ void ChromatinTestSim::print_info() {
   // envelope_.run_force_mag_test(dt, kBT, rng_);
 }
 
-void ChromatinTestSim::apply_pair_interactions() { return; }
+void ChromatinTestSim::apply_envelope_chromatin_vertex_pair_interactions() {
+
+  int Nv_env = envelope_.get_num_vertices();
+  int Nv_chr = chromatin_.get_num_vertices();
+
+  double wca_epsilon =
+      std::sqrt(envelope_.wca_epsilon_ * chromatin_.wca_epsilon_);
+  double wca_sigma = (envelope_.wca_sigma_ + chromatin_.wca_sigma_) / 2.0;
+
+  for (int v_chr = 0; v_chr < Nv_chr; v_chr++) {
+    Vec3d x_chr = chromatin_.xyz_coord_v(v_chr);
+    for (int v_env = 0; v_env < Nv_env; v_env++) {
+      Vec3d x_env = envelope_.xyz_coord_v(v_env);
+
+      Vec3d dx = x_env - x_chr;
+      Vec3d u = dx / dx.norm();
+      Vec3d x_bead = x_chr + chromatin_.bead_radius_ * u;
+
+      Vec3d F = wca_force(x_bead, x_env, wca_epsilon, wca_sigma);
+      chromatin_.force_V_.row(v_chr) += F;
+      envelope_.force_V_.row(v_env) -= F;
+    }
+  }
+}
+
+void ChromatinTestSim::apply_envelope_chromatin_face_vertex_interactions() {
+
+  int Nf = envelope_.get_num_faces();
+  int Nv_env = envelope_.get_num_vertices();
+  int Nv_chr = chromatin_.get_num_vertices();
+
+  double wca_epsilon =
+      std::sqrt(envelope_.wca_epsilon_ * chromatin_.wca_epsilon_);
+  double wca_sigma = (envelope_.wca_sigma_ + chromatin_.wca_sigma_) / 2.0;
+
+  for (int f = 0; f < Nf; f++) {
+    int h0 = envelope_.h_right_f(f);
+    int h1 = envelope_.h_next_h(h0);
+    int h2 = envelope_.h_next_h(h1);
+    int v0 = envelope_.v_origin_h(h0);
+    int v1 = envelope_.v_origin_h(h1);
+    int v2 = envelope_.v_origin_h(h2);
+
+    // pts on simplices
+    Vec3d x_v0 = envelope_.xyz_coord_v(v0);
+    Vec3d x_v1 = envelope_.xyz_coord_v(v1);
+    Vec3d x_v2 = envelope_.xyz_coord_v(v2);
+
+    // for finding bary coords
+    Vec3d b1 = x_v1 - x_v0;
+    Vec3d b2 = x_v2 - x_v0;
+
+    double g11 = b1.dot(b1);
+    double g12 = b1.dot(b2);
+    double g22 = b2.dot(b2);
+    double detg = g11 * g22 - g12 * g12;
+    double gi11 = g22 / detg;
+    double gi12 = -g12 / detg;
+    double gi22 = g11 / detg;
+
+    Vec3d bi1 = gi11 * b1 + gi12 * b2;
+    Vec3d bi2 = gi12 * b1 + gi22 * b2;
+
+    // origins and vecs tangent to edges
+    Vec3d &x_e0 = x_v0;
+    Vec3d &x_e1 = x_v1;
+    Vec3d &x_e2 = x_v2;
+    Vec3d u_e0 = x_v1 - x_v0;
+    Vec3d u_e1 = x_v2 - x_v1;
+    Vec3d u_e2 = x_v0 - x_v2;
+
+    for (int v_chr = 0; v_chr < Nv_chr; v_chr++) {
+      //
+      Vec3d x_chr = chromatin_.xyz_coord_v(v_chr);
+
+      // Check distances to vertices
+      // check v0
+      Vec3d x = x_v0;
+      double d = (x - x_chr).norm();
+      Vec3d cp = x;
+      double d_min = d;
+      // check v1
+      x = x_v1;
+      d = (x - x_chr).norm();
+      if (d < d_min) {
+        cp = x;
+        d_min = d;
+      }
+      // check v2
+      x = x_v2;
+      d = (x - x_chr).norm();
+      if (d < d_min) {
+        cp = x;
+        d_min = d;
+      }
+      // Check distances to edges
+      // check e0
+      Vec3d x_e = x_e0;
+      Vec3d u_e = u_e0;
+      x = x_e + u_e.dot(x_chr - x_e) * u_e / u_e.squaredNorm();
+      d = (x - x_chr).norm();
+      double s_e = u_e.dot(x - x_e) / u_e.squaredNorm();
+      if (d < d_min && s_e > 0.0 && s_e < 1.0) {
+        cp = x;
+        d_min = d;
+      }
+      // check e1
+      x_e = x_e1;
+      u_e = u_e1;
+      x = x_e + u_e.dot(x_chr - x_e) * u_e / u_e.squaredNorm();
+      d = (x - x_chr).norm();
+      s_e = u_e.dot(x - x_e) / u_e.squaredNorm();
+      if (d < d_min && s_e > 0.0 && s_e < 1.0) {
+        cp = x;
+        d_min = d;
+      }
+      // check e2
+      x_e = x_e2;
+      u_e = u_e2;
+      x = x_e + u_e.dot(x_chr - x_e) * u_e / u_e.squaredNorm();
+      d = (x - x_chr).norm();
+      s_e = u_e.dot(x - x_e) / u_e.squaredNorm();
+      if (d < d_min && s_e > 0.0 && s_e < 1.0) {
+        cp = x;
+        d_min = d;
+      }
+      // Check distance to face
+      Vec3d dx_v0_to_chr = x_chr - x_v0;
+      double s1_f = bi1.dot(dx_v0_to_chr);
+      double s2_f = bi2.dot(dx_v0_to_chr);
+      double s0_f = 1.0 - s1_f - s2_f;
+      x = x_v0 + s1_f * b1 + s2_f * b2;
+      d = (x - x_chr).norm();
+      if (d < d_min && s0_f > 0.0 && s0_f < 1.0 && s1_f > 0.0 && s1_f < 1.0 &&
+          s2_f > 0.0 && s2_f < 1.0) {
+        cp = x;
+        d_min = d;
+        // printf("we usin the face\n");
+      }
+
+      //
+      Vec3d dx_v0_to_cp = cp - x_v0;
+      double s1 = bi1.dot(dx_v0_to_cp);
+      double s2 = bi2.dot(dx_v0_to_cp);
+      double s0 = 1.0 - s1 - s2;
+
+      double cp_err = (s0 * x_v0 + s1 * x_v1 + s2 * x_v2 - cp).norm();
+      // printf("  s0=%.10f\n", s0);
+      // printf("  s1=%.10f\n", s1);
+      // printf("  s2=%.10f\n", s2);
+      // printf("  s err=%.10f\n", s0 + s1 + s2 - 1.0);
+      // printf("  cp err=%.10f\n", cp_err);
+      if (s0 < -1e-8) {
+        throw std::runtime_error("s0=" + std::to_string(s0));
+      }
+      if (s0 > 1.0 + 1e-8) {
+        throw std::runtime_error("s0=" + std::to_string(s0));
+      }
+      if (s1 < -1e-8) {
+        throw std::runtime_error("s1=" + std::to_string(s0));
+      }
+      if (s1 > 1.0 + 1e-8) {
+        throw std::runtime_error("s1=" + std::to_string(s0));
+      }
+      if (s2 < -1e-8) {
+        throw std::runtime_error("s2=" + std::to_string(s0));
+      }
+      if (s2 > 1.0 + 1e-8) {
+        throw std::runtime_error("s2=" + std::to_string(s0));
+      }
+
+      // force on x_chr
+      Vec3d F = wca_force(x_chr, cp, wca_epsilon, wca_sigma);
+
+      chromatin_.force_V_.row(v_chr) += F;
+      envelope_.force_V_.row(v0) -= s0 * F;
+      envelope_.force_V_.row(v1) -= s1 * F;
+      envelope_.force_V_.row(v2) -= s2 * F;
+    }
+  }
+}
+
+void ChromatinTestSim::apply_pair_interactions() {
+
+  // apply_envelope_chromatin_vertex_pair_interactions();
+  apply_envelope_chromatin_face_vertex_interactions();
+}
 
 void ChromatinTestSim::apply_internal_interactions() {
   // envelope_.test_surface_tension();

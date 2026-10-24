@@ -64,6 +64,8 @@ public:
   //
   //
   //
+  void apply_envelope_chromatin_vertex_pair_interactions();
+  void apply_envelope_chromatin_face_vertex_interactions();
   //
   void print_info();
   void clear_interactions();

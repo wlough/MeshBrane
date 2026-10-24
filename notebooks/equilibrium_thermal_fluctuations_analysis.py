@@ -557,7 +557,7 @@ def save_final_surface_tension_stats():
     return surface_tension_stats_data
 
 
-# save_final_surface_tension_stats()
+save_final_surface_tension_stats()
 # s = compute_concatenated_run_average_surface_tension_stats(
 #     surface_tension_stats_runs_005120,
 #     t_start=0.0,
@@ -626,7 +626,7 @@ def save_final_chunked_samples_and_weights():
     )
 
 
-# save_final_chunked_samples_and_weights()
+save_final_chunked_samples_and_weights()
 
 # %%
 

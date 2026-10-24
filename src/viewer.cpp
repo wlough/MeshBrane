@@ -2,6 +2,7 @@
  * @file viewer.cpp
  */
 #include "meshbrane/viewer.hpp"
+#include <cmath>
 #include <filesystem>
 
 namespace fs = std::filesystem;
@@ -187,6 +188,30 @@ void Viewer::draw_wireframe(MatrixMesh &m) {
   // }
 };
 
+// void Viewer::draw_chromatin_chain(ChromatinChain &m) {
+//
+//   auto *data = &iglviewer_.data();
+//   data->point_size = m.radius_vertex_;
+//   Eigen::Matrix<double, Eigen::Dynamic, 3> rgb_V =
+//       m.rgba_V.block(0, 0, m.rgba_V.rows(), 3);
+//   data->add_points(m.get_xyz_coord_V(), rgb_V);
+//
+//   int num_edges = m.get_num_edges();
+//   Samples3d P0{num_edges, 3};
+//   Samples3d P1{num_edges, 3};
+//   for (int e = 0; e < num_edges; e++) {
+//     int v0 = m.V_cycle_E_(e, 0);
+//     int v1 = m.V_cycle_E_(e, 1);
+//     P0.row(e) = m.xyz_coord_v(v0);
+//     P1.row(e) = m.xyz_coord_v(v1);
+//   }
+//   Eigen::Matrix<double, Eigen::Dynamic, 3> rgb_E =
+//       m.rgba_E_.block(0, 0, m.rgba_E_.rows(), 3);
+//   data->add_edges(P0, P1, rgb_E);
+//
+//   data->line_width = 2.0;
+// }
+
 void Viewer::draw_chromatin_chain(ChromatinChain &m) {
 
   auto *data = &iglviewer_.data();
@@ -195,19 +220,73 @@ void Viewer::draw_chromatin_chain(ChromatinChain &m) {
       m.rgba_V.block(0, 0, m.rgba_V.rows(), 3);
   data->add_points(m.get_xyz_coord_V(), rgb_V);
 
+  //
+  //
+  //
+  // const auto &core = iglviewer_.core();
+  //
+  // double radius = m.bead_radius_; // Physical bead radius
+  // double D = (core.camera_eye - core.camera_center).norm();
+  // double phi = core.camera_view_angle * M_PI / 180.0;
+  // double s = core.camera_zoom * core.camera_base_zoom;
+  // double H = core.viewport(3);
+  //
+  // data->point_size = radius * H * s / (D * std::tan(phi / 2.0));
+
+  //
+  //
+  //
+
+  constexpr int segments_per_edge = 16;
+  constexpr int num_turns = 4;
+  constexpr double amplitude_fraction = 0.08;
+
   int num_edges = m.get_num_edges();
-  Samples3d P0{num_edges, 3};
-  Samples3d P1{num_edges, 3};
-  for (int e = 0; e < num_edges; e++) {
+  int num_segments = num_edges * segments_per_edge;
+
+  Samples3d P0{num_segments, 3};
+  Samples3d P1{num_segments, 3};
+  Samples3d rgb{num_segments, 3};
+
+  for (int e = 0; e < num_edges; ++e) {
     int v0 = m.V_cycle_E_(e, 0);
     int v1 = m.V_cycle_E_(e, 1);
-    P0.row(e) = m.xyz_coord_v(v0);
-    P1.row(e) = m.xyz_coord_v(v1);
-  }
-  Eigen::Matrix<double, Eigen::Dynamic, 3> rgb_E =
-      m.rgba_E_.block(0, 0, m.rgba_E_.rows(), 3);
-  data->add_edges(P0, P1, rgb_E);
 
+    Eigen::Vector3d a = m.xyz_coord_v(v0).transpose();
+    Eigen::Vector3d b = m.xyz_coord_v(v1).transpose();
+
+    Eigen::Vector3d d = b - a;
+    double L = d.norm();
+    if (L < 1e-12)
+      continue;
+
+    Eigen::Vector3d axis = d / L;
+    Eigen::Vector3d u = axis.unitOrthogonal();
+    Eigen::Vector3d v = axis.cross(u);
+
+    double A = amplitude_fraction * L;
+
+    auto spring_point = [&](double t) {
+      double phase = 2.0 * M_PI * num_turns * t;
+      double radius = A * std::sin(M_PI * t);
+
+      return Eigen::Vector3d(
+          a + t * d + radius * (std::cos(phase) * u + std::sin(phase) * v));
+    };
+
+    for (int k = 0; k < segments_per_edge; ++k) {
+      double t0 = double(k) / segments_per_edge;
+      double t1 = double(k + 1) / segments_per_edge;
+
+      int idx = e * segments_per_edge + k;
+
+      P0.row(idx) = spring_point(t0).transpose();
+      P1.row(idx) = spring_point(t1).transpose();
+      rgb.row(idx) = m.rgba_E_.block(e, 0, 1, 3);
+    }
+  }
+
+  data->add_edges(P0, P1, rgb);
   data->line_width = 2.0;
 }
 
