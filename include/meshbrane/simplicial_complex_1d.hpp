@@ -1,3 +1,4 @@
+
 #pragma once
 
 /**
@@ -19,23 +20,24 @@ namespace meshbrane {
 
 class SimplicialComplex1d {
 public:
-  std::string name_{"line"};
+  std::string name_{"mesh"};
   ////////////////////////////
   // Core data structure /////
   ////////////////////////////
-  Samples3d xyz_coord_V_;   //
-  Samples2i V_cycle_E_;     //
-                            //
-  Samplesi h_out_V_;        //
-  Samplesi h_directed_E_;   //
-  Samplesi h_ghost_B_;      //
-                            //
+  Samples3d xyz_coord_V_; //
+  Samplesi h_out_V_;      //
+  //
+  Samples2i V_cycle_E_;   //
+  Samplesi h_directed_E_; //
+  //
   Samplesi v_origin_H_;     //
   Samplesi e_undirected_H_; //
-                            //
   Samplesi h_twin_H_;       //
   Samplesi h_rot_H_;        //
   ////////////////////////////
+  ////////////////////////////
+  ////////////////////////////
+  Samplesi h_ghost_B_; //
 
   /////////////////////////
   // fixed parameters /////
@@ -122,18 +124,7 @@ public:
 
   // void update_vector_field_arrows(Samples3d X, Samples3d U);
   void init_straight_chain(size_t Nv, Vec3d axis, double edge_length) {
-    // Samples3d xyz_coord_V_;   //
-    // Samples2i V_cycle_E_;     //
-    //                           //
-    // Samplesi h_out_V_;        //
-    // Samplesi h_directed_E_;   //
-    // Samplesi h_ghost_B_;      //
-    //                           //
-    // Samplesi v_origin_H_;     //
-    // Samplesi e_undirected_H_; //
-    //                           //
-    // Samplesi h_twin_H_;       //
-    // Samplesi h_rot_H_;        //
+
     size_t Ne = Nv - 1;
     size_t Nh = 2 * Ne;
     size_t Nb = 2;
@@ -182,19 +173,15 @@ public:
     // .--h0->.--h1->.--h2->.--h3->.--h4->.--h5->.--h6->.--h7->
   }
 
-  void init_single_loop(size_t Nv, Vec3d loop_center, Vec3d loop_normal,
-                        double loop_radius) {
-    printf("SimplicialComplex1d::init_single_loop\n");
+  void init_single_loop_topo(Samples3d xyz_coord_V) {
+    printf("SimplicialComplex1d::init_single_loop_topo\n");
+
+    size_t Nv = xyz_coord_V.rows();
     size_t Ne = Nv;
     size_t Nh = 2 * Ne;
     size_t Nb = 0;
 
-    printf("  Nv= %lu\n", Nv);
-    printf("  Ne= %lu\n", Ne);
-    printf("  Nb= %lu\n", Nb);
-    printf("  Nh= %lu\n", Nh);
-
-    xyz_coord_V_.resize(Nv, 3);
+    xyz_coord_V_ = xyz_coord_V;
     h_out_V_.resize(Nv);
 
     V_cycle_E_.resize(Ne, 2);
@@ -208,6 +195,90 @@ public:
     h_rot_H_.resize(Nh);
 
     Samplesi h_next_H(Nh);
+
+    // assign data to vertices
+    for (int v = 0; v < Nv; v++) {
+      int h = v;
+      h_out_V_[v] = h;
+    }
+
+    // assign data to edges
+    for (int e = 0; e < Ne; e++) {
+      int v0 = e;
+      int v1 = (v0 + 1) % Nv;
+      int h = e;
+      V_cycle_E_.row(e) << v0, v1;
+      h_directed_E_[e] = h;
+    }
+
+    // assign twin/edge data to half-edges
+    // assign vertex/next to inner/cw half-edges
+    for (int h = 0; h < Ne; h++) {
+      int v = h;
+      int e = h;
+      v_origin_H_[h] = v;
+      e_undirected_H_[h] = e;
+
+      int ht = Nh - (h + 1);
+      int hn = (h + 1) % Ne;
+      h_twin_H_[h] = ht;
+      h_twin_H_[ht] = h;
+      h_next_H[h] = hn;
+      e_undirected_H_[ht] = e;
+    }
+
+    // assign next to outer/ccw half-edges
+    for (int h = Ne; h < Nh; h++) {
+      int h_reduced = h - Ne;
+      int hn_reduced = (h_reduced + 1) % Ne;
+      int hn = hn_reduced + Ne;
+      h_next_H[h] = hn;
+    }
+
+    // assign rot to half-edges
+    for (int h = 0; h < Nh; h++) {
+      int ht = h_twin_H_[h];
+      int hr = h_next_H[ht];
+      h_rot_H_[h] = hr;
+      // int hr = h_next_H[h_twin_H_[h]];
+      // h_rot_H_[h] = hr;
+    }
+    // assign vertex to outer/ccw half-edges
+    for (int h = Ne; h < Nh; h++) {
+      int hr = h_rot_H_[h];
+      int v = v_origin_H_[hr];
+      v_origin_H_[h] = v;
+    }
+  }
+
+  void init_single_loop(size_t Nv, Vec3d loop_center, Vec3d loop_normal,
+                        double loop_radius) {
+    printf("SimplicialComplex1d::init_single_loop\n");
+    // size_t Ne = Nv;
+    // size_t Nh = 2 * Ne;
+    // size_t Nb = 0;
+
+    // printf("  Nv= %lu\n", Nv);
+    // printf("  Ne= %lu\n", Ne);
+    // printf("  Nb= %lu\n", Nb);
+    // printf("  Nh= %lu\n", Nh);
+
+    // xyz_coord_V_.resize(Nv, 3);
+    // h_out_V_.resize(Nv);
+    //
+    // V_cycle_E_.resize(Ne, 2);
+    // h_directed_E_.resize(Ne);
+    //
+    // h_ghost_B_.resize(Nb);
+    //
+    // v_origin_H_.resize(Nh);
+    // e_undirected_H_.resize(Nh);
+    // h_twin_H_.resize(Nh);
+    // h_rot_H_.resize(Nh);
+    //
+    // Samplesi h_next_H(Nh);
+
+    Samples3d xyz_coord_V(Nv, 3);
 
     printf("SimplicialComplex1d::init_single_loop --- 0\n");
     printf("  define loop frame\n");
@@ -232,101 +303,209 @@ public:
     for (int v = 0; v < Nv; v++) {
       int h = v;
       double phi_v = 2 * M_PI * v / Nv;
-      xyz_coord_V_.row(v) = loop_center + loop_radius * (std::cos(phi_v) * ex +
-                                                         std::sin(phi_v) * ey);
-      h_out_V_[v] = h;
+      xyz_coord_V.row(v) = loop_center + loop_radius * (std::cos(phi_v) * ex +
+                                                        std::sin(phi_v) * ey);
+      // h_out_V_[v] = h;
     }
-    printf("SimplicialComplex1d::init_single_loop --- 3\n");
-    printf("  assign data to edges\n");
-    // assign data to edges
-    for (int e = 0; e < Ne; e++) {
-      int v0 = e;
-      int v1 = (v0 + 1) % Nv;
-      int h = e;
-      printf("    e= %d\n", e);
-      printf("    v0, v1= %d, %d\n", v0, v1);
-      V_cycle_E_.row(e) << v0, v1;
-      h_directed_E_[e] = h;
-    }
-    printf("SimplicialComplex1d::init_single_loop --- 4\n");
-    printf("  assign twin/edge data to half-edges\n");
-    printf("  assign vertex/next to inner/cw half-edges\n");
-    // assign twin/edge data to half-edges
-    // assign vertex/next to inner/cw half-edges
-    for (int h = 0; h < Ne; h++) {
-      int v = h;
-      int e = h;
-      v_origin_H_[h] = v;
-      e_undirected_H_[h] = e;
+    init_single_loop_topo(xyz_coord_V);
+    // printf("SimplicialComplex1d::init_single_loop --- 3\n");
+    // printf("  assign data to edges\n");
+    // // assign data to edges
+    // for (int e = 0; e < Ne; e++) {
+    //   int v0 = e;
+    //   int v1 = (v0 + 1) % Nv;
+    //   int h = e;
+    //   printf("    e= %d\n", e);
+    //   printf("    v0, v1= %d, %d\n", v0, v1);
+    //   V_cycle_E_.row(e) << v0, v1;
+    //   h_directed_E_[e] = h;
+    // }
+    // printf("SimplicialComplex1d::init_single_loop --- 4\n");
+    // printf("  assign twin/edge data to half-edges\n");
+    // printf("  assign vertex/next to inner/cw half-edges\n");
+    // // assign twin/edge data to half-edges
+    // // assign vertex/next to inner/cw half-edges
+    // for (int h = 0; h < Ne; h++) {
+    //   int v = h;
+    //   int e = h;
+    //   v_origin_H_[h] = v;
+    //   e_undirected_H_[h] = e;
+    //
+    //   int ht = Nh - (h + 1);
+    //   int hn = (h + 1) % Ne;
+    //   h_twin_H_[h] = ht;
+    //   h_twin_H_[ht] = h;
+    //   h_next_H[h] = hn;
+    //   e_undirected_H_[ht] = e;
+    //
+    //   printf("    h = %d\n", h);
+    //   printf("    ht = %d\n", ht);
+    //   printf("    hn = %d\n", hn);
+    //   printf("    v = %d\n", v);
+    //   printf("    e = %d\n", e);
+    // }
+    // printf("SimplicialComplex1d::init_single_loop --- 5\n");
+    // printf("  assign next to outer/ccw half-edges\n");
+    // // assign next to outer/ccw half-edges
+    // for (int h = Ne; h < Nh; h++) {
+    //   int h_reduced = h - Ne;
+    //   int hn_reduced = (h_reduced + 1) % Ne;
+    //   int hn = hn_reduced + Ne;
+    //   h_next_H[h] = hn;
+    //
+    //   printf("    h = %d\n", h);
+    //   printf("    hn = %d\n", hn);
+    // }
+    //
+    // printf("  h_twin_H_ data\n");
+    // for (int h = 0; h < Nh; h++) {
+    //   int ht = h_twin_H_[h];
+    //   printf("    ht = %d\n", ht);
+    // }
+    // printf("  h_rot_H_ data\n");
+    // for (int h = 0; h < Nh; h++) {
+    //   int hr = h_rot_H_[h];
+    //   printf("    hr = %d\n", hr);
+    // }
+    // printf("  h_next_H_ data\n");
+    // for (int h = 0; h < Nh; h++) {
+    //   int hn = h_next_H[h];
+    //   printf("    hn = %d\n", hn);
+    // }
+    //
+    // printf("SimplicialComplex1d::init_single_loop --- 6\n");
+    // printf("  assign rot to half-edges\n");
+    // // assign rot to half-edges
+    // for (int h = 0; h < Nh; h++) {
+    //   printf("    h= %d\n", h);
+    //   int ht = h_twin_H_[h];
+    //   printf("    ht= %d\n", ht);
+    //   int hr = h_next_H[ht];
+    //   printf("    hr= %d\n", ht);
+    //   h_rot_H_[h] = hr;
+    //   // int hr = h_next_H[h_twin_H_[h]];
+    //   // h_rot_H_[h] = hr;
+    // }
+    // printf("SimplicialComplex1d::init_single_loop --- 7\n");
+    // printf("  assign vertex to outer/ccw half-edges\n");
+    // // assign vertex to outer/ccw half-edges
+    // for (int h = Ne; h < Nh; h++) {
+    //   int hr = h_rot_H_[h];
+    //   int v = v_origin_H_[hr];
+    //   printf("    h= %d\n", h);
+    //   printf("    hr= %d\n", hr);
+    //   printf("    v= %d\n", v);
+    //   v_origin_H_[h] = v;
+    // }
+    // printf("SimplicialComplex1d::init_single_loop - done\n");
+    // check_he_matrices();
+  }
 
-      int ht = Nh - (h + 1);
-      int hn = (h + 1) % Ne;
-      h_twin_H_[h] = ht;
-      h_twin_H_[ht] = h;
-      h_next_H[h] = hn;
-      e_undirected_H_[ht] = e;
+  void init_point_topo(Vec3d xyz) {
+    int Nv = 1;
+    int Ne = 0;
+    int Nb = 1;
+    int Nh = 1;
 
-      printf("    h = %d\n", h);
-      printf("    ht = %d\n", ht);
-      printf("    hn = %d\n", hn);
-      printf("    v = %d\n", v);
-      printf("    e = %d\n", e);
-    }
-    printf("SimplicialComplex1d::init_single_loop --- 5\n");
-    printf("  assign next to outer/ccw half-edges\n");
-    // assign next to outer/ccw half-edges
-    for (int h = Ne; h < Nh; h++) {
-      int h_reduced = h - Ne;
-      int hn_reduced = (h_reduced + 1) % Ne;
-      int hn = hn_reduced + Ne;
-      h_next_H[h] = hn;
+    xyz_coord_V_.resize(Nv, 3);
+    h_out_V_.resize(Nv);
 
-      printf("    h = %d\n", h);
-      printf("    hn = %d\n", hn);
-    }
+    V_cycle_E_.resize(Ne, 2);
+    h_directed_E_.resize(Ne);
 
-    printf("  h_twin_H_ data\n");
-    for (int h = 0; h < Nh; h++) {
-      int ht = h_twin_H_[h];
-      printf("    ht = %d\n", ht);
-    }
-    printf("  h_rot_H_ data\n");
-    for (int h = 0; h < Nh; h++) {
-      int hr = h_rot_H_[h];
-      printf("    hr = %d\n", hr);
-    }
-    printf("  h_next_H_ data\n");
-    for (int h = 0; h < Nh; h++) {
-      int hn = h_next_H[h];
-      printf("    hn = %d\n", hn);
-    }
+    h_ghost_B_.resize(Nb);
 
-    printf("SimplicialComplex1d::init_single_loop --- 6\n");
-    printf("  assign rot to half-edges\n");
-    // assign rot to half-edges
-    for (int h = 0; h < Nh; h++) {
-      printf("    h= %d\n", h);
-      int ht = h_twin_H_[h];
-      printf("    ht= %d\n", ht);
-      int hr = h_next_H[ht];
-      printf("    hr= %d\n", ht);
-      h_rot_H_[h] = hr;
-      // int hr = h_next_H[h_twin_H_[h]];
-      // h_rot_H_[h] = hr;
+    v_origin_H_.resize(Nh);
+    e_undirected_H_.resize(Nh);
+    h_twin_H_.resize(Nh);
+    h_rot_H_.resize(Nh);
+
+    int v = 0, h = 0, b = 0;
+    xyz_coord_V_.row(v) = xyz;
+    h_out_V_[v] = h;
+
+    h_ghost_B_[b] = h;
+
+    v_origin_H_[h] = v;
+    e_undirected_H_[h] = -(b + 1);
+    h_twin_H_[h] = h;
+    h_rot_H_[h] = h;
+  }
+
+  void init_edge_topo(Samples3d xyz_coord_V) {
+    int Nv = xyz_coord_V.rows();
+    if (Nv != 2) {
+      throw std::out_of_range("xyz_coord_V must contain exactly 2 points");
     }
-    printf("SimplicialComplex1d::init_single_loop --- 7\n");
-    printf("  assign vertex to outer/ccw half-edges\n");
-    // assign vertex to outer/ccw half-edges
-    for (int h = Ne; h < Nh; h++) {
-      int hr = h_rot_H_[h];
-      int v = v_origin_H_[hr];
-      printf("    h= %d\n", h);
-      printf("    hr= %d\n", hr);
-      printf("    v= %d\n", v);
-      v_origin_H_[h] = v;
+    int Ne = 1;
+    int Nb = 2;
+    int Nh = 2 * Ne + Nb;
+
+    xyz_coord_V_.resize(Nv, 3);
+    h_out_V_.resize(Nv);
+
+    V_cycle_E_.resize(Ne, 2);
+    h_directed_E_.resize(Ne);
+
+    h_ghost_B_.resize(Nb);
+
+    v_origin_H_.resize(Nh);
+    e_undirected_H_.resize(Nh);
+    h_twin_H_.resize(Nh);
+    h_rot_H_.resize(Nh);
+
+    int v0 = 0, v1 = 1;
+    int e0 = 0;
+    int b0 = 0, b1 = 1;
+    int h0 = 0, h1 = 1, h2 = 2, h3 = 3;
+
+    xyz_coord_V_ = xyz_coord_V;
+    h_out_V_[v0] = h0;
+    h_out_V_[v1] = h1;
+
+    V_cycle_E_.row(e0) << v0, v1;
+    h_directed_E_[e0] = h0;
+
+    h_ghost_B_[b0] = h2;
+    h_ghost_B_[b1] = h3;
+
+    v_origin_H_[h0] = v0;
+    e_undirected_H_[h0] = e0;
+    h_twin_H_[h0] = h1;
+    h_rot_H_[h0] = h2;
+
+    v_origin_H_[h1] = v1;
+    e_undirected_H_[h1] = e0;
+    h_twin_H_[h1] = h0;
+    h_rot_H_[h1] = h3;
+
+    v_origin_H_[h2] = v0;
+    e_undirected_H_[h2] = -(b0 + 1);
+    h_twin_H_[h2] = h2;
+    h_rot_H_[h2] = h0;
+
+    v_origin_H_[h3] = v1;
+    e_undirected_H_[h3] = -(b1 + 1);
+    h_twin_H_[h3] = h3;
+    h_rot_H_[h3] = h1;
+  }
+
+  void init_fib_sphere(size_t Nv, Vec3d center, double radius) {
+
+    Samples3d xyz_coord_V(Nv, 3);
+
+    double ga = M_PI * (3.0 - std::sqrt(5.0)); // golden angle
+
+    for (int v = 0; v < Nv; v++) {
+      double z = 1.0 - 2.0 * v / (Nv - 1); // -1<=z<=1
+      double r = std::sqrt(1.0 - z * z);   // cylindrical radius at z
+      double theta = ga * v;               // angle
+      double x = r * std::cos(theta);
+      double y = r * std::sin(theta);
+      Vec3d xyz{x, y, z};
+      xyz_coord_V.row(v) = center + radius * xyz;
     }
-    printf("SimplicialComplex1d::init_single_loop - done\n");
-    check_he_matrices();
+    init_single_loop_topo(xyz_coord_V);
   }
 
   void check_he_matrices() const {
@@ -370,7 +549,8 @@ public:
         throw std::out_of_range("v_origin_H_[h]: Vertex index out of range");
       }
       int e_undirected = e_undirected_H_[h];
-      if (e_undirected < 0 || e_undirected >= Ne) {
+      int b = -(e_undirected + 1);
+      if ((e_undirected < 0 && b >= Nb) || e_undirected >= Ne) {
         std::cout << "h=" << h << '\n';
         std::cout << "e_undirected=" << e_undirected << '\n';
         throw std::out_of_range("e_undirected_H_[h]: Edge index out of range");
@@ -537,13 +717,62 @@ public:
   Vec3d xyz_coord_v(int v) const { return xyz_coord_V_.row(v); }
   int h_out_v(int v) const { return h_out_V_[v]; }
   int v_origin_h(int h) const { return v_origin_H_[h]; }
+  /**
+   * @brief The unique dart with a different vertex and the same edge
+   * h=(v, e) --> h'=(v', e). Orbit is the set of all (2) darts through a fixed
+   * edge.
+   *
+   * @param h
+   *
+   * ```
+   * \                     /     \                     /
+   *  \      -h->         /       \        e          /
+   *   v-----------------v'   -->  v-----------------v'
+   *  /        e           \      /      <-h'-         \
+   * /                      \    /                      \
+   *
+   * ```
+   */
   int h_twin_h(int h) const { return h_twin_H_[h]; }
+  /**
+   * @brief h=(v, e) --> h'=(v, e') with e'=e at boundaries. Orbit is the set of
+   * all darts through a fixed vertex.
+   *
+   * @param h
+   *
+   * ```
+   * \                      \
+   *  \                      \
+   *   \                      \
+   *    \  -h->  e             \
+   *     v---------   -->       v---------
+   *    /    e'                / /
+   *   /                   e' / h'
+   *  /                      / /_
+   * /                      /
+   *
+   *
+   *   -h->  e           -h->  e
+   * v---------  -->   v---------
+   *
+   *
+   * ```
+   */
   int h_rot_h(int h) const { return h_rot_H_[h]; }
   int h_ghost_b(int b) const { return h_ghost_B_[b]; }
   int h_directed_e(int e) const { return h_directed_E_[e]; }
   int e_undirected_h(int h) const { return e_undirected_H_[h]; }
 
   int h_next_h(int h) const { return h_rot_H_[h_twin_H_[h]]; }
+  int h_unrot_h(int h) const {
+    int h0 = h;
+    int h1 = h_rot_H_[h0];
+    while (h1 != h) {
+      h0 = h1;
+      h1 = h_rot_H_[h1];
+    }
+    return h0;
+  }
 
   ///////////////////////////////////////////////////////
   // Predicates /////////////////////////////////////////
@@ -554,7 +783,50 @@ public:
   bool some_boundary_contains_v(int v) const {
     int h = h_out_V_[v];
     int hr = h_rot_H_[h];
-    return (h == hr);
+    return h == hr;
+  }
+
+  bool is_ghost_h(int h) {
+    // return e_undirected_H_[h] < 0;
+    return h_twin_H_[h] == h;
+  }
+
+  bool is_isolated_v(int v) {
+    int h = h_out_V_[v];
+    return h == h_rot_H_[h];
+  }
+
+  bool is_boundary_v(int v) {
+    int h = h_out_V_[v];
+    int hr = h_rot_H_[h];
+    return (is_ghost_h(h) || is_ghost_h(hr));
+  }
+
+  bool is_nonisolated_boundary_v(int v) {
+    int h = h_out_V_[v];
+    int hr = h_rot_H_[h];
+    return (hr != h && (is_ghost_h(h) || is_ghost_h(hr)));
+  }
+
+  bool adjacent_vv(int v0, int v1) {
+    int h_start = h_out_V_[v0];
+    int h = h_start;
+
+    do {
+      int ht = h_twin_H_[h];
+      int v = v_origin_H_[ht];
+      if (v == v1) {
+        return true;
+      }
+      h = h_rot_H_[h];
+    } while (h != h_start);
+    return false;
+  }
+
+  bool incident_ve(int v, int e) {
+    int h0 = h_directed_E_[e];
+    int h1 = h_twin_H_[h0];
+    return (v_origin_H_[h0] == v || v_origin_H_[h1] == v);
   }
 
   ///////////////////////////////////////////////////////
@@ -586,6 +858,25 @@ public:
     }
   }
 
+  int valance_v(int v) {
+    int valance = 0;
+    // int h_start = h_out_V_[v];
+    // int h0 = h_start;
+    // int h1 = h_rot_H_[h0];
+    // while (h1 != h_start) {
+    //   valance++;
+    //   h0 = h1;
+    //   h1 = h_rot_H_[h1];
+    // }
+    int h_start = h_out_V_[v];
+    int h = h_rot_H_[h_start];
+    while (h != h_start) {
+      valance++;
+      h = h_rot_H_[h];
+    }
+    return valance;
+  }
+
   /**
    * @brief Divides edge by adding a new vertex at its midpoint
    *
@@ -606,7 +897,7 @@ public:
    *
    * ```
    */
-  void split_edge(int e) {
+  int split_edge(int e) {
 
     int Nv0 = get_num_vertices();
     int Ne0 = get_num_edges();
@@ -681,6 +972,607 @@ public:
     rgba_H.conservativeResize(Nh, 4);
     rgba_H.row(h2) = rgba_half_edge_;
     rgba_H.row(h3) = rgba_half_edge_;
+    return h3;
+  }
+
+  // *       \   _               \   _
+  // *     \  \ \              \  \ \
+  // *     h1  \ h0            h1  \ h0   e1
+  // *      _\  \ \ -h2->       _\  \ \  -h2->      -h4->
+  // *          v0          -->     v0-----------v1
+  // *                                   <-h3-
+
+  /**
+   * @brief grow new edge incident on a vertex v
+   *
+   * @param h
+   *
+   * ```
+   * With v0=v
+   *
+   * valance(v0) > 1
+   *
+   *  \   _         \   _
+   *   \ \           \ \
+   *    \ h0          \ h0   e2
+   *     \ \           \ \  -h2->
+   *     v0    -->     v0-----------v1 -h4>
+   *     / /           / /  <-h3-
+   *    / h1          / h1
+   *   / /_          / /_
+   *  /             /
+   *
+   * valance(v0) = 1
+   *
+   * \        e0                      \     e0       e1
+   *  \      -h1->         -h2->       \   -h1->    -h3->   -h2->
+   *   v1----------------v0       -->   v1-------v2-------v0
+   *  /      <-h0-                     /   <-h4-    <-h0-
+   * /                                /
+   *
+   *
+   *
+   * valance(v0) = 0
+   *                          e0
+   *   b0             b0     -h1->       b1
+   * <-h0-v0   -->  <-h0-v0-----------v1-h3->
+   *                         <-h2-
+   * ```
+   */
+  int seed_edge(int v, Vec3d direction) {
+    // printf("SimplicialComplex1d::seed_edge\n");
+    int Nv0 = get_num_vertices();
+    int Ne0 = get_num_edges();
+    int Nb0 = get_num_boundaries();
+    int Nh0 = get_num_half_edges();
+
+    if (is_isolated_v(v)) {
+      // valance(v0) = 0 case
+      int Nv = Nv0 + 1;
+      int Ne = Ne0 + 1;
+      int Nb = Nb0 + 1;
+      int Nh = Nh0 + 3;
+
+      xyz_coord_V_.conservativeResize(Nv, 3);
+      h_out_V_.conservativeResize(Nv);
+
+      V_cycle_E_.conservativeResize(Ne, 2);
+      h_directed_E_.conservativeResize(Ne);
+
+      h_ghost_B_.conservativeResize(Nb);
+
+      v_origin_H_.conservativeResize(Nh);
+      e_undirected_H_.conservativeResize(Nh);
+      h_twin_H_.conservativeResize(Nh);
+      h_rot_H_.conservativeResize(Nh);
+
+      // existing elements
+      int v0 = v;
+      int h0 = h_out_V_[v0];
+      int b0 = -(e_undirected_H_[h0]);
+      // new elements
+      int v1 = Nv0;
+      int e0 = Ne0;
+      int h1 = Nh0, h2 = Nh0 + 1, h3 = Nh0 + 2;
+      int b1 = Nb0;
+
+      // update existing elements
+      h_out_V_[v0] = h1;
+      h_rot_H_[h0] = h1;
+      // assign data to new elements
+      xyz_coord_V_.row(v1) = xyz_coord_v(v0) + direction;
+      h_out_V_[v1] = h2;
+
+      V_cycle_E_.row(e0) << v0, v1;
+      h_directed_E_[e0] = h1;
+
+      h_ghost_B_[b1] = h3;
+
+      v_origin_H_[h1] = v0;
+      e_undirected_H_[h1] = e0;
+      h_twin_H_[h1] = h2;
+      h_rot_H_[h1] = h0;
+
+      v_origin_H_[h2] = v1;
+      e_undirected_H_[h2] = e0;
+      h_twin_H_[h2] = h1;
+      h_rot_H_[h2] = h3;
+
+      v_origin_H_[h3] = v1;
+      e_undirected_H_[h3] = -(b1 + 1);
+      h_twin_H_[h3] = h3;
+      h_rot_H_[h3] = h2;
+
+      radius_V.conservativeResize(Nv);
+      radius_V[v1] = radius_vertex_;
+      rgba_V.conservativeResize(Nv, 4);
+      rgba_V.row(v1) = rgba_vertex_;
+
+      rgba_E_.conservativeResize(Ne, 4);
+      rgba_E_.row(e0) = rgba_edge_;
+
+      rgba_H.conservativeResize(Nh, 4);
+      rgba_H.row(h1) = rgba_half_edge_;
+      rgba_H.row(h2) = rgba_half_edge_;
+      rgba_H.row(h3) = rgba_half_edge_;
+      // printf("SimplicialComplex1d::seed_edge - done\n");
+      return h2;
+    }
+    if (is_boundary_v(v)) {
+      // valance(v0) = 1 case
+      int v0 = v;
+      int v2 = Nv0;
+
+      int h0 = h_out_v(v0);
+      if (is_ghost_h(h0)) {
+        h0 = h_rot_h(h0);
+      }
+      int e0 = e_undirected_h(h0);
+
+      int h3 = split_edge(e0); // add new vertex at midpoint
+
+      // set coords of new midpoint vertex to old endpoint
+      // and update endpoint coords
+      xyz_coord_V_.row(v2) = xyz_coord_v(v0);
+      xyz_coord_V_.row(v0) = xyz_coord_v(v0) + direction;
+      return h3;
+    }
+
+    int Nv = Nv0 + 1;
+    int Ne = Ne0 + 1;
+    int Nb = Nb0 + 1;
+    int Nh = Nh0 + 3;
+
+    xyz_coord_V_.conservativeResize(Nv, 3);
+    h_out_V_.conservativeResize(Nv);
+
+    V_cycle_E_.conservativeResize(Ne, 2);
+    h_directed_E_.conservativeResize(Ne);
+
+    h_ghost_B_.conservativeResize(Nb);
+
+    v_origin_H_.conservativeResize(Nh);
+    e_undirected_H_.conservativeResize(Nh);
+    h_twin_H_.conservativeResize(Nh);
+    h_rot_H_.conservativeResize(Nh);
+
+    // existing elements
+    int v0 = v;
+    int h0 = h_out_V_[v0];
+    int h1 = h_rot_H_[h0];
+    // new elements
+    int v1 = Nv0;
+    int e0 = Ne0;
+    int b0 = Nb0;
+    int h2 = Nh0, h3 = Nh0 + 1, h4 = Nh0 + 2;
+    // update existing elements
+    h_rot_H_[h0] = h2;
+    // assign data to new elements
+    xyz_coord_V_.row(v1) = xyz_coord_v(v0) + direction;
+    h_out_V_[v1] = h3;
+
+    V_cycle_E_.row(e0) << v0, v1;
+    h_directed_E_[e0] = h2;
+
+    h_ghost_B_[b0] = h4;
+
+    v_origin_H_[h2] = v0;
+    e_undirected_H_[h2] = e0;
+    h_twin_H_[h2] = h3;
+    h_rot_H_[h2] = h1;
+
+    v_origin_H_[h3] = v1;
+    e_undirected_H_[h3] = e0;
+    h_twin_H_[h3] = h2;
+    h_rot_H_[h3] = h4;
+
+    v_origin_H_[h4] = v1;
+    e_undirected_H_[h4] = -(b0 + 1);
+    h_twin_H_[h4] = h4;
+    h_rot_H_[h4] = h3;
+
+    radius_V.conservativeResize(Nv);
+    radius_V[v1] = radius_vertex_;
+    rgba_V.conservativeResize(Nv, 4);
+    rgba_V.row(v1) = rgba_vertex_;
+
+    rgba_E_.conservativeResize(Ne, 4);
+    rgba_E_.row(e0) = rgba_edge_;
+
+    rgba_H.conservativeResize(Nh, 4);
+    rgba_H.row(h2) = rgba_half_edge_;
+    rgba_H.row(h3) = rgba_half_edge_;
+    rgba_H.row(h4) = rgba_half_edge_;
+    return h3;
+  }
+
+  int add_isolated_vertex(Vec3d xyz) {
+    // printf("***************** 0");
+    int Nv0 = get_num_vertices();
+    int Nb0 = get_num_boundaries();
+    int Nh0 = get_num_half_edges();
+
+    int Nv = Nv0 + 1;
+    int Nb = Nb0 + 1;
+    int Nh = Nh0 + 1;
+
+    xyz_coord_V_.conservativeResize(Nv, 3);
+    h_out_V_.conservativeResize(Nv);
+
+    h_ghost_B_.conservativeResize(Nb);
+
+    v_origin_H_.conservativeResize(Nh);
+    e_undirected_H_.conservativeResize(Nh);
+    h_twin_H_.conservativeResize(Nh);
+    h_rot_H_.conservativeResize(Nh);
+
+    int v = Nv0;
+    int b = Nb0;
+    int h = Nh0;
+    // printf("***************** 1");
+    xyz_coord_V_.row(v) = xyz;
+    h_out_V_[v] = h;
+
+    h_ghost_B_[b] = h;
+
+    v_origin_H_[h] = v;
+    e_undirected_H_[h] = -(b + 1);
+    h_twin_H_[h] = h;
+    h_rot_H_[h] = h;
+
+    // printf("***************** 2");
+
+    radius_V.conservativeResize(Nv);
+    radius_V[v] = radius_vertex_;
+    rgba_V.conservativeResize(Nv, 4);
+    rgba_V.row(v) = rgba_vertex_;
+    rgba_H.conservativeResize(Nh, 4);
+    rgba_H.row(h) = rgba_half_edge_;
+    rgba_H.row(h) = rgba_half_edge_;
+    rgba_H.row(h) = rgba_half_edge_;
+    // printf("***************** 3");
+    return h;
+  }
+
+  /**
+   * @brief Add new edge between non-adjacent vertices
+   *
+   * @param f
+   *
+   * ```
+   * 2 interior vertices
+   *
+   * h0_              _h3     h0_      e0      _h3
+   *   \              /         \     -h4->    /
+   *   v0            v1   -->   v0------------v1
+   *   /_            _\         /_    <-h5-   _\
+   * h2                h1     h2                h1
+   *
+   *
+   * ```
+   */
+  int add_edge_between_vertices(int v0, int v1) {
+
+    if (adjacent_vv(v0, v1)) {
+      return -1;
+    }
+
+    bool v0_is_non_isolated_boundary = is_nonisolated_boundary_v(v0);
+    bool v1_is_non_isolated_boundary = is_nonisolated_boundary_v(v1);
+
+    // t/t covers valance 1/1
+    if (v0_is_non_isolated_boundary && v1_is_non_isolated_boundary) {
+      int Ne0 = get_num_edges();
+      int Nb0 = get_num_boundaries();
+      int Ne = Ne0 + 1;
+      int Nb = Nb0 - 2;
+
+      int h0 = h_out_V_[v0];
+      if (!is_ghost_h(h0)) {
+        h0 = h_rot_H_[h0];
+      }
+      int b_v0 = e_undirected_H_[h0];
+      b_v0 = -(b_v0 + 1);
+      int b0 = Nb0 - 2;
+      swap_boundary_indices(b0, b_v0);
+
+      int h1 = h_out_V_[v1];
+      if (!is_ghost_h(h1)) {
+        h1 = h_rot_H_[h1];
+      }
+      int b_v1 = e_undirected_H_[h1];
+      b_v1 = -(b_v1 + 1);
+      int b1 = Nb0 - 1;
+      swap_boundary_indices(b1, b_v1);
+
+      // new elements
+      int e0 = Ne0;
+      h_ghost_B_.conservativeResize(Nb);
+      h_directed_E_.conservativeResize(Ne);
+      V_cycle_E_.conservativeResize(Ne, 2);
+
+      // update existing
+      e_undirected_H_[h0] = e0;
+      h_twin_H_[h0] = h1;
+      e_undirected_H_[h1] = e0;
+      h_twin_H_[h1] = h0;
+      // assign new
+      h_directed_E_[e0] = h0;
+      V_cycle_E_.row(e0) << v0, v1;
+      // visual data
+      rgba_E_.conservativeResize(Ne, 4);
+      rgba_E_.row(e0) = rgba_edge_;
+      return h0;
+    }
+
+    if (v0_is_non_isolated_boundary) {
+      std::swap(v0, v1);
+      std::swap(v0_is_non_isolated_boundary, v1_is_non_isolated_boundary);
+    }
+    // f/t covers valance 0/1,2+/1
+    if (!v0_is_non_isolated_boundary && v1_is_non_isolated_boundary) {
+      int Ne0 = get_num_edges();
+      int Nb0 = get_num_boundaries();
+      int Nh0 = get_num_half_edges();
+      int Ne = Ne0 + 1;
+      int Nb = Nb0 - 1;
+      int Nh = Nh0 + 1;
+
+      int h0 = h_out_V_[v0];
+      int h2 = h_rot_h(h0); // = h0 for isolated v0
+
+      int h1 = h_out_V_[v1];
+      if (!is_ghost_h(h1)) {
+        h1 = h_rot_H_[h1];
+      }
+      int b1 = e_undirected_H_[h1];
+      b1 = -(b1 + 1);
+      swap_boundary_indices(b1, Nb0 - 1);
+
+      // new elements
+      int e0 = Ne0;
+      int h3 = Nh0;
+      h_directed_E_.conservativeResize(Ne);
+      V_cycle_E_.conservativeResize(Ne, 2);
+      h_ghost_B_.conservativeResize(Nb);
+      v_origin_H_.conservativeResize(Nh);
+      e_undirected_H_.conservativeResize(Nh);
+      h_twin_H_.conservativeResize(Nh);
+      h_rot_H_.conservativeResize(Nh);
+      // update existing
+      h_rot_H_[h0] = h3;
+      e_undirected_H_[h1] = e0;
+      h_twin_H_[h1] = h3;
+      // assign new
+      V_cycle_E_.row(e0) << v0, v1;
+      h_directed_E_[e0] = h1;
+      v_origin_H_[h3] = v0;
+      e_undirected_H_[h3] = e0;
+      h_twin_H_[h3] = h1;
+      h_rot_H_[h3] = h2;
+      // visual data
+      rgba_E_.conservativeResize(Ne, 4);
+      rgba_E_.row(e0) = rgba_edge_;
+      rgba_H.conservativeResize(Nh, 4);
+      rgba_H.row(h3) = rgba_half_edge_;
+      return h3;
+    }
+
+    // f/f covers valance 0/0,0/2+,2+/2+
+    int Ne0 = get_num_edges();
+    int Nh0 = get_num_half_edges();
+    int Ne = Ne0 + 1;
+    int Nh = Nh0 + 2;
+
+    int h0 = h_out_V_[v0];
+    int h1 = h_out_V_[v1];
+    int h2 = h_rot_h(h0); // = h0 for isolated v0
+    int h3 = h_rot_h(h1); // = h1 for isolated v1
+
+    // new elements
+    int h4 = Nh0, h5 = Nh0 + 1;
+    int e0 = Ne0;
+    h_directed_E_.conservativeResize(Ne);
+    V_cycle_E_.conservativeResize(Ne, 2);
+    v_origin_H_.conservativeResize(Nh);
+    e_undirected_H_.conservativeResize(Nh);
+    h_twin_H_.conservativeResize(Nh);
+    h_rot_H_.conservativeResize(Nh);
+
+    // update existing
+    h_rot_H_[h0] = h4;
+    h_rot_H_[h1] = h5;
+    // assign new
+    V_cycle_E_.row(e0) << v0, v1;
+    h_directed_E_[e0] = h4;
+
+    v_origin_H_[h4] = v0;
+    e_undirected_H_[h4] = e0;
+    h_twin_H_[h4] = h5;
+    h_rot_H_[h4] = h2;
+
+    v_origin_H_[h5] = v1;
+    e_undirected_H_[h5] = e0;
+    h_twin_H_[h5] = h4;
+    h_rot_H_[h5] = h3;
+    // visual data
+    rgba_E_.conservativeResize(Ne, 4);
+    rgba_E_.row(e0) = rgba_edge_;
+    rgba_H.conservativeResize(Nh, 4);
+    rgba_H.row(h4) = rgba_half_edge_;
+    rgba_H.row(h5) = rgba_half_edge_;
+    return h4;
+  }
+
+  void swap_vertex_indices(int v0, int v1) {
+
+    bool adjacent = false;
+    int h01;
+
+    // find and update things that output v0/v1 indices
+    // EXCEPT edge and half-edges incident on both vertices
+    // v0->v1
+    int h_start = h_out_V_[v0];
+    int h = h_start;
+    do {
+      // check other vertex on this edge
+      int ht = h_twin_H_[h];
+      if (v_origin_H_[ht] == v1) {
+        adjacent = true;
+        h01 = h;
+        h = h_rot_H_[h];
+        continue;
+      }
+      v_origin_H_[h] = v1;
+      int e = e_undirected_H_[h];
+      if (e < 0) {
+        h = h_rot_H_[h];
+        continue;
+      }
+      if (V_cycle_E_(e, 0) == v0) {
+        V_cycle_E_(e, 0) = v1;
+      } else {
+        V_cycle_E_(e, 1) = v1;
+      }
+      h = h_rot_H_[h];
+    } while (h != h_start);
+    // v1->v0
+    h_start = h_out_V_[v1];
+    h = h_start;
+    do {
+      int ht = h_twin_H_[h];
+      if (ht == h01) {
+        h = h_rot_H_[h];
+        continue;
+      }
+      v_origin_H_[h] = v0;
+      int e = e_undirected_H_[h];
+      if (e < 0) {
+        h = h_rot_H_[h];
+        continue;
+      }
+      int i = V_cycle_E_(e, 0);
+      if (V_cycle_E_(e, 0) == v1) {
+        V_cycle_E_(e, 0) = v0;
+      } else {
+        V_cycle_E_(e, 1) = v0;
+      }
+      h = h_rot_H_[h];
+    } while (h != h_start);
+
+    if (adjacent) {
+      int h10 = h_twin_H_[h01];
+      v_origin_H_[h01] = v1;
+      v_origin_H_[h10] = v0;
+      int e = e_undirected_H_[h01];
+      if (V_cycle_E_(e, 0) == v0) {
+        V_cycle_E_.row(e) << v1, v0;
+      } else {
+        V_cycle_E_.row(e) << v0, v1;
+      }
+    }
+    // update things that eat v0/v1 indices
+    auto xyz_coord_v0 = xyz_coord_v(v0);
+    auto h_out_v0 = h_out_V_[v0];
+    xyz_coord_V_.row(v0) = xyz_coord_v(v1);
+    h_out_V_[v0] = h_out_V_[v1];
+    xyz_coord_V_.row(v1) = xyz_coord_v0;
+    h_out_V_[v1] = h_out_v0;
+    // visual data
+    auto radius_v0 = radius_V[v0];
+    auto rgba_v0 = rgba_V.row(v0).eval();
+    radius_V[v0] = radius_V[v1];
+    rgba_V.row(v0) = rgba_V.row(v1).eval();
+    radius_V[v1] = radius_v0;
+    rgba_V.row(v1) = rgba_v0;
+  }
+
+  void swap_edge_indices(int e0, int e1) {
+
+    int h0 = h_directed_E_[e0];
+    int ht0 = h_twin_H_[h0];
+    int h1 = h_directed_E_[e1];
+    int ht1 = h_twin_H_[h1];
+    auto V_cycle_e0 = V_cycle_E_.row(e0).eval();
+
+    // update things that output e0/e1 indices
+    e_undirected_H_[h0] = e1;
+    e_undirected_H_[ht0] = e1;
+    e_undirected_H_[h1] = e0;
+    e_undirected_H_[ht1] = e0;
+
+    // update things that eat e0/e1 indices
+    h_directed_E_[e0] = h1;
+    V_cycle_E_.row(e0) = V_cycle_E_.row(e1);
+    h_directed_E_[e1] = h0;
+    V_cycle_E_.row(e1) = V_cycle_e0;
+    // visual data
+    rgba_E_.row(e0).swap(rgba_E_.row(e1));
+  }
+
+  void swap_boundary_indices(int b0, int b1) {
+    int h0 = h_ghost_B_[b0];
+    int h1 = h_ghost_B_[b1];
+    // update things that output b0/b1 indices
+    e_undirected_H_[h0] = -(b1 + 1);
+    e_undirected_H_[h1] = -(b0 + 1);
+    // update things that eat b0/b1 indices
+    h_ghost_B_[b0] = h1;
+    h_ghost_B_[b1] = h0;
+  }
+
+  void swap_halfedge_indices(int h0, int h1) {
+    int v0 = v_origin_H_[h0];
+    int e0 = e_undirected_H_[h0];
+    int b0 = -(e0 + 1);
+    int h_twin0 = h_twin_H_[h0];
+    int h_rot0 = h_rot_H_[h0];
+    int h_unrot0 = h_unrot_h(h0);
+
+    int v1 = v_origin_H_[h1];
+    int e1 = e_undirected_H_[h1];
+    int b1 = -(e1 + 1);
+    int h_twin1 = h_twin_H_[h1];
+    int h_rot1 = h_rot_H_[h1];
+    int h_unrot1 = h_unrot_h(h1);
+
+    // update things that output h0/h1 indices
+    if (h_out_V_[v0] == h0) {
+      h_out_V_[v0] = h1;
+    }
+    if (e0 < 0) {
+      h_ghost_B_[b0] = h1;
+    } else if (h_directed_E_[e0] == h0) {
+      h_directed_E_[e0] = h1;
+    }
+    h_twin_H_[h_twin0] = h1;
+    h_rot_H_[h_unrot0] = h1;
+
+    if (h_out_V_[v1] == h1) {
+      h_out_V_[v1] = h0;
+    }
+    if (e1 < 0) {
+      h_ghost_B_[b1] = h0;
+    } else if (h_directed_E_[e1] == h1) {
+      h_directed_E_[e1] = h0;
+    }
+    h_twin_H_[h_twin1] = h0;
+    h_rot_H_[h_unrot1] = h0;
+
+    // update things that eat h0/h1 indices
+    v_origin_H_[h0] = v1;
+    e_undirected_H_[h0] = e1;
+    h_twin_H_[h0] = h_twin1;
+    h_rot_H_[h0] = h_rot1;
+
+    v_origin_H_[h1] = v0;
+    e_undirected_H_[h1] = e0;
+    h_twin_H_[h1] = h_twin0;
+    h_rot_H_[h1] = h_rot0;
+    // visual data
+    auto rgba_h0 = rgba_H.row(h0).eval();
+    rgba_H.row(h0) = rgba_H.row(h1);
+    rgba_H.row(h1) = rgba_h0;
   }
 };
 

@@ -140,6 +140,9 @@ void ChromatinTestSim::apply_envelope_chromatin_face_vertex_interactions() {
       std::sqrt(envelope_.wca_epsilon_ * chromatin_.wca_epsilon_);
   double wca_sigma = (envelope_.wca_sigma_ + chromatin_.wca_sigma_) / 2.0;
 
+  double skip_dist =
+      (TWO_POW_ONE_SIXTH * wca_sigma + 3 * envelope_.average_edge_length_);
+
   for (int f = 0; f < Nf; f++) {
     int h0 = envelope_.h_right_f(f);
     int h1 = envelope_.h_next_h(h0);
@@ -184,6 +187,9 @@ void ChromatinTestSim::apply_envelope_chromatin_face_vertex_interactions() {
       // check v0
       Vec3d x = x_v0;
       double d = (x - x_chr).norm();
+      if (d > skip_dist) {
+        continue;
+      }
       Vec3d cp = x;
       double d_min = d;
       // check v1
