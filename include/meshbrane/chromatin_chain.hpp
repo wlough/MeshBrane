@@ -55,6 +55,11 @@ public:
   bool seed_ring_{false};
   Vec3d xyz_seed_{0, 0, 0};
 
+  /////////////////////////////
+  // Interaction accumulator //
+  /////////////////////////////
+  Samples3d force_V_;
+
   ////////////////////////
   // Initialization //////
   ////////////////////////
@@ -93,29 +98,86 @@ public:
   // }
 
   void do_swap_test() {
-    printf("ChromatinChain::do_swap_test 0");
+    printf("ChromatinChain::do_swap_test 0\n");
     int Nv = get_num_vertices();
-    int v0 = Nv, v1 = Nv + 1;
+    // int v0 = Nv, v1 = Nv + 1;
     // add_random_isolated_vertex();
     // add_random_isolated_vertex();
     // add_random_isolated_vertex();
     // add_random_isolated_vertex();
     // add_random_isolated_vertex();
     // add_edge_between_vertices(v0, v1);
-    printf("ChromatinChain::do_swap_test 1");
+    printf("ChromatinChain::do_swap_test 1\n");
     // swap_boundary_indices(0, 1);
-    printf("ChromatinChain::do_swap_test 2");
-    swap_vertex_indices(0, 1);
-    printf("ChromatinChain::do_swap_test 3");
-    swap_edge_indices(0, 1);
-    printf("ChromatinChain::do_swap_test 4");
+    printf("ChromatinChain::do_swap_test 2\n");
+    // swap_vertex_indices(0, 1);
+    printf("ChromatinChain::do_swap_test 3\n");
+    // swap_edge_indices(0, 1);
+    printf("ChromatinChain::do_swap_test 4\n");
     // swap_halfedge_indices(0, 1);
     // printf("ChromatinChain::do_swap_test 5");
     //
     // printf("ChromatinChain::do_swap_test 6");
 
+    // for (int v = 0; v < Nv; v++) {
+    //
+    //   int vv = (v + Nv / 2) % Nv;
+    //   printf("v=%d, vv=%d, Nv=%d", v, vv, Nv);
+    //   add_edge_between_vertices(v, vv);
+    // }
+    printf("**********************\n**********************\ninitial data\n");
+    print_he_mats();
+    print_info();
+    printf("**********************\n**********************\n\n");
+    int Ne = get_num_edges();
+    for (int e = 0; e < Ne; e++) {
+      printf("**********************\ne=%d -start\n", e);
+      int h0 = h_directed_E_[0];
+      int h1 = h_rot_H_[h0];
+      int h2 = h_unrot_h(h0);
+
+      int ht0 = h_twin_H_[h0];
+      int ht1 = h_rot_H_[ht0];
+      int ht2 = h_unrot_h(ht0);
+
+      int v0 = v_origin_H_[h0];
+      int vt0 = v_origin_H_[ht0];
+
+      bool v0_valance_is_2 = (h1 == h2 && h_twin_H_[h1] != h1);
+      bool vt0_valance_is_2 = (ht1 == ht2 && h_twin_H_[ht1] != ht1);
+
+      if (v0_valance_is_2 && vt0_valance_is_2) {
+        printf("* v0_valance_is_2 && vt0_valance_is_2\n");
+      } else if (v0_valance_is_2 && !vt0_valance_is_2) {
+        printf("* v0_valance_is_2 && !vt0_valance_is_2\n");
+      } else if (!v0_valance_is_2 && vt0_valance_is_2) {
+        printf("* !v0_valance_is_2 && vt0_valance_is_2\n");
+      } else if (!v0_valance_is_2 && !vt0_valance_is_2) {
+        printf("* !v0_valance_is_2 && !vt0_valance_is_2\n");
+      }
+
+      printf("    v0 = %d\n", v0);
+      printf("    vt0 = %d\n", vt0);
+      printf("    valance(v0) = %d\n", valance_v(v0));
+      printf("    valance(vt0) = %d\n", valance_v(vt0));
+      printf("    h0 = %d\n", h0);
+      printf("    h1 = %d\n", h1);
+      printf("    h2 = %d\n", h2);
+      printf("    ht0 = %d\n", ht0);
+      printf("    ht1 = %d\n", ht1);
+      printf("    ht2 = %d\n", ht2);
+
+      remove_e(0);
+      printf("remove_e(0)\n");
+      print_he_mats();
+      print_info();
+      printf("e=%d -done\n**********************\n", e);
+    }
+
     for (int v = 0; v < Nv; v++) {
+
       int vv = (v + Nv / 2) % Nv;
+      printf("v=%d, vv=%d, Nv=%d", v, vv, Nv);
       add_edge_between_vertices(v, vv);
     }
   }
@@ -221,9 +283,15 @@ public:
       init_fib_sphere(num_initial_beads_, initial_center_, initial_radius_);
     }
     bead_drag_coefficient_ = 6.0 * M_PI * bulk_viscosity_ * bead_radius_;
+    printf("ChromatinChain::init_chromatin_from_attributes -- 0\n");
     update_complex_geometric_data();
+    printf("ChromatinChain::init_chromatin_from_attributes -- 1\n");
     set_visual_defaults();
+    printf("ChromatinChain::init_chromatin_from_attributes -- 2\n");
+    force_V_.resize(get_num_vertices(), 3);
+
     do_swap_test();
+    printf("ChromatinChain::init_chromatin_from_attributes -done\n");
   }
 
   Vec3d get_bond_force_v(int v) {
@@ -397,6 +465,9 @@ public:
 
   void split_random_edge() {
     int Ne = get_num_edges();
+    if (Ne < 1) {
+      return;
+    }
     int e = randng_.randint(0, Ne);
     split_edge(e);
   }
@@ -427,7 +498,7 @@ public:
                     randng_.standard_uniform() - 0.5,
                     randng_.standard_uniform() - 0.5};
     direction *= 1e-2 / direction.norm();
-    seed_edge(v, direction);
+    add_edge_incident_v(v, direction);
   }
 
   void seed_random_edge() {
@@ -436,7 +507,7 @@ public:
     Vec3d direction{randng_.standard_uniform(), randng_.standard_uniform(),
                     randng_.standard_uniform()};
     direction *= 1e-2 / direction.norm();
-    seed_edge(v, direction);
+    add_edge_incident_v(v, direction);
   }
 
   void add_random_isolated_vertex() {

@@ -1,5 +1,5 @@
 output_dir: output # Path to output directory
-run_name: chromatin_seed_test10 # Name of the run
+run_name: chromatin_seed_test11 # Name of the run
 make_movie: True # Whether to make a movie of the simulation
 clear_output_dir: true # Whether to clear the output directory
 dt: 1e-5
@@ -75,14 +75,14 @@ chromatin:
   split_edges: true
   grow_ends: true
   seed_new_edges: true
-  seed_isolated_vertices: false
-  num_initial_beads: 30
+  seed_isolated_vertices: true
+  num_initial_beads: 3
   # num_max_beads: 100000
   num_max_beads: 35000
   bead_radius: 7.5e-2
   loop_center: [0, 0, 0]
   loop_normal: [1, 0, 0]
-  loop_radius: .85
+  loop_radius: .9
   initial_center: [0, 0, 0]
   initial_radius: .4
   enable_fluctuations: true
