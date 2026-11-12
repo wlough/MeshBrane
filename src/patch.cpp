@@ -82,7 +82,7 @@ Patch Patch::from_cylinder(MatrixMesh *supermesh, Vec3d p0, Vec3d ez,
   printf("  delta_z = %f\n", delta_z);
   //////////////////////////////////////////
   double z_seed = std::numeric_limits<double>::min();
-  int seed_vertex = 0;
+  int seed_vertex = -1;
   for (int v = 0; v < supermesh->get_num_vertices(); v++) {
     Vec3d p = supermesh->xyz_coord_V_.row(v);
     Vec3d p_p0 = p - p0;
@@ -91,6 +91,9 @@ Patch Patch::from_cylinder(MatrixMesh *supermesh, Vec3d p0, Vec3d ez,
       z_seed = z;
       seed_vertex = v;
     }
+  }
+  if (seed_vertex == -1) {
+    throw std::runtime_error("No seed vertex found");
   }
   ////////////////////////////////////////////
   double z_min = z_seed - delta_z;

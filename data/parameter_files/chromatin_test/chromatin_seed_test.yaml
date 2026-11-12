@@ -75,10 +75,10 @@ chromatin:
   split_edges: true
   grow_ends: true
   seed_new_edges: true
-  seed_isolated_vertices: true
-  num_initial_beads: 3
+  seed_isolated_vertices: false
+  num_initial_beads: 4
   # num_max_beads: 100000
-  num_max_beads: 35000
+  num_max_beads: 3500
   bead_radius: 7.5e-2
   loop_center: [0, 0, 0]
   loop_normal: [1, 0, 0]

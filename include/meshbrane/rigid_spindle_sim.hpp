@@ -593,6 +593,8 @@ public:
   RigidSpindleSimData data_;
   Membrane envelope_;
   RigidSpindle spindle_;
+  bool follow_spindle_frame_{false};
+  bool init_with_chromatin_envelope_contact_{false};
 
   double dt_mean_{0.0};
   double midpoint_radius_{0.0};
@@ -670,6 +672,32 @@ public:
   void find_contact_patch2();
   void record_envelope_data();
   void record_spindle_data();
+
+  void orient_viewer_with_spindle() {
+    viewer_.iglviewer_.core().camera_center =
+        spindle_.mt_bundle_.xyz_center_.cast<float>();
+
+    viewer_.iglviewer_.core().camera_up =
+        spindle_.mt_bundle_.rotation_matrix_center_.col(0).cast<float>();
+
+    viewer_.iglviewer_.core().camera_eye =
+        (spindle_.mt_bundle_.xyz_center_ +
+         viewer_.dist_ * spindle_.mt_bundle_.rotation_matrix_center_.col(1))
+            .cast<float>();
+  }
+
+  void update_params_for_chromatin_envelope_contact() {
+
+    double R_NE = 1.0;
+    double R_SPB =
+        parameters_["spindle"]["spb1"]["contact_radius"].as<double>();
+    double sigma = parameters_["spindle"]["spb1"]["wca_sigma"].as<double>();
+    // double TWO_POW_ONE_SIXTH =
+    //     1.122462048309373; // std::pow(2.0, 1.0 / 6.0);
+    double R_steric = std::pow(2.0, 1.0 / 6.0) * sigma;
+    double L = 2 * (R_NE - R_SPB - R_steric);
+    parameters_["spindle"]["mt_bundle"]["length"] = L;
+  }
 
   //
   //

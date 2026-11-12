@@ -16,11 +16,17 @@ See `python install.py -h` for a complete list of optional flags.
 
 ## Dependencies
 
-Installation requires
+MeshBrane requires the following libraries and tools to be installed and available in the build environment:
 
 * [Eigen](https://gitlab.com/libeigen/eigen)
 * [yaml-cpp](https://github.com/jbeder/yaml-cpp)
 * [ffmpeg](https://github.com/FFmpeg/FFmpeg)
+
+The following dependencies are included in the repository as Git submodules:
+
+* [libigl](https://libigl.github.io)
+* [tinyply](https://github.com/ddiakopoulos/tinyply)
+
 
 ## Examples
 

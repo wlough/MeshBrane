@@ -8,6 +8,7 @@ dt_save: 0.25
 T_run: 5.0
 kBT: 1.0291e-2 # ***
 bulk_viscosity: 1.0
+save_sim_data: true
 viewer:
   eye: [0.00000001, 6.8125, 0]
   center: [0.0, 0.0, 0.0]

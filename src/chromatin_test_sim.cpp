@@ -335,7 +335,7 @@ void ChromatinTestSim::update_state_variables(double dt) {
 //   envelope_moments_.resize(3, 1);
 //   envelope_moments_.setZero();
 //   double A = envelope_.get_num_faces() * envelope_.average_face_area_;
-//   // Samples1d area_V = envelope_.get_area_V();
+
 //   double variance_z = 0.0;
 //   double skewness_z = 0.0;
 //   double kurtosis_z = 0.0;

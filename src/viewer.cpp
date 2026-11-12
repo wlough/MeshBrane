@@ -85,6 +85,7 @@ void Viewer::init() {
       igl::opengl::ViewerCore::ROTATION_TYPE_TWO_AXIS_VALUATOR_FIXED_UP);
   // iglviewer_.core().set_rotation_type(
   //     igl::opengl::ViewerCore::ROTATION_TYPE_TRACKBALL);
+  dist_ = (eye_ - center_).norm();
 }
 
 ///////////////////////////////
@@ -98,46 +99,18 @@ void Viewer::draw_simple_vector_field(SimpleVectorField &vfield) {
                               vfield.rgb_);
 };
 
-// void Viewer::draw_mesh(MatrixMesh &m) {
-//   auto data = iglviewer_.data();
-//   iglviewer_.data().set_mesh(m.xyz_coord_V_, m.V_cycle_F_);
-//   iglviewer_.data().set_face_based(true);
-//   iglviewer_.data().set_colors(m.rgba_F);
-//   if (m.show_vertices_) {
-//     iglviewer_.data().point_size = m.radius_vertex_;
-//     Eigen::Matrix<double, Eigen::Dynamic, 3> rgb_V =
-//         m.rgba_V.block(0, 0, m.rgba_V.rows(), 3);
-//     iglviewer_.data().add_points(m.get_xyz_coord_V(), rgb_V);
-//   }
-
-//   if (m.show_half_edges_) {
-//     Eigen::Matrix<double, Eigen::Dynamic, 3> rgb_H =
-//         m.rgba_H.block(0, 0, m.rgba_H.rows(), 3);
-//     iglviewer_.data().add_edges(m.shifted_half_edge_arrows_[0],
-//                                 m.shifted_half_edge_arrows_[1], rgb_H);
-//     iglviewer_.data().add_edges(m.shifted_half_edge_arrows_[1],
-//                                 m.shifted_half_edge_arrows_[2], rgb_H);
-//   }
-
-//   if (m.show_edges_) {
-//     iglviewer_.data().show_lines = true;
-//     iglviewer_.data().line_width = 2.0;
-//   } else {
-//     iglviewer_.data().show_lines = false;
-//   }
-// };
-
 void Viewer::draw_mesh(MatrixMesh &m) {
 
   auto *data = &iglviewer_.data();
-  data->set_mesh(m.xyz_coord_V_, m.V_cycle_F_);
+  // data->set_mesh(m.xyz_coord_V_, m.V_cycle_F_);
+  data->set_mesh(m.xyz_coord_V_, m.get_V_cycle_F1());
   data->set_face_based(true);
   data->set_colors(m.rgba_F);
   if (m.show_vertices_) {
     data->point_size = m.radius_vertex_;
     Eigen::Matrix<double, Eigen::Dynamic, 3> rgb_V =
         m.rgba_V.block(0, 0, m.rgba_V.rows(), 3);
-    data->add_points(m.get_xyz_coord_V(), rgb_V);
+    data->add_points(m.xyz_coord_V_, rgb_V);
   }
 
   if (m.show_half_edges_) {
@@ -164,15 +137,16 @@ void Viewer::draw_wireframe(MatrixMesh &m) {
     data->point_size = m.radius_vertex_;
     Eigen::Matrix<double, Eigen::Dynamic, 3> rgb_V =
         m.rgba_V.block(0, 0, m.rgba_V.rows(), 3);
-    data->add_points(m.get_xyz_coord_V(), rgb_V);
+    data->add_points(m.xyz_coord_V_, rgb_V);
   }
 
   int num_edges = m.get_num_edges();
   Samples3d P0{num_edges, 3};
   Samples3d P1{num_edges, 3};
   for (int e = 0; e < num_edges; e++) {
-    int v0 = m.V_cycle_E_(e, 0);
-    int v1 = m.V_cycle_E_(e, 1);
+    int h = m.h_directed_E_[e];
+    int v0 = m.v_origin_h(h);
+    int v1 = m.v_origin_h(m.h_twin_h(h));
     P0.row(e) = m.xyz_coord_v(v0);
     P1.row(e) = m.xyz_coord_v(v1);
   }
@@ -180,12 +154,16 @@ void Viewer::draw_wireframe(MatrixMesh &m) {
       m.rgba_E_.block(0, 0, m.rgba_E_.rows(), 3);
   data->add_edges(P0, P1, rgb_E);
 
-  // if (m.show_edges_) {
-  //   data->show_lines = true;
+  if (m.show_half_edges_) {
+    Eigen::Matrix<double, Eigen::Dynamic, 3> rgb_H =
+        m.rgba_H.block(0, 0, m.rgba_H.rows(), 3);
+    data->add_edges(m.shifted_half_edge_arrows_[0],
+                    m.shifted_half_edge_arrows_[1], rgb_H);
+    data->add_edges(m.shifted_half_edge_arrows_[1],
+                    m.shifted_half_edge_arrows_[2], rgb_H);
+  }
+
   data->line_width = 2.0;
-  // } else {
-  //   data->show_lines = false;
-  // }
 };
 
 // void Viewer::draw_chromatin_chain(ChromatinChain &m) {
@@ -194,7 +172,7 @@ void Viewer::draw_wireframe(MatrixMesh &m) {
 //   data->point_size = m.radius_vertex_;
 //   Eigen::Matrix<double, Eigen::Dynamic, 3> rgb_V =
 //       m.rgba_V.block(0, 0, m.rgba_V.rows(), 3);
-//   data->add_points(m.get_xyz_coord_V(), rgb_V);
+//   data->add_points(m.xyz_coord_V_, rgb_V);
 //
 //   int num_edges = m.get_num_edges();
 //   Samples3d P0{num_edges, 3};
@@ -218,7 +196,7 @@ void Viewer::draw_chromatin_chain(ChromatinChain &m) {
   data->point_size = m.radius_vertex_;
   Eigen::Matrix<double, Eigen::Dynamic, 3> rgb_V =
       m.rgba_V.block(0, 0, m.rgba_V.rows(), 3);
-  data->add_points(m.get_xyz_coord_V(), rgb_V);
+  data->add_points(m.xyz_coord_V_, rgb_V);
 
   //
   //
@@ -335,8 +313,6 @@ void Viewer::draw_meshes(std::vector<MatrixMesh *> &meshes) {
     cum_Nv.push_back(cum_Nv[i] + Nv[i]);
   }
 
-  // std::vector<Eigen::MatrixXd> vector_V;
-  // std::vector<Eigen::MatrixXi> vector_F;
   std::vector<Eigen::RowVector3d> vector_V;
   std::vector<Eigen::RowVector3i> vector_F;
   std::vector<Eigen::RowVector4d> vector_F_rgba;
@@ -347,16 +323,14 @@ void Viewer::draw_meshes(std::vector<MatrixMesh *> &meshes) {
   for (int i = 0; i < meshes.size(); i++) {
     auto &m = meshes[i];
     int Nv_shift = cum_Nv[i];
-    Samples3i F_shifted = m->V_cycle_F_;
+    // Samples3i F_shifted = m->V_cycle_F_;
+    // for (int j = 0; j < F_shifted.rows(); j++) {
+    //   F_shifted(j, 0) += Nv_shift;
+    //   F_shifted(j, 1) += Nv_shift;
+    //   F_shifted(j, 2) += Nv_shift;
+    // }
+    Samples3i F_shifted = m->get_V_cycle_F1().array() + Nv_shift;
 
-    for (int j = 0; j < F_shifted.rows(); j++) {
-      F_shifted(j, 0) += Nv_shift;
-      F_shifted(j, 1) += Nv_shift;
-      F_shifted(j, 2) += Nv_shift;
-    }
-
-    // vector_V.push_back(m.get_xyz_coord_V());
-    // vector_F.push_back(m.V_cycle_F_);
     for (int j = 0; j < m->get_num_vertices(); j++) {
       Eigen::RowVector3d xyz = m->xyz_coord_V_.row(j);
       vector_V.push_back(xyz);

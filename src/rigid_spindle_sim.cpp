@@ -32,7 +32,6 @@ RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
   } else {
     throw std::runtime_error("No kBT provided in parameters file");
   }
-
   if (parameters_["save_sim_data"]) {
     printf("set save_sim_data_\n");
     save_sim_data_ = parameters_["save_sim_data"].as<bool>();
@@ -40,6 +39,19 @@ RigidSpindleSim::RigidSpindleSim(const fs::path &path_to_parameters)
   if (parameters_["no_graph"]) {
     printf("set no_graph_\n");
     no_graph_ = parameters_["no_graph"].as<bool>();
+  }
+  if (parameters_["follow_spindle_frame"]) {
+    printf("set follow_spindle_frame_\n");
+    follow_spindle_frame_ = parameters_["follow_spindle_frame"].as<bool>();
+  }
+  if (parameters_["init_with_chromatin_envelope_contact"]) {
+    printf("set init_with_chromatin_envelope_contact_\n");
+    init_with_chromatin_envelope_contact_ =
+        parameters_["init_with_chromatin_envelope_contact"].as<bool>();
+  }
+
+  if (init_with_chromatin_envelope_contact_) {
+    update_params_for_chromatin_envelope_contact();
   }
 
   if (parameters_["spindle"]) {
@@ -334,7 +346,7 @@ void RigidSpindleSim::record_envelope_data() {
   envelope_moments_.resize(3, 1);
   envelope_moments_.setZero();
   double A = envelope_.get_num_faces() * envelope_.average_face_area_;
-  // Samples1d area_V = envelope_.get_area_V();
+
   double variance_z = 0.0;
   double skewness_z = 0.0;
   double kurtosis_z = 0.0;
@@ -540,6 +552,9 @@ void RigidSpindleSim::save_frame() {
 }
 
 void RigidSpindleSim::draw_scene() {
+  if (follow_spindle_frame_) {
+    orient_viewer_with_spindle();
+  }
   viewer_.iglviewer_.data().clear();
   std::vector<MatrixMesh *> meshes;
   if (envelope_.draw_wireframe_) {

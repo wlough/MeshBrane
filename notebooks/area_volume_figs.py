@@ -701,6 +701,7 @@ def plot_multiruns_area_change_minmaxmean(
             ls = MATPLOTLIB_LINESTYLES[_]
             lw = 0.5
             for dA_A in dA_A_list:
+                print(f"{r=:.2g}, {dA_A[-1]=:.2g}")
                 ax.plot(
                     t,
                     dA_A,
@@ -803,12 +804,12 @@ plot_multiruns_area_change_minmaxmean(
 )
 
 
-# plot_ne_point_cloud2d_sweep(
-#     "../output/area_volume_test_mitosis_001280_rp25_sweep",
-#     t_start=0.01,
-#     dt_sample=0.25,
-#     markersize=2.5,
-# )
+plot_ne_point_cloud2d_sweep(
+    "../output/area_volume_test_mitosis_001280_rp45_sweep1",
+    t_start=0.01,
+    dt_sample=0.25,
+    markersize=2.5,
+)
 
 # plot_ne_point_cloud2d_sweep(
 #     "../output/area_volume_test_mitosis_001280_rp25_sweep1",

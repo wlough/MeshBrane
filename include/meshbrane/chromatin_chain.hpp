@@ -7,7 +7,7 @@
 
 #include "meshbrane/meshbrane_data_types.hpp"
 #include "meshbrane/pretty_pictures.hpp"
-#include "meshbrane/simplicial_complex_1d.hpp"
+#include "meshbrane/simplicial_1_complex.hpp"
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -17,7 +17,7 @@
 
 namespace meshbrane {
 
-class ChromatinChain : public SimplicialComplex1d {
+class ChromatinChain : public Simplicial1Complex {
 public:
   std::string name_{"chromatin"};
 
@@ -55,6 +55,8 @@ public:
   bool seed_ring_{false};
   Vec3d xyz_seed_{0, 0, 0};
 
+  Samples2i ChrEnv_xlinks;
+
   /////////////////////////////
   // Interaction accumulator //
   /////////////////////////////
@@ -74,57 +76,38 @@ public:
     init_chromatin_from_attributes();
   }
 
-  // void do_swap_test() {
-  //   printf("ChromatinChain::do_swap_test 0");
-  //   int Nv = get_num_vertices();
-  //   int v0 = Nv, v1 = Nv + 1;
-  //   add_random_isolated_vertex();
-  //   add_random_isolated_vertex();
-  //   // add_random_isolated_vertex();
-  //   // add_random_isolated_vertex();
-  //   // add_random_isolated_vertex();
-  //   add_edge_between_vertices(v0, v1);
-  //   printf("ChromatinChain::do_swap_test 1");
-  //   swap_boundary_indices(0, 1);
-  //   printf("ChromatinChain::do_swap_test 2");
-  //   swap_vertex_indices(0, 1);
-  //   printf("ChromatinChain::do_swap_test 3");
-  //   swap_edge_indices(0, 1); //***
-  //   printf("ChromatinChain::do_swap_test 4");
-  //   // swap_halfedge_indices(0, 1);
-  //   // printf("ChromatinChain::do_swap_test 5");
-  //   //
-  //   // printf("ChromatinChain::do_swap_test 6");
-  // }
-
   void do_swap_test() {
     printf("ChromatinChain::do_swap_test 0\n");
     int Nv = get_num_vertices();
-    // int v0 = Nv, v1 = Nv + 1;
-    // add_random_isolated_vertex();
-    // add_random_isolated_vertex();
-    // add_random_isolated_vertex();
-    // add_random_isolated_vertex();
-    // add_random_isolated_vertex();
-    // add_edge_between_vertices(v0, v1);
+    int v0 = Nv, v1 = Nv + 1;
+    add_random_isolated_vertex();
+    add_random_isolated_vertex();
+    add_random_isolated_vertex();
+    add_random_isolated_vertex();
+    add_random_isolated_vertex();
+    add_edge_between_vertices(v0, v1);
     printf("ChromatinChain::do_swap_test 1\n");
-    // swap_boundary_indices(0, 1);
+    swap_boundary_indices(0, 1);
+    swap_boundary_indices(0, 3);
     printf("ChromatinChain::do_swap_test 2\n");
-    // swap_vertex_indices(0, 1);
+    swap_vertex_indices(0, 1);
+    swap_vertex_indices(0, 5);
     printf("ChromatinChain::do_swap_test 3\n");
-    // swap_edge_indices(0, 1);
+    swap_edge_indices(0, 1);
+    swap_edge_indices(0, 4);
     printf("ChromatinChain::do_swap_test 4\n");
-    // swap_halfedge_indices(0, 1);
-    // printf("ChromatinChain::do_swap_test 5");
+    swap_halfedge_indices(0, 1);
+    swap_halfedge_indices(0, 8);
+    printf("ChromatinChain::do_swap_test 5");
     //
     // printf("ChromatinChain::do_swap_test 6");
 
-    // for (int v = 0; v < Nv; v++) {
-    //
-    //   int vv = (v + Nv / 2) % Nv;
-    //   printf("v=%d, vv=%d, Nv=%d", v, vv, Nv);
-    //   add_edge_between_vertices(v, vv);
-    // }
+    for (int v = 0; v < Nv; v++) {
+
+      int vv = (v + Nv / 2) % Nv;
+      printf("v=%d, vv=%d, Nv=%d", v, vv, Nv);
+      add_edge_between_vertices(v, vv);
+    }
     printf("**********************\n**********************\ninitial data\n");
     print_he_mats();
     print_info();
@@ -174,16 +157,16 @@ public:
       printf("e=%d -done\n**********************\n", e);
     }
 
-    for (int v = 0; v < Nv; v++) {
-
-      int vv = (v + Nv / 2) % Nv;
-      printf("v=%d, vv=%d, Nv=%d", v, vv, Nv);
-      add_edge_between_vertices(v, vv);
-    }
+    // for (int v = 0; v < Nv; v++) {
+    //
+    //   int vv = (v + Nv / 2) % Nv;
+    //   printf("v=%d, vv=%d, Nv=%d", v, vv, Nv);
+    //   add_edge_between_vertices(v, vv);
+    // }
   }
 
   void set_attributes_from_parameters() {
-    SimplicialComplex1d::set_attributes_from_parameters();
+    Simplicial1Complex::set_attributes_from_parameters();
     printf("ChromatinChain::set_attributes_from_parameters\n");
     if (parameters_["num_initial_beads"]) {
       num_initial_beads_ = parameters_["num_initial_beads"].as<size_t>();
@@ -273,15 +256,18 @@ public:
 
   void init_chromatin_from_attributes() {
     printf("ChromatinChain::init_chromatin_from_attributes\n");
-    if (seed_vertex_) {
-      init_point_topo(xyz_seed_);
-    } else if (seed_ring_) {
-      init_single_loop(num_initial_beads_, loop_center_, loop_normal_,
-                       loop_radius_);
-      // init_fib_sphere(num_initial_beads_, initial_center_, initial_radius_);
-    } else {
-      init_fib_sphere(num_initial_beads_, initial_center_, initial_radius_);
-    }
+    // if (seed_vertex_) {
+    //   init_point_topo(xyz_seed_);
+    // } else if (seed_ring_) {
+    //   init_loop(num_initial_beads_, loop_center_, loop_normal_,
+    //   loop_radius_);
+    // } else {
+    //   init_fib_sphere(num_initial_beads_, initial_center_, initial_radius_);
+    // }
+    test_init();
+    // init_open_chain(num_initial_beads_, loop_normal_,
+    // preferred_bond_length_);
+    // print_he_mats();
     bead_drag_coefficient_ = 6.0 * M_PI * bulk_viscosity_ * bead_radius_;
     printf("ChromatinChain::init_chromatin_from_attributes -- 0\n");
     update_complex_geometric_data();
@@ -290,7 +276,7 @@ public:
     printf("ChromatinChain::init_chromatin_from_attributes -- 2\n");
     force_V_.resize(get_num_vertices(), 3);
 
-    do_swap_test();
+    // do_swap_test();
     printf("ChromatinChain::init_chromatin_from_attributes -done\n");
   }
 
@@ -311,6 +297,7 @@ public:
     } while (h != h_start);
     return F;
   }
+
   void apply_bond_force_V() {
     int Nv = get_num_vertices();
     for (int v = 0; v < Nv; v++) {
@@ -318,78 +305,10 @@ public:
     }
   }
 
-  // Vec3d get_bending_force_v(int v) {
-  //   double k = bond_stiffness_;
-  //   Vec3d F = Vec3d::Zero();
-  //   if (is_boundary_v(v)) {
-  //     return F;
-  //   }
-  //   int h_start = h_out_V_[v];
-  //   int h = h_start;
-  //   int hr = h_rot_H_[h];
-  //   Vec3d x0 = xyz_coord_v(v);
-  //   do {
-  //
-  //     int ht = h_twin_H_[h];
-  //     int hrt = h_twin_H_[hr];
-  //     int v = v_origin_H_[ht];
-  //     int vr = v_origin_H_[hrt];
-  //     // Vec3d x = xyz_coord_v(v);
-  //     // Vec3d xr = xyz_coord_v(vr);
-  //     // Vec3d dx0 = x0 - xr;
-  //     // Vec3d dx1 = x - x0;
-  //     // double ds0 = dx0.norm();
-  //     // double ds1 = dx1.norm();
-  //     // Vec3d B = dx0.cross(dx1);
-  //     // double sin_theta = B.norm() / (ds0 * ds1);
-  //     // double theta = std::asin(sin_theta);
-  //     // B /= B.norm();
-  //     // Vec3d T = x - xr;
-  //     // double norm_T = T.norm();
-  //     // T /= norm_T;
-  //     // Vec3d N = B.cross(T);
-  //     // F += k * theta * N;
-  //     Vec3d xp = xyz_coord_v(v);
-  //     Vec3d xm = xyz_coord_v(vr);
-  //     Vec3d dxp = xp - x0;
-  //     Vec3d dxm = x0 - xm;
-  //     double dsp = dxp.norm();
-  //     double dsm = dxm.norm();
-  //
-  //     Vec3d x_ss = (2.0 / (dsm + dsp)) * (dxp / dsp - dxm / dsm);
-  //     F += k * x_ss;
-  //
-  //     h = hr;
-  //     hr = h_rot_H_[h];
-  //   } while (hr != h_start);
-  //   return F;
-  // }
-
   Vec3d get_bending_force_v(int v) {
     double k = bond_stiffness_;
     Vec3d F = Vec3d::Zero();
-    // if (is_boundary_v(v)) {
-    //   return F;
-    // }
-    // int h_start = h_out_V_[v];
-    // int h = h_start;
-    // int hr = h_rot_H_[h];
-    // Vec3d x0 = xyz_coord_v(v);
-    // do {
-    //   int ht = h_twin_H_[h];
-    //   int hrt = h_twin_H_[hr];
-    //   int v = v_origin_H_[ht];
-    //   int vr = v_origin_H_[hrt];
-    //   Vec3d xp = xyz_coord_v(v);
-    //   Vec3d xm = xyz_coord_v(vr);
-    //
-    //   ...
-    //
-    //   F += ???;
-    //
-    //   h = hr;
-    //   hr = h_rot_H_[h];
-    // } while (hr != h_start);
+
     return F;
   }
 
@@ -402,7 +321,7 @@ public:
 
   void apply_internal_interactions() {
     apply_bond_force_V();
-    apply_bending_force_V();
+    // apply_bending_force_V();
   }
   void clear_interactions() {
     force_V_.resize(get_num_vertices(), 3);
@@ -539,6 +458,16 @@ public:
       add_random_isolated_vertex();
     }
     // check_he_matrices();
+  }
+
+  int get_num_ChrEnv_xlinks() { return ChrEnv_xlinks.rows(); }
+
+  void add_ChrEnv_xlink(int v_chr, int v_env) {
+    check_v(v_chr);
+    int l = get_num_ChrEnv_xlinks();
+    int Nl = l + 1;
+    ChrEnv_xlinks.conservativeResize(Nl, 2);
+    ChrEnv_xlinks.row(l) << v_chr, v_env;
   }
 };
 

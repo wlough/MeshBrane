@@ -1,5 +1,5 @@
 output_dir: output # Path to output directory
-run_name: rigid_spindle_test # Name of the run
+run_name: rigid_spindle_test_follow_spindle # Name of the run
 make_movie: false # Whether to make a movie of the simulation
 clear_output_dir: true # Whether to clear the output directory
 dt: 1e-5
@@ -9,6 +9,8 @@ T_run: 5.0
 kBT: 1.0291e-2 # ***
 bulk_viscosity: 1.0
 save_sim_data: true
+# follow_spindle_frame: false
+follow_spindle_frame: true
 viewer:
   eye: [0.00000001, 6.8125, 0]
   center: [0.0, 0.0, 0.0]
@@ -57,8 +59,9 @@ envelope:
   # laplacian_type: guckenberger
   laplacian_type: cotan
   # laplacian_type: adaptive_belkin
+  # laplacian_type: heat
   timestep_type: euler_adaptive
-  show_contact_patches: true
+  show_contact_patches: false
   atol: 1e-6
   rtol: 1e-3
   belkin_dt: 0.001
@@ -68,6 +71,8 @@ envelope:
   rgba_face: [1.0, 0.7431, 0.0, 1.0]
   rgba_half_edge: [0.5804, 0.0, 0.8275, 1.0]
 spindle:
+  # mt_spb_stretch_stiffness: 1.5e4 # ***
+  # mt_spb_rotation_stiffness: 1e2 # ***
   xyz_center: [0.0, 0.0, 0.0]
   axis: [0.0, 0.0, 1.0]
   draw_axes: false

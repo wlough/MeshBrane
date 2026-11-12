@@ -7,7 +7,7 @@
 #include <cmath> // For std::acos and std::sqrt
 #include <filesystem>
 
-namespace fs = std::filesystem;
+// namespace fs = std::filesystem;
 
 namespace meshbrane {
 
@@ -16,13 +16,17 @@ namespace meshbrane {
 void Membrane::apply_internal_interactions() {
   // TODO: use cached data to optimize force computations
   //////////////////////////////////////////
-  apply_tether_force_V();
+  if (use_tether_force_) {
+    apply_tether_force_V();
+  }
   // uses:
   // * xyz_coord_V_ to recompute length_E_, vec_H_ data
   // * target_edge_length_
   //////////////////////////////////////////
   //////////////////////////////////////////
-  apply_bending_force_V();
+  if (use_bending_force_) {
+    apply_bending_force_V();
+  }
   // uses:
   // * mean_curvature_V_
   // * gaussian_curvature_V_
@@ -31,14 +35,18 @@ void Membrane::apply_internal_interactions() {
   // * normal_V_
   //////////////////////////////////////////
   //////////////////////////////////////////
-  apply_area_force_V();
+  if (use_area_force_) {
+    apply_area_force_V();
+  }
   // uses:
   // * surface_tension_F_
   // * xyz_coord_V_ to recompute vec_H_ data
   // * normal_F_
   //////////////////////////////////////////
   //////////////////////////////////////////
-  apply_volume_force_V();
+  if (use_volume_force_) {
+    apply_volume_force_V();
+  }
   // uses:
   // * pressure_
   // * area_F_
@@ -255,10 +263,17 @@ void Membrane::set_attributes_from_parameters() {
   ///////////////////////////////////////////////////////
   ///////////////////////////////////////////////////////
   ///////////////////////////////////////////////////////
+  //   use_bending_force_
+  // use_tether_force_
+  // use_area_force_
+  // use_volume_force_
   // if (parameters_["timestep_type"]) {
   //   timestep_type_ = parameters_["timestep_type"].as<std::string>();
   // }
   // Bending force
+  if (parameters_["use_bending_force"]) {
+    use_bending_force_ = parameters_["use_bending_force"].as<bool>();
+  }
   if (parameters_["bending_modulus"]) {
     bending_modulus_ = parameters_["bending_modulus"].as<double>();
   }
@@ -270,6 +285,9 @@ void Membrane::set_attributes_from_parameters() {
   }
   ///////////////////////////////////////////////////////
   // Tether force
+  if (parameters_["use_tether_force"]) {
+    use_tether_force_ = parameters_["use_tether_force"].as<bool>();
+  }
   if (parameters_["dimensionless_tether_repulsive_singularity"]) {
     dimensionless_tether_repulsive_singularity_ =
         parameters_["dimensionless_tether_repulsive_singularity"].as<double>();
@@ -290,6 +308,9 @@ void Membrane::set_attributes_from_parameters() {
     tether_stiffness_ = parameters_["tether_stiffness"].as<double>();
   }
   // Area conservation force
+  if (parameters_["use_area_force"]) {
+    use_area_force_ = parameters_["use_area_force"].as<bool>();
+  }
   if (parameters_["area_stiffness"]) {
     area_stiffness_ = parameters_["area_stiffness"].as<double>();
   }
@@ -297,6 +318,9 @@ void Membrane::set_attributes_from_parameters() {
     fix_target_face_area_ = parameters_["fix_target_face_area"].as<bool>();
   }
   // Volume conservation force
+  if (parameters_["use_volume_force"]) {
+    use_volume_force_ = parameters_["use_volume_force"].as<bool>();
+  }
   if (parameters_["fix_target_volume"]) {
     fix_target_volume_ = parameters_["fix_target_volume"].as<bool>();
   }
@@ -374,122 +398,6 @@ void Membrane::set_attributes_from_parameters() {
   }
 }
 
-// void Membrane::set_attributes_from_yaml_node(const YAML::Node &node) {
-//   MatrixMesh::set_attributes_from_yaml_node(node);
-
-//   // Bending force
-//   if (node["bending_modulus"]) {
-//     bending_modulus_ = node["bending_modulus"].as<double>();
-//   }
-//   if (node["spontaneous_curvature"]) {
-//     spontaneous_curvature_ = node["spontaneous_curvature"].as<double>();
-//   }
-//   if (node["splay_modulus"]) {
-//     splay_modulus_ = node["splay_modulus"].as<double>();
-//   }
-//   ///////////////////////////////////////////////////////
-//   // Tether force
-//   if (node["dimensionless_tether_repulsive_singularity"]) {
-//     dimensionless_tether_repulsive_singularity_ =
-//         node["dimensionless_tether_repulsive_singularity"].as<double>();
-//   }
-//   if (node["dimensionless_tether_repulsive_onset"]) {
-//     dimensionless_tether_repulsive_onset_ =
-//         node["dimensionless_tether_repulsive_onset"].as<double>();
-//   }
-//   if (node["dimensionless_tether_attractive_onset"]) {
-//     dimensionless_tether_attractive_onset_ =
-//         node["dimensionless_tether_attractive_onset"].as<double>();
-//   }
-//   if (node["dimensionless_tether_attractive_singularity"]) {
-//     dimensionless_tether_attractive_singularity_ =
-//         node["dimensionless_tether_attractive_singularity"].as<double>();
-//   }
-//   if (node["tether_stiffness"]) {
-//     tether_stiffness_ = node["tether_stiffness"].as<double>();
-//   }
-//   // Area conservation force
-//   if (node["area_stiffness"]) {
-//     area_stiffness_ = node["area_stiffness"].as<double>();
-//   }
-//   if (node["fix_target_face_area"]) {
-//     fix_target_face_area_ = node["fix_target_face_area"].as<bool>();
-//   }
-//   // Volume conservation force
-//   if (node["fix_target_volume"]) {
-//     fix_target_volume_ = node["fix_target_volume"].as<bool>();
-//   }
-//   if (node["volume_stiffness"]) {
-//     volume_stiffness_ = node["volume_stiffness"].as<double>();
-//   }
-//   if (node["node_drag_coefficient"]) {
-//     node_drag_coefficient_ = node["node_drag_coefficient"].as<double>();
-//   }
-//   ///////////////////////////////////////////////////////
-//   if (node["vector_field_scale"]) {
-//     vector_field_scale_ = node["vector_field_scale"].as<double>();
-//   }
-//   if (node["show_force_field"]) {
-//     show_force_field_ = node["show_force_field"].as<bool>();
-//   }
-//   if (node["show_mcvec_field"]) {
-//     show_mcvec_field_ = node["show_mcvec_field"].as<bool>();
-//   }
-//   if (node["enable_flipping"]) {
-//     enable_flipping_ = node["enable_flipping"].as<bool>();
-//   }
-//   if (node["enable_fluctuations"]) {
-//     enable_fluctuations_ = node["enable_fluctuations"].as<bool>();
-//   }
-//   if (node["dt_flip"]) {
-//     dt_flip_ = node["dt_flip"].as<double>();
-//   }
-//   if (node["flipping_probability"]) {
-//     flipping_probability_ = node["flipping_probability"].as<double>();
-//   }
-//   ///////////////////////////////////////////////////////
-//   if (node["show_contact_patches"]) {
-//     show_contact_patches_ = node["show_contact_patches"].as<bool>();
-//   }
-//   if (node["use_surface_tension_constant"]) {
-//     use_surface_tension_constant_ =
-//         node["use_surface_tension_constant"].as<bool>();
-//   }
-//   if (node["use_surface_tension_penalty_local"]) {
-//     use_surface_tension_penalty_local_ =
-//         node["use_surface_tension_penalty_local"].as<bool>();
-//   }
-//   if (node["surface_tension_constant"]) {
-//     surface_tension_constant_ =
-//     node["surface_tension_constant"].as<double>();
-//   } else if (use_surface_tension_constant_) {
-//     printf(
-//         "Warning: use_surface_tension_constant_ = true but no constant value
-//         " "found\n");
-//   }
-//   if (node["wca_sigma"]) {
-//     wca_sigma_ = node["wca_sigma"].as<double>();
-//     // 0.1*r_cutoff=0.1*2^(1/6)*sigma
-//     dx_max_ = 0.1122462048309373 * wca_sigma_;
-//   }
-//   if (node["wca_epsilon"]) {
-//     wca_epsilon_total_ = node["wca_epsilon"].as<double>();
-//   }
-//   // set global parameters
-//   if ((*sim_parameters_)["kBT"]) {
-//     kBT_ = (*sim_parameters_)["kBT"].as<double>();
-//   }
-//   if ((*sim_parameters_)["bulk_viscosity"]) {
-//     bulk_viscosity_ = (*sim_parameters_)["bulk_viscosity"].as<double>();
-//   }
-//   if (node["use_local_drag_coefficient"]) {
-//     use_local_drag_coefficient_ =
-//     node["use_local_drag_coefficient"].as<bool>();
-//     // local_drag_coefficient_ = 4 * M_PI * bulk_viscosity_;
-//     local_drag_coefficient_ = 1.5 * bulk_viscosity_; // * 1/R but R=1
-//   }
-// }
-
 void Membrane::init_membrane_from_attributes() {
 
   initial_area_ = average_face_area_ * get_num_faces();
@@ -527,18 +435,12 @@ void Membrane::init_membrane_from_attributes() {
   }
 
   // integration patch initialization
-  integration_patch_.supermesh_ = this;
-  integration_patch_.rgba_face_ = RGBA_DICT.at("meshbrane_orange");
+  // integration_patch_.supermesh_ = this;
+  // integration_patch_.rgba_face_ = RGBA_DICT.at("meshbrane_orange");
 
   spb_patch_plus_.supermesh_ = this;
   spb_patch_minus_.supermesh_ = this;
 }
-
-// void Membrane::init(const YAML::Node &node) {
-//   set_attributes_from_yaml_node(node);
-//   init_matrixmesh_from_attributes();
-//   init_membrane_from_attributes();
-// }
 
 void Membrane::update_geotargets() {
   target_edge_length_ = average_edge_length_;
@@ -551,7 +453,9 @@ void Membrane::update_geotargets() {
 }
 
 void Membrane::init_from_ply() {
-  MatrixMesh::init_from_ply();
+
+  init_core_data_from_ply();
+  init_cache_from_core_data();
   initial_area_ = average_face_area_ * get_num_faces();
   initial_volume_ = total_volume_;
   target_face_area_ = average_face_area_;
@@ -576,8 +480,8 @@ void Membrane::init_from_ply() {
   }
 
   // integration patch initialization
-  integration_patch_.supermesh_ = this;
-  integration_patch_.rgba_face_ = RGBA_DICT.at("meshbrane_orange");
+  // integration_patch_.supermesh_ = this;
+  // integration_patch_.rgba_face_ = RGBA_DICT.at("meshbrane_orange");
 
   // set_node_drag_coefficient_from_bulk_viscosity();
   // printf("*****************************************************************"

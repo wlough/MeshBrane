@@ -38,6 +38,11 @@ public:
   ///////////////////////////////////////////////////////
   // Data members ///////////////////////////////////////
   ///////////////////////////////////////////////////////
+  /////////////////////////////
+  // Interaction accumulator //
+  /////////////////////////////
+  Samples3d force_V_;
+
   double dx_max_{1.0};
   double wca_sigma_{0.1};
   double wca_epsilon_{12.5};
@@ -53,10 +58,12 @@ public:
   double initial_area_{0.0};
   double initial_volume_{0.0};
   // Bending force
+  bool use_bending_force_{true};
   double bending_modulus_{1.0};
   double spontaneous_curvature_{0.0};
   double splay_modulus_{0.0};
   // Tether force
+  bool use_tether_force_{true};
   double target_edge_length_{0.0};
   double dimensionless_tether_repulsive_singularity_{0.4};
   double dimensionless_tether_repulsive_onset_{0.8};
@@ -64,11 +71,13 @@ public:
   double dimensionless_tether_attractive_singularity_{1.6};
   double tether_stiffness_{0.16};
   // Surface tension
+  bool use_area_force_{true};
   bool fix_target_face_area_{true};
   double area_stiffness_{100.0};
   double target_face_area_{0.0};
   Samples1d surface_tension_F_;
   // Pressure
+  bool use_volume_force_{true};
   bool fix_target_volume_{true};
   double target_volume_{0.0};
   double volume_stiffness_{10000.0};
@@ -129,7 +138,7 @@ public:
     set_attributes_from_parameters();
     init_from_ply();
     name_ = name;
-    integration_patch_ = Patch(this);
+    // integration_patch_ = Patch(this);
     spb_patch_plus_ = Patch(this);
     spb_patch_minus_ = Patch(this);
   }

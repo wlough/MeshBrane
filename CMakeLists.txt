@@ -35,6 +35,9 @@ endif()
 option(BUILD_RIGID_SPINDLE_SIM "Build rigid spindle simulation executable" ON)
 option(BUILD_PARAM_SWEEP "Build param_sweep executable" ON)
 option(BUILD_CHROMATIN_TEST_SIM "Build chromatin_test_sim executable" ON)
+option(BUILD_ENVELOPE_TEST_SIM "Build envelope_test_sim executable" ON)
+
+
 
 
 

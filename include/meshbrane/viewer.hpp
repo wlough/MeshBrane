@@ -9,6 +9,7 @@
 #include "meshbrane/chromatin_chain.hpp"
 #include "meshbrane/matrix_mesh.hpp"
 #include "meshbrane/membrane.hpp"
+#include "meshbrane/meshbrane_data_types.hpp"
 #include "meshbrane/rigid_spindle.hpp"
 #include "meshbrane/simple_vector_field.hpp"
 #include <Eigen/Dense>
@@ -33,6 +34,7 @@ struct Viewer {
   Eigen::Vector3f eye_;
   Eigen::Vector3f center_;
   Eigen::Vector3f up_;
+  float dist_{-1.0};
   float dfar_{1000.0f};
   float dnear_{0.1f};
   // double view_angle{};

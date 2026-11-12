@@ -75,23 +75,10 @@ void SphericalSPB::set_attributes_from_parameters() {
 }
 
 void SphericalSPB::init_state(Vec3d &center, Eigen::Matrix3d &rotation_matrix) {
-  MatrixMesh::init_icosohedron();
-  // double r = contact_radius_;
-  // int N = get_num_vertices();
-  // double rho = N / (4 * M_PI * r * r);
-  // double rho_min = 400.0;
-  // int ref = 0;
-  // while (rho <= rho_min) {
-  //   refine_icososphere();
-  //   N = get_num_vertices();
-  //   rho = N / (4 * M_PI * r * r);
-  //   ++ref;
-  // }
-  // printf("SphericalSPB::init_state - r = %f, N = %d, rho = %f\n", r, N, rho);
 
-  for (int refinement = 0; refinement < num_refinements_; refinement++) {
-    refine_icososphere();
-  }
+  MatrixMesh::init_icososphere(num_refinements_);
+
+  // init_cache_from_core_data();
   double r = contact_radius_;
   int N = get_num_vertices();
   double rho = N / (4 * M_PI * r * r);
@@ -102,7 +89,7 @@ void SphericalSPB::init_state(Vec3d &center, Eigen::Matrix3d &rotation_matrix) {
   xyz_frame_ = center;
   rotation_matrix_frame_ = rotation_matrix;
   update_coords_from_frame();
-  init_from_he_mats();
+  init_cache_from_core_data();
 }
 
 void SphericalSPB::sum_envelope_force_V() {
