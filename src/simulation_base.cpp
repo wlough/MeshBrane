@@ -43,11 +43,15 @@ SimulationBase::SimulationBase(const fs::path &path_to_parameters) {
   } else {
     throw std::runtime_error("No output_dir provided in parameters file");
   }
+  if (parameters_["clear_output_dir"]) {
+    clear_output_dir_ = parameters_["clear_output_dir"].as<bool>();
+  }
+
   logs_dir_ = output_dir_ / "logs";
   raw_data_dir_ = output_dir_ / "raw_data";
   visualizations_dir_ = output_dir_ / "visualizations";
   temp_images_dir_ = output_dir_ / "temp_images";
-  make_output_directory(true);
+  make_output_directory(clear_output_dir_);
 
   log_path_ = logs_dir_ / "sim.log";
 
@@ -62,22 +66,36 @@ void SimulationBase::make_output_directory(bool overwrite) {
   std::vector<std::string> sub_dirs = {logs_dir_, raw_data_dir_,
                                        visualizations_dir_, temp_images_dir_};
 
-  if (!overwrite) {
-    for (const auto &sub_dir : sub_dirs) {
-      if (fs::exists(sub_dir)) {
-        throw std::runtime_error(sub_dir +
-                                 " already exists. Choose a different "
-                                 "output_dir, or set overwrite=true");
-      } else {
-        fs::create_directories(sub_dir);
-      }
-    }
-  } else {
+  if (overwrite) {
     fs::remove_all(output_dir_);
-    for (const auto &sub_dir : sub_dirs) {
+  }
+  for (const auto &sub_dir : sub_dirs) {
+    if (fs::exists(sub_dir)) {
+      throw std::runtime_error(sub_dir + " already exists. Choose a different "
+                                         "output_dir, or set overwrite=true");
+    } else {
       fs::create_directories(sub_dir);
     }
   }
+  //
+  //
+  //
+  // if (!overwrite) {
+  //   for (const auto &sub_dir : sub_dirs) {
+  //     if (fs::exists(sub_dir)) {
+  //       throw std::runtime_error(sub_dir +
+  //                                " already exists. Choose a different "
+  //                                "output_dir, or set overwrite=true");
+  //     } else {
+  //       fs::create_directories(sub_dir);
+  //     }
+  //   }
+  // } else {
+  //   fs::remove_all(output_dir_);
+  //   for (const auto &sub_dir : sub_dirs) {
+  //     fs::create_directories(sub_dir);
+  //   }
+  // }
 }
 
 void SimulationBase::configure_logging() {

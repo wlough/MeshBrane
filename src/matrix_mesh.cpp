@@ -3012,32 +3012,21 @@ Samples1d MatrixMesh::cotan_laplacian(Samples1d &Q) {
       int hijp1 = h_twin_h(h_next_h(h_next_h(hij)));
       int hjjm1 = h_twin_h(h_next_h(h_next_h(h_twin_h(hij))));
       int hjjp1 = h_next_h(hij);
-      // printf("hijm1 = %d, hijp1 = %d, hjjm1 = %d, hjjp1 = %d, hij = %d\n",
-      //        hijm1, hijp1, hjjm1, hjjp1, hij);
 
       int eijm1 = e_undirected_h(hijm1);
       int eijp1 = e_undirected_h(hijp1);
       int ejjm1 = e_undirected_h(hjjm1);
       int ejjp1 = e_undirected_h(hjjp1);
       int eij = e_undirected_h(hij);
-      // printf("eijm1 = %d, ejjm1 = %d, eijp1 = %d, ejjp1 = %d, eij = %d\n",
-      //        eijm1, ejjm1, eijp1, ejjp1, eij);
 
       double Lijm1 = length_E_[eijm1];
       double Ljjm1 = length_E_[ejjm1];
       double Lijp1 = length_E_[eijp1];
       double Ljjp1 = length_E_[ejjp1];
       double Lij = length_E_[eij];
-      // printf("Lijm1 = %.20f, Ljjm1 = %.20f, Lijp1 = %.20f, Ljjp1 = %.20f,
-      // Lij
-      // "
-      //        "= %.20f\n",
-      //        Lijm1, Ljjm1, Lijp1, Ljjp1, Lij);
 
       double thetajm1 = math::heron_angle(Lijm1, Ljjm1, Lij);
       double thetajp1 = math::heron_angle(Lijp1, Ljjp1, Lij);
-      // printf("thetajm1 = %.20f, thetajp1 = %.20f\n", thetajm1, thetajp1);
-
       // auto cos_thetam =
       //     (ri_rj + rjm1_rjm1 - rj_rjm1 - ri_rjm1) / (Lijm1 * Ljjm1);
 
@@ -3256,7 +3245,6 @@ void MatrixMesh::update_mean_curvature() {
   lap_mean_curvature_V_.resize(num_vertices);
   mcvec_V_ = laplacian(xyz_coord_V_);
   for (int v = 0; v < num_vertices; v++) {
-    // Vec3d n = normal_V_.row(v);
     Vec3d mcvec = mcvec_V_.row(v);
     int h = h_out_v(v);
     if (some_negative_boundary_contains_h(h)) {
@@ -3266,7 +3254,11 @@ void MatrixMesh::update_mean_curvature() {
     Vec3d n = normal_F_.row(f);
     double mcvec_sign = math::sign(math::dot(mcvec, n));
     mean_curvature_V_[v] = mcvec_sign * math::L2norm(mcvec) / 2;
+    //
+    // mean_curvature_V_[v] = mcvec_V_.row(v).dot(normal_V_.row(v)) / 2;
   }
+  // mean_curvature_V_ =
+  //     0.5 * (mcvec_V_.array() * normal_V_.array()).rowwise().sum().matrix();
   lap_mean_curvature_V_ = laplacian(mean_curvature_V_);
 }
 

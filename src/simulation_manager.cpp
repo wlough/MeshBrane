@@ -96,12 +96,13 @@ void SimulationManager::make_sim_parameters() {
           envelope_lists_[j][indices[j]];
     }
 
-    if (spindle_type_ == "simple") {
-      for (int j = 0; j < spindle_keys_.size(); j++) {
-        sim_parameters_[i]["spindle"][spindle_keys_[j]] =
-            spindle_lists_[j][indices[j + envelope_keys_.size()]];
-      }
-    } else if (spindle_type_ == "rigid_spindle") {
+    // if (spindle_type_ == "simple") {
+    //   for (int j = 0; j < spindle_keys_.size(); j++) {
+    //     sim_parameters_[i]["spindle"][spindle_keys_[j]] =
+    //         spindle_lists_[j][indices[j + envelope_keys_.size()]];
+    //   }
+    // } else
+    if (spindle_type_ == "rigid_spindle") {
       for (int j = 0; j < spindle_keys_.size(); j++) {
         if (spindle_keys_[j] == "max_length" || spindle_keys_[j] == "v_grow" ||
             spindle_keys_[j] == "max_force") {
@@ -156,6 +157,9 @@ void SimulationManager::loadParameters(const std::string &file_path) {
   if (parameters_["spindle_type"]) {
     spindle_type_ = parameters_["spindle_type"].as<std::string>();
   }
+  if (parameters_["clear_output_dir"]) {
+    clear_output_dir_ = parameters_["clear_output_dir"].as<bool>();
+  }
 
   envelope_keys_ =
       parameters_["envelope"]["list_keys"].as<std::vector<std::string>>();
@@ -172,12 +176,13 @@ void SimulationManager::loadParameters(const std::string &file_path) {
   //////////////////////////////
 
   spindle_lists_.resize(spindle_keys_.size());
-  if (spindle_type_ == "simple") {
-    for (int i = 0; i < spindle_keys_.size(); i++) {
-      spindle_lists_[i] =
-          parameters_["spindle"][spindle_keys_[i]].as<std::vector<double>>();
-    }
-  } else if (spindle_type_ == "rigid_spindle") {
+  // if (spindle_type_ == "simple") {
+  //   for (int i = 0; i < spindle_keys_.size(); i++) {
+  //     spindle_lists_[i] =
+  //         parameters_["spindle"][spindle_keys_[i]].as<std::vector<double>>();
+  //   }
+  // } else
+  if (spindle_type_ == "rigid_spindle") {
     for (int i = 0; i < spindle_keys_.size(); i++) {
       if (spindle_keys_[i] == "max_length" || spindle_keys_[i] == "v_grow" ||
           spindle_keys_[i] == "max_force") {
@@ -207,12 +212,13 @@ void SimulationManager::loadParameters(const std::string &file_path) {
   for (int i = 0; i < envelope_keys_.size(); i++) {
     list_lengths_[i] = parameters_["envelope"][envelope_keys_[i]].size();
   }
-  if (spindle_type_ == "simple") {
-    for (int i = 0; i < spindle_keys_.size(); i++) {
-      list_lengths_[i + envelope_keys_.size()] =
-          parameters_["spindle"][spindle_keys_[i]].size();
-    }
-  } else if (spindle_type_ == "rigid_spindle") {
+  // if (spindle_type_ == "simple") {
+  //   for (int i = 0; i < spindle_keys_.size(); i++) {
+  //     list_lengths_[i + envelope_keys_.size()] =
+  //         parameters_["spindle"][spindle_keys_[i]].size();
+  //   }
+  // } else
+  if (spindle_type_ == "rigid_spindle") {
     for (int i = 0; i < spindle_keys_.size(); i++) {
       if (spindle_keys_[i] == "max_length" || spindle_keys_[i] == "v_grow" ||
           spindle_keys_[i] == "max_force") {
@@ -253,8 +259,20 @@ void SimulationManager::save_parameters(const std::string &path) {
 
 void SimulationManager::make_output_directory() {
   printf("make_output_directory\n");
-  std::filesystem::remove_all(output_dir_);
+
+  if (clear_output_dir_) {
+    printf("std::filesystem::remove_all(output_dir_);\n");
+    std::filesystem::remove_all(output_dir_);
+  }
+  if (std::filesystem::exists(output_dir_)) {
+    throw std::runtime_error(output_dir_ +
+                             " already exists. Choose a different "
+                             "output_dir, or set clear_output_dir: true");
+  }
   std::filesystem::create_directories(output_dir_);
+  //
+  // std::filesystem::remove_all(output_dir_);
+  // std::filesystem::create_directories(output_dir_);
 }
 
 void SimulationManager::update_movie_paths() {

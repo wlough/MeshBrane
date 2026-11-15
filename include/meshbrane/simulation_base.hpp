@@ -123,6 +123,8 @@ public:
   std::string frame_prefix_ = "frame";
   double t_ = 0.0;
 
+  bool clear_output_dir_{false};
+
   // std::vector<std::unique_ptr<MeshBraneObject>> objects_;
   // std::vector<std::unique_ptr<PairInteraction>> pair_interactions_;
 

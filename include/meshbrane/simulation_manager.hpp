@@ -12,7 +12,7 @@
 namespace meshbrane {
 class SimulationManager {
 public:
-  std::string spindle_type_ = "simple";
+  std::string spindle_type_ = "rigid_spindle";
   YAML::Node parameters_;
 
   bool no_graph_ = false;
@@ -38,6 +38,7 @@ public:
   int num_runs_;
   std::string exe_path_;
   std::vector<std::string> movie_paths_;
+  bool clear_output_dir_{false};
 
   void generate_index_combinations(const std::vector<int> &list_lengths);
 
