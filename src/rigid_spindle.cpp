@@ -5,6 +5,7 @@
 #include "meshbrane/rigid_spindle.hpp"
 #include "meshbrane/math_utils.hpp"
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 
 namespace meshbrane {
@@ -67,9 +68,9 @@ void SphericalSPB::set_attributes_from_parameters() {
   // set global parameters
   if ((*sim_parameters_)["bulk_viscosity"]) {
     double mu = (*sim_parameters_)["bulk_viscosity"].as<double>();
-    linear_drag_coefficient_ = 6.0 * M_PI * mu * contact_radius_;
+    linear_drag_coefficient_ = 6.0 * std::numbers::pi * mu * contact_radius_;
     angular_drag_coefficient_ =
-        8.0 * M_PI * mu * contact_radius_ * contact_radius_ * contact_radius_;
+        8.0 * std::numbers::pi * mu * contact_radius_ * contact_radius_ * contact_radius_;
   }
   //
 }
@@ -81,7 +82,7 @@ void SphericalSPB::init_state(Vec3d &center, Eigen::Matrix3d &rotation_matrix) {
   // init_cache_from_core_data();
   double r = contact_radius_;
   int N = get_num_vertices();
-  double rho = N / (4 * M_PI * r * r);
+  double rho = N / (4 * std::numbers::pi * r * r);
   printf("SphericalSPB::init_state - r = %f, N = %d, rho = %f\n", r, N, rho);
   // throw std::runtime_error("SphericalSPB::init_state");
 
@@ -296,9 +297,9 @@ void RigidMTBundle::set_attributes_from_parameters() {
     // double c_par = c_drag_constant_par_;
     // double c_perp = c_drag_constant_perp_;
     // double log_term = std::log(0.5 * L / a);
-    // lin_drag_per_len_par_ = 2.0 * M_PI * mu / (log_term + c_par);
-    // lin_drag_per_len_perp_ = 4.0 * M_PI * mu / (log_term + c_perp);
-    ang_drag_per_len_par_ = 4.0 * M_PI * mu * a * a;
+    // lin_drag_per_len_par_ = 2.0 * std::numbers::pi * mu / (log_term + c_par);
+    // lin_drag_per_len_perp_ = 4.0 * std::numbers::pi * mu / (log_term + c_perp);
+    ang_drag_per_len_par_ = 4.0 * std::numbers::pi * mu * a * a;
     update_linear_drag_coefficients();
   }
 }
@@ -311,8 +312,8 @@ void RigidMTBundle::update_linear_drag_coefficients() {
   // double c_par = c_drag_constant_par_;
   // double c_perp = c_drag_constant_perp_;
   // double log_term = std::log(0.5 * L / a);
-  // lin_drag_per_len_par_ = 2.0 * M_PI * mu / (log_term + c_par);
-  // lin_drag_per_len_perp_ = 4.0 * M_PI * mu / (log_term + c_perp);
+  // lin_drag_per_len_par_ = 2.0 * std::numbers::pi * mu / (log_term + c_par);
+  // lin_drag_per_len_perp_ = 4.0 * std::numbers::pi * mu / (log_term + c_perp);
 
   double mu = bulk_viscosity_;
   double L = 0.5 * (length_ + overlap_length_);
@@ -321,8 +322,8 @@ void RigidMTBundle::update_linear_drag_coefficients() {
   double c_par = c_drag_constant_par_;
   double c_perp = c_par + 1;
   double log_term = std::log(aspect_ratio);
-  lin_drag_per_len_par_ = 2.0 * M_PI * mu / (log_term + c_par);
-  lin_drag_per_len_perp_ = 4.0 * M_PI * mu / (log_term + c_perp);
+  lin_drag_per_len_par_ = 2.0 * std::numbers::pi * mu / (log_term + c_par);
+  lin_drag_per_len_perp_ = 4.0 * std::numbers::pi * mu / (log_term + c_perp);
   if (lin_drag_per_len_par_ < 0.0) {
     throw std::runtime_error(
         "RigidMTBundle::update_linear_drag_coefficients - Negative drag "

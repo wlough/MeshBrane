@@ -50,8 +50,10 @@ EnvelopeTestSim::EnvelopeTestSim(const fs::path &path_to_parameters)
     throw std::runtime_error("Fatal error: no parameters found for Membrane");
   }
 
-  init_concentric_spheres();
+  // init_concentric_spheres();
   // init_with_npcs();
+  // init_glue_tubes_test();
+  init_make_hole_test();
 
   viewer_.sim_parameters_ = &parameters_;
   viewer_.sync_parameters();
@@ -93,13 +95,12 @@ void EnvelopeTestSim::print_info() {
 }
 
 void EnvelopeTestSim::apply_pair_interactions() {
-
   //
   //
 }
 
 void EnvelopeTestSim::apply_internal_interactions() {
-  envelope_.apply_internal_interactions();
+  // envelope_.apply_internal_interactions();
 }
 
 void EnvelopeTestSim::clear_interactions() { envelope_.clear_interactions(); }
@@ -111,7 +112,7 @@ void EnvelopeTestSim::update_cached_data() {
 
 void EnvelopeTestSim::apply_thermal_fluctuations(double dt) {
   //
-  envelope_.apply_thermal_fluctuations_to_self(dt, kBT_, rng_);
+  // envelope_.apply_thermal_fluctuations_to_self(dt, kBT_, rng_);
 }
 
 void EnvelopeTestSim::update_state_variables(double dt) {

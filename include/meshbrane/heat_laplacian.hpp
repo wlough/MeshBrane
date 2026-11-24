@@ -8,6 +8,7 @@
 
 #include "meshbrane/meshbrane_data_types.hpp"
 #include <Eigen/Dense>
+#include <numbers>
 
 namespace meshbrane {
 
@@ -43,12 +44,12 @@ namespace meshbrane {
  */
 inline double heat_parametrix2d(Vec3d &x, Vec3d &y, double t) {
   double dist = (y - x).norm();
-  return std::exp(-dist * dist / (4 * t)) / (4 * M_PI * t);
+  return std::exp(-dist * dist / (4 * t)) / (4 * std::numbers::pi * t);
 }
 
 inline double heat_laplacian_kernel1(Vec3d x, Vec3d y, double t) {
   double dist = (y - x).norm();
-  return std::exp(-dist * dist / (4 * t)) / (4 * M_PI * t * t);
+  return std::exp(-dist * dist / (4 * t)) / (4 * std::numbers::pi * t * t);
 }
 
 inline Samples1d belkin_heat_laplacian(const Samples1d &phi,

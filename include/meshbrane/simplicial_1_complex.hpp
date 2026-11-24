@@ -12,6 +12,7 @@
 #include "meshbrane/simple_vector_field.hpp"
 #include <filesystem>
 #include <iostream>
+#include <numbers>
 #include <string> // std::string
 #include <tuple>  // std::tuple
 #include <yaml-cpp/yaml.h>
@@ -527,7 +528,7 @@ public:
     // assign data to vertices
     for (int v = 0; v < Nv; v++) {
       int h = v;
-      double phi_v = 2 * M_PI * v / Nv;
+      double phi_v = 2 * std::numbers::pi * v / Nv;
       xyz_coord_V.row(v) = loop_center + loop_radius * (std::cos(phi_v) * ex +
                                                         std::sin(phi_v) * ey);
     }
@@ -538,7 +539,7 @@ public:
 
     Samples3d xyz_coord_V(Nv, 3);
 
-    double ga = M_PI * (3.0 - std::sqrt(5.0)); // golden angle
+    double ga = std::numbers::pi * (3.0 - std::sqrt(5.0)); // golden angle
 
     for (int v = 0; v < Nv; v++) {
       double z = 1.0 - 2.0 * v / (Nv - 1); // -1<=z<=1

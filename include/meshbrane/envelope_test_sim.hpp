@@ -2,7 +2,7 @@
 
 /**
  * @file envelope_test_sim.hpp
- * @brief Defines EnvelopeTestSim class and associated classes
+ * @brief Prototyping...
  */
 
 #include "meshbrane/kmc.hpp"
@@ -14,6 +14,7 @@
 #include <cassert>
 #include <cstdint>
 #include <filesystem>
+#include <numbers>
 
 namespace meshbrane {
 
@@ -62,26 +63,27 @@ public:
 
     envelope_.init_core_data_from_minimal_half_edge_data();
     envelope_.init_cache_from_core_data();
-    envelope_.initial_area_ =
-        envelope_.average_face_area_ * envelope_.get_num_faces();
-    envelope_.initial_volume_ = envelope_.total_volume_;
-    envelope_.target_face_area_ = envelope_.average_face_area_;
-    envelope_.target_volume_ = envelope_.total_volume_;
-    envelope_.update_geotargets();
-
-    envelope_.mcvec_V_.resize(envelope_.get_num_vertices(), 3);
-    envelope_.mcvec_V_.setZero();
-
-    envelope_.force_V_.resize(envelope_.get_num_vertices(), 3);
-    envelope_.force_V_.setZero();
-
-    envelope_.update_surface_tension_and_pressure();
-
-    if (envelope_.enable_flipping_) {
-      envelope_.t_flip_ = envelope_.dt_flip_; // time to next flip
-    } else {
-      envelope_.t_flip_ = std::numeric_limits<double>::infinity();
-    }
+    // envelope_.initial_area_ =
+    //     envelope_.average_face_area_ * envelope_.get_num_faces();
+    // envelope_.initial_volume_ = envelope_.total_volume_;
+    // envelope_.target_face_area_ = envelope_.average_face_area_;
+    // envelope_.target_volume_ = envelope_.total_volume_;
+    // envelope_.update_geotargets();
+    //
+    // envelope_.mcvec_V_.resize(envelope_.get_num_vertices(), 3);
+    // envelope_.mcvec_V_.setZero();
+    //
+    // envelope_.force_V_.resize(envelope_.get_num_vertices(), 3);
+    // envelope_.force_V_.setZero();
+    //
+    // envelope_.update_surface_tension_and_pressure();
+    //
+    // if (envelope_.enable_flipping_) {
+    //   envelope_.t_flip_ = envelope_.dt_flip_; // time to next flip
+    // } else {
+    //   envelope_.t_flip_ = std::numeric_limits<double>::infinity();
+    // }
+    envelope_.init_from_mesh_data();
   }
 
   void init_concentric_spheres0() {
@@ -293,7 +295,7 @@ public:
       double z = z_min + nz * Delta_z / (Nz - 1);
       for (int nphi = 0; nphi < Nphi; nphi++) {
         int v = nphi + nz * Nphi;
-        double phi = nphi * 2 * M_PI / Nphi;
+        double phi = nphi * 2 * std::numbers::pi / Nphi;
         double x = r * std::cos(phi);
         double y = r * std::sin(phi);
         xyz_coord_V.row(v) << x, y, z;
@@ -325,7 +327,7 @@ public:
     return m;
   }
 
-  void init_with_npcs() {
+  void init_with_npcs0() {
     printf("EnvelopeTestSim::init_with_npcs()\n");
     envelope_.check_he_matrices();
     double inner_membrane_scale = 0.8;
@@ -459,6 +461,249 @@ public:
     reinit_envelope();
 
     printf("EnvelopeTestSim::init_with_npcs() - 5\n");
+    envelope_.check_he_matrices();
+  }
+
+  void init_with_npcs() {
+    printf("EnvelopeTestSim::init_with_npcs()\n");
+    MatrixMesh m = MatrixMesh::spherical_shell(3, 0.05);
+    m.init_cache_from_core_data();
+    // envelope_.copy_mesh_data(m);
+    // envelope_.copy_mesh_cache(m);
+    // envelope_.init_from_mesh_data();
+    printf("EnvelopeTestSim::init_with_npcs() - 0\n");
+
+    int v0 = 0;
+    int valance_v0 = envelope_.get_valence_v(v0);
+    while (valance_v0 != 6) {
+      v0++;
+      valance_v0 = envelope_.get_valence_v(v0);
+    }
+    printf("found vertex v0=%d with valance=%d\n", v0, valance_v0);
+    double r_max = 0.5;
+    int v1 = m.find_opposite_vertex(v0, r_max);
+    int valance_v1 = envelope_.get_valence_v(v1);
+    printf("found vertex v1=%d with valance=%d\n", v1, valance_v1);
+
+    printf("EnvelopeTestSim::init_with_npcs() - 1\n");
+    // m.remove_v_neighborhood(v0);
+    m.remove_v_and_v_opposite_neighborhood(v0, r_max);
+    printf("EnvelopeTestSim::init_with_npcs() - 2\n");
+    m.init_cache_from_core_data();
+    envelope_.copy_mesh_data(m);
+    envelope_.copy_mesh_cache(m);
+    envelope_.init_from_mesh_data();
+
+    //
+    //
+    //
+    //
+    //
+    //
+    // printf("EnvelopeTestSim::init_with_npcs()\n");
+    // envelope_.check_he_matrices();
+    // double inner_membrane_scale = 0.8;
+    // int Nv0 = envelope_.get_num_vertices();
+    // int Nf0 = envelope_.get_num_faces();
+    //
+    // printf("EnvelopeTestSim::init_with_npcs() - 0\n");
+    // int v_hole0 = 0;
+    // int valance_v_hole0 = envelope_.get_valence_v(v_hole0);
+    // while (valance_v_hole0 != 6) {
+    //   v_hole0++;
+    //   valance_v_hole0 = envelope_.get_valence_v(v_hole0);
+    // }
+    //
+    // printf("EnvelopeTestSim::init_with_npcs() - 0.1\n");
+    //
+    // Samples3d xyz_coord_V0 = envelope_.xyz_coord_V_;
+    // Samples3i V_cycle_F0 = envelope_.V_cycle_F_;
+    //
+    // int Nv = 2 * Nv0;
+    // int Nf = 2 * Nf0;
+    //
+    // printf("EnvelopeTestSim::init_with_npcs() - 1\n");
+    // Samples3d xyz_coord_V1 = inner_membrane_scale * xyz_coord_V0;
+    // Samples3i V_cycle_F1 = V_cycle_F0.array() + Nv0;
+    // V_cycle_F1.col(1).swap(V_cycle_F1.col(2));
+    //
+    // Samples3d xyz_coord_V(Nv, 3);
+    // Samples3i V_cycle_F(Nf, 3);
+    //
+    // xyz_coord_V.topRows(Nv0) = xyz_coord_V0;
+    // xyz_coord_V.bottomRows(Nv0) = xyz_coord_V1;
+    //
+    // V_cycle_F.topRows(Nf0) = V_cycle_F0;
+    // V_cycle_F.bottomRows(Nf0) = V_cycle_F1;
+    //
+    // //
+    // // std::cout << "V_cycle_F = " << V_cycle_F.transpose() << '\n';
+    // // std::cout << "V_cycle_F = " << V_cycle_F << '\n';
+    //
+    // //
+    // //
+    // printf("EnvelopeTestSim::init_with_npcs() - 2\n");
+    //
+    // Samples3d xyz_loop0{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}};
+    // Samples3d xyz_loop1{{0, 0, 1}, {1, 0, 1}, {0, 1, 1}};
+    // Samples3d xyz_loop2{{0, 0, 2}, {1, 0, 2}, {0, 1, 2}};
+    // MatrixMesh m0 = MatrixMesh::tube_between_loops(xyz_loop0, xyz_loop1, 3);
+    // MatrixMesh m1 = MatrixMesh::tube_between_loops(xyz_loop1, xyz_loop2, 3);
+    //
+    // int b0 = 0;
+    // int b1 = 1;
+    // int h0 = m0.h_negative_b(b0);
+    // int h1 = m1.h_twin_h(m1.h_negative_b(b1));
+    // int v0 = m0.v_origin_h(h0);
+    // int v1 = m1.v_origin_h(h1);
+    // double x0 = m0.xyz_coord_V_(v0, 0);
+    // double y0 = m0.xyz_coord_V_(v0, 1);
+    // double z0 = m0.xyz_coord_V_(v0, 2);
+    // double x1 = m1.xyz_coord_V_(v1, 0);
+    // double y1 = m1.xyz_coord_V_(v1, 1);
+    // double z1 = m1.xyz_coord_V_(v1, 2);
+    //
+    // printf("x0, y0, z0 = %f, %f, %f\n", x0, y0, z0);
+    // printf("x1, y1, z1 = %f, %f, %f\n", x1, y1, z1);
+    //
+    // m0.normal_v(0);
+    //
+    // m0.glue_boundaries(m1, b0, b1);
+    //
+    // envelope_.xyz_coord_V_ = m0.xyz_coord_V_;
+    // envelope_.V_cycle_F_ = m0.V_cycle_F_;
+    // envelope_.init_core_data_from_V_cycle_F();
+    //
+    // printf("EnvelopeTestSim::init_with_npcs() - 3\n");
+    // //
+    // //
+    // //
+    // //
+    // // envelope_.swap_vertex_indices(0, 1);
+    // // envelope_.swap_vertex_indices(0, 1);
+    // // envelope_.swap_vertex_indices(2, 6);
+    // //
+    // // envelope_.swap_edge_indices(0, 1);
+    // // envelope_.swap_edge_indices(0, 1);
+    // // envelope_.swap_edge_indices(2, 6);
+    // //
+    // // envelope_.swap_face_indices(0, 1);
+    // // envelope_.swap_face_indices(0, 1);
+    // // envelope_.swap_face_indices(2, 6);
+    //
+    // // envelope_.swap_halfedge_indices(0, 1);
+    // // envelope_.swap_halfedge_indices(0, 1);
+    // // envelope_.swap_halfedge_indices(2, 6);
+    // //
+    // //
+    // printf("EnvelopeTestSim::init_with_npcs() - 4\n");
+    // reinit_envelope();
+    //
+    // printf("EnvelopeTestSim::init_with_npcs() - 5\n");
+    // envelope_.check_he_matrices();
+  }
+
+  void init_glue_tubes_test() {
+    printf("EnvelopeTestSim::init_glue_tubes_test()\n");
+
+    Samples3d xyz_loop0{{0, 0, -1}, {1, 0, -1}, {0, 1, -1}};
+    Samples3d xyz_loop1{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}};
+    Samples3d xyz_loop2{{0, 0, 1}, {1, 0, 1}, {0, 1, 1}};
+    MatrixMesh m0 = MatrixMesh::tube_between_loops(xyz_loop0, xyz_loop1, 3);
+    MatrixMesh m1 = MatrixMesh::tube_between_loops(xyz_loop1, xyz_loop2, 3);
+
+    m0.print_simplex_mats();
+    m0.print_he_mats();
+    m1.print_simplex_mats();
+    m1.print_he_mats();
+    m0.check_he_matrices();
+    m1.check_he_matrices();
+
+    printf("EnvelopeTestSim::init_glue_tubes_test() - 0\n");
+
+    int b0 = 1;
+    int b1 = 0;
+    int h0 = m0.h_negative_b(b0);
+    int h1 = m1.h_twin_h(m1.h_negative_b(b1));
+    int v0 = m0.v_origin_h(h0);
+    int v1 = m1.v_origin_h(h1);
+    double x0 = m0.xyz_coord_V_(v0, 0);
+    double y0 = m0.xyz_coord_V_(v0, 1);
+    double z0 = m0.xyz_coord_V_(v0, 2);
+    double x1 = m1.xyz_coord_V_(v1, 0);
+    double y1 = m1.xyz_coord_V_(v1, 1);
+    double z1 = m1.xyz_coord_V_(v1, 2);
+
+    printf("x0, y0, z0 = %f, %f, %f\n", x0, y0, z0);
+    printf("x1, y1, z1 = %f, %f, %f\n", x1, y1, z1);
+
+    m0.glue_boundaries(m1, b0, b1);
+
+    printf("EnvelopeTestSim::init_glue_tubes_test() - 1\n");
+    m0.init_cache_from_core_data();
+
+    // envelope_.xyz_coord_V_ = m0.xyz_coord_V_;
+    // envelope_.V_cycle_F_ = m0.V_cycle_F_;
+    // envelope_.init_core_data_from_V_cycle_F();
+
+    printf("EnvelopeTestSim::init_glue_tubes_test() - 2\n");
+
+    envelope_.copy_mesh_data(m0);
+    envelope_.copy_mesh_cache(m0);
+    envelope_.init_from_mesh_data();
+
+    printf("EnvelopeTestSim::init_glue_tubes_test() - 3\n");
+    // reinit_envelope();
+
+    printf("EnvelopeTestSim::init_glue_tubes_test() - 4\n");
+    envelope_.check_he_matrices();
+  }
+
+  void init_make_hole_test() {
+    printf("EnvelopeTestSim::init_make_hole_test()\n");
+
+    MatrixMesh m = MatrixMesh::icososphere(3);
+
+    printf("EnvelopeTestSim::init_make_hole_test() - 0\n");
+
+    int Nv0 = m.get_num_vertices();
+    int Ne0 = m.get_num_edges();
+    int Nf0 = m.get_num_faces();
+    int Nb0 = m.get_num_boundaries();
+    int Nh0 = m.get_num_half_edges();
+
+    printf("Nv0 = %d\n", Nv0);
+    printf("Ne0 = %d\n", Ne0);
+    printf("Nf0 = %d\n", Nf0);
+    printf("Nb0 = %d\n", Nb0);
+    printf("Nh0 = %d\n", Nh0);
+
+    int v0 = 0;
+
+    double r_max = 0.15;
+    // int v1 = m.find_opposite_vertex(v0, r_max);
+    // m.remove_v_neighborhood(v0);
+    // m.remove_v_neighborhood(v1);
+
+    m.remove_v_and_v_opposite_neighborhood(v0, r_max);
+
+    printf("EnvelopeTestSim::init_make_hole_test() - 1\n");
+    m.init_cache_from_core_data();
+
+    // envelope_.xyz_coord_V_ = m0.xyz_coord_V_;
+    // envelope_.V_cycle_F_ = m0.V_cycle_F_;
+    // envelope_.init_core_data_from_V_cycle_F();
+
+    printf("EnvelopeTestSim::init_make_hole_test() - 2\n");
+
+    envelope_.copy_mesh_data(m);
+    envelope_.copy_mesh_cache(m);
+    envelope_.init_from_mesh_data();
+
+    printf("EnvelopeTestSim::init_make_hole_test() - 3\n");
+    // reinit_envelope();
+
+    printf("EnvelopeTestSim::init_make_hole_test() - 4\n");
     envelope_.check_he_matrices();
   }
 };

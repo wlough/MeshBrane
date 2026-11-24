@@ -199,9 +199,9 @@ void RigidSpindleSim::apply_pair_interactions() {
   double sigma1 = 0.5 * (spindle_.spb1_.wca_sigma_ + envelope_.wca_sigma_);
   double epsilon1 = spindle_.spb1_.wca_epsilon_;
   for (int v1 : envelope_.spb_patch_plus_.V_) {
-    Vec3d x1 = envelope_.xyz_coord_v(v1);
+    Vec3d x1 = envelope_.xyz_coord_V_.row(v1);
     for (int v2{0}; v2 < Nspb1; v2++) {
-      Vec3d x2 = spindle_.spb1_.xyz_coord_v(v2);
+      Vec3d x2 = spindle_.spb1_.xyz_coord_V_.row(v2);
       Vec3d F = wca_force(x1, x2, epsilon1, sigma1);
       envelope_.force_V_.row(v1) += F;
       spindle_.spb1_.force_V_.row(v2) -= F;
@@ -210,9 +210,9 @@ void RigidSpindleSim::apply_pair_interactions() {
   double sigma2 = 0.5 * (spindle_.spb2_.wca_sigma_ + envelope_.wca_sigma_);
   double epsilon2 = spindle_.spb2_.wca_epsilon_;
   for (int v1 : envelope_.spb_patch_minus_.V_) {
-    Vec3d x1 = envelope_.xyz_coord_v(v1);
+    Vec3d x1 = envelope_.xyz_coord_V_.row(v1);
     for (int v2{0}; v2 < Nspb2; v2++) {
-      Vec3d x2 = spindle_.spb2_.xyz_coord_v(v2);
+      Vec3d x2 = spindle_.spb2_.xyz_coord_V_.row(v2);
       Vec3d F = wca_force(x1, x2, epsilon2, sigma2);
       envelope_.force_V_.row(v1) += F;
       spindle_.spb2_.force_V_.row(v2) -= F;
@@ -265,7 +265,7 @@ void RigidSpindleSim::apply_pair_interactions() {
   double r_max = spindle_.mt_bundle_.interaction_radius_;
 
   for (int v = 0; v < Nv; v++) {
-    Vec3d p1 = envelope_.xyz_coord_v(v);
+    Vec3d p1 = envelope_.xyz_coord_V_.row(v);
     Vec3d xyz = p1 - o;
     double z = xyz.dot(ez);
     Vec3d r_vec = xyz - z * ez;
@@ -279,7 +279,7 @@ void RigidSpindleSim::apply_pair_interactions() {
     envelope_.force_V_.row(v) += F;
     spindle_.mt_bundle_.force_envelope_ -= F;
     Vec3d l_vec = p2 - o;
-    Vec3d T = -math::cross(l_vec, F);
+    Vec3d T = -l_vec.cross(F);
     spindle_.mt_bundle_.torque_envelope_ += T;
   }
 }

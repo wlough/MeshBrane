@@ -6,8 +6,9 @@
  */
 
 #include <Eigen/Dense>
-#include <cmath> // For M_PI and std::acos
+#include <cmath> // For std::acos
 #include <cstdint>
+#include <numbers>
 
 namespace meshbrane {
 

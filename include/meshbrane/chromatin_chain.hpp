@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <iostream>
 #include <limits>
+#include <numbers>
 #include <string> // std::string
 #include <tuple>  // std::tuple
 #include <yaml-cpp/yaml.h>
@@ -268,7 +269,8 @@ public:
     // init_open_chain(num_initial_beads_, loop_normal_,
     // preferred_bond_length_);
     // print_he_mats();
-    bead_drag_coefficient_ = 6.0 * M_PI * bulk_viscosity_ * bead_radius_;
+    bead_drag_coefficient_ =
+        6.0 * std::numbers::pi * bulk_viscosity_ * bead_radius_;
     printf("ChromatinChain::init_chromatin_from_attributes -- 0\n");
     update_complex_geometric_data();
     printf("ChromatinChain::init_chromatin_from_attributes -- 1\n");

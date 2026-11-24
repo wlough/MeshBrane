@@ -3,306 +3,30 @@
  * @file matrix_mesh.cpp
  */
 #include "meshbrane/matrix_mesh.hpp"
-#include "meshbrane/combinatorics.hpp"
+// #include "meshbrane/combinatorics.hpp"
 #include "meshbrane/heat_laplacian.hpp"
 #include "meshbrane/mesh_builder.hpp"
+#include "meshbrane/mesh_helpers.hpp"
 #include "meshbrane/meshbrane_data_types.hpp"
 #include "meshbrane/simple_generator.hpp"
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
-#include <cmath> // For M_PI and std::acos
+#include <cmath> // For std::acos
 #include <coroutine>
 #include <filesystem>
 #include <iostream>
+#include <numbers>
 #include <stdexcept>
+#include <string>
 #include <unordered_set> // std::unordered_set
 
 namespace fs = std::filesystem;
 
 namespace meshbrane {
 
-// Some helper functions
-
-bool VF_data_check_all_v_indices_in_range(Samples3d &xyz_coord_V,
-                                          Samples3i &V_cycle_F) {
-  auto [min_it, max_it] = std::minmax_element(
-      V_cycle_F.data(), V_cycle_F.data() + V_cycle_F.size());
-
-  int v_min = *min_it;
-  int v_max = *max_it;
-
-  return (v_min >= 0 || v_max < xyz_coord_V.size());
-}
-
-bool VF_data_check_no_isolated_vertices(Samples3d &xyz_coord_V,
-                                        Samples3i &V_cycle_F) {
-  size_t Nv = xyz_coord_V.rows();
-  Samplesi seen_V = Samplesi::Zero(Nv);
-
-  for (int f = 0; f < V_cycle_F.rows(); f++) {
-    for (auto v : V_cycle_F.row(f)) {
-      seen_V[v] = 1;
-    }
-  }
-  for (auto seen : seen_V) {
-    if (seen == 0) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-bool VF_data_check_face_v_indices_unique(Samples3d &xyz_coord_V,
-                                         Samples3i &V_cycle_F) {
-  for (int f = 0; f < V_cycle_F.rows(); f++) {
-    int v0 = V_cycle_F(f, 0);
-    int v1 = V_cycle_F(f, 1);
-    int v2 = V_cycle_F(f, 2);
-    if (v0 == v1 || v1 == v2 || v2 == v0) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool VF_data_check(Samples3d &xyz_coord_V, Samples3i &V_cycle_F) {
-  int Nv = xyz_coord_V.rows();
-  int Nf = V_cycle_F.rows();
-  auto [min_it, max_it] = std::minmax_element(
-      V_cycle_F.data(), V_cycle_F.data() + V_cycle_F.size());
-  int v_min = *min_it;
-  int v_max = *max_it;
-  if (v_min < 0 || v_max >= Nv) {
-    // v index in face out of range
-    return false;
-  }
-  Samplesi seen_V = Samplesi::Zero(Nv);
-  for (int f = 0; f < Nf; f++) {
-    int v0 = V_cycle_F(f, 0);
-    int v1 = V_cycle_F(f, 1);
-    int v2 = V_cycle_F(f, 2);
-    if (v0 == v1 || v1 == v2 || v2 == v0) {
-      // v indices in face not unique
-      return false;
-    }
-    seen_V[v0] = 1;
-    seen_V[v1] = 1;
-    seen_V[v2] = 1;
-  }
-  for (auto seen : seen_V) {
-    if (seen == 0) {
-      // isolated vertex
-      return false;
-    }
-  }
-  return true;
-}
-
-bool min_HE_data_check_faces_are_triangles(
-    Samples3d &xyz_coord_V, Samplesi &h_out_V, Samplesi &h_right_F,
-    Samplesi &v_origin_H, Samplesi &f_left_H, Samplesi &h_next_H,
-    Samplesi &h_twin_H, Samplesi &h_negative_B) {
-
-  for (int f = 0; f < h_right_F.size(); f++) {
-    int h0 = h_right_F[f];
-    int h1 = h_next_H[h0];
-    int h2 = h_next_H[h2];
-    if (h_next_H[h2] != h0) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool min_HE_data_check_twin_cycles_are_length_2(
-    Samples3d &xyz_coord_V, Samplesi &h_out_V, Samplesi &h_right_F,
-    Samplesi &v_origin_H, Samplesi &f_left_H, Samplesi &h_next_H,
-    Samplesi &h_twin_H, Samplesi &h_negative_B) {
-
-  for (int h = 0; h < h_twin_H.size(); h++) {
-    int ht = h_twin_H[h];
-    if (ht == h || h_twin_H[ht] != h) {
-      return false;
-    }
-  }
-  return true;
-}
-
-// bool min_HE_data_check(Samples3d &xyz_coord_V, Samplesi &h_out_V,
-//                        Samplesi &h_right_F, Samplesi &v_origin_H,
-//                        Samplesi &f_left_H, Samplesi &h_next_H,
-//                        Samplesi &h_twin_H, Samplesi &h_negative_B) {
-//
-//   int Nv = xyz_coord_V.rows();
-//   if (h_out_V.size() != Nv) {
-//     return false;
-//   }
-//   int Nf = h_right_F.size();
-//   int Nh = v_origin_H.size();
-//   if (Nh % 2 != 0) {
-//     return false;
-//   }
-//   if (f_left_H.size() != Nh || h_next_H.size() != Nh || h_twin_H.size() !=
-//   Nh) {
-//     return false;
-//   }
-//   int Ne = Nh / 2;
-//   int Nb = h_negative_B.size();
-//
-//   // Check v index ranges
-//   for (int v : v_origin_H) {
-//     if (v < 0 || v >= Nv) {
-//       return false;
-//     }
-//   }
-//   // Check f/b index ranges
-//   for (int f : f_left_H) {
-//     if (f < -Nb || f >= Nf) {
-//       return false;
-//     }
-//   }
-//   // Check h indices in range
-//   for (const auto *samples :
-//        {&h_out_V, &h_right_F, &h_next_H, &h_twin_H, &h_negative_B}) {
-//     for (int h : *samples) {
-//       if (h < 0 || h >= Nh) {
-//         return false;
-//       }
-//     }
-//   }
-//
-//   // check h_out_V, v_origin_H compatibility
-//   for (int v = 0; v < Nv; v++) {
-//     int h = h_out_V[v];
-//     if (v_origin_H[h] != v) {
-//       return false;
-//     }
-//   }
-//   // check h_right_F, f_left_H compatibility
-//   for (int f = 0; f < Nf; f++) {
-//     int h = h_right_F[f];
-//     if (f_left_H[h] != f) {
-//       return false;
-//     }
-//   }
-//   // check h_negative_B, f_left_H compatibility
-//   for (int b = 0; b < Nb; b++) {
-//     int h = h_negative_B[b];
-//     if (f_left_H[h] != -(b + 1)) {
-//       return false;
-//     }
-//   }
-//
-//   for (int h0 = 0; h0 < Nh; h0++) {
-//     int ht = h_twin_H[h0];
-//     if (ht == h0 || h_twin_H[ht] != h0) {
-//       // twin cycle not length 2
-//       return false;
-//     }
-//     int h1 = h_next_H[h0];
-//     int h2 = h_next_H[h1];
-//     if (h_next_H[h2] != h0) {
-//       // next cycle not length 2
-//       return false;
-//     }
-//   }
-//
-//   return true;
-// }
-
-bool combinatorial_map_check(Samplesi &h_out_V, Samplesi &h_directed_E,
-                             Samplesi &h_right_F, Samplesi &v_origin_H,
-                             Samplesi &e_undirected_H, Samplesi &f_left_H,
-                             Samplesi &h_next_H, Samplesi &h_twin_H,
-                             Samplesi &h_negative_B) {
-
-  int Nv = h_out_V.size();
-  int Ne = h_directed_E.size();
-  int Nf = h_right_F.size();
-  int Nh = v_origin_H.size();
-  int Nb = h_negative_B.size();
-  if (Nh % 2 != 0) {
-    return false;
-  }
-  if (e_undirected_H.size() != Nh || f_left_H.size() != Nh ||
-      h_next_H.size() != Nh || h_twin_H.size() != Nh) {
-    return false;
-  }
-  if (Ne != Nh / 2) {
-    return false;
-  }
-
-  // Check v index ranges
-  for (int v : v_origin_H) {
-    if (v < 0 || v >= Nv) {
-      return false;
-    }
-  }
-  // Check e index ranges
-  for (int e : e_undirected_H) {
-    if (e < 0 || e >= Nv) {
-      return false;
-    }
-  }
-  // Check f/b index ranges
-  for (int f : f_left_H) {
-    if (f < -Nb || f >= Nf) {
-      return false;
-    }
-  }
-  // Check h indices in range
-  for (const auto *samples : {&h_out_V, &h_directed_E, &h_right_F, &h_next_H,
-                              &h_twin_H, &h_negative_B}) {
-    for (int h : *samples) {
-      if (h < 0 || h >= Nh) {
-        return false;
-      }
-    }
-  }
-
-  // check h_out_V, v_origin_H compatibility
-  for (int v = 0; v < Nv; v++) {
-    if (v_origin_H[h_out_V[v]] != v) {
-      return false;
-    }
-  }
-  // check h_right_F, f_left_H compatibility
-  for (int f = 0; f < Nf; f++) {
-    if (f_left_H[h_right_F[f]] != f) {
-      return false;
-    }
-  }
-  // check h_negative_B, f_left_H compatibility
-  for (int b = 0; b < Nb; b++) {
-    if (f_left_H[h_negative_B[b]] != -(b + 1)) {
-      return false;
-    }
-  }
-
-  for (int h = 0; h < Nh; h++) {
-    int ht = h_twin_H[h];
-    if (v_origin_H[h] == v_origin_H[ht] ||
-        e_undirected_H[h] != e_undirected_H[ht] ||
-        f_left_H[h] == f_left_H[ht]) {
-      // twin ~ (v,e,f)->(v',e,f')
-      return false;
-    }
-    int hn = h_next_H[h];
-    if (v_origin_H[h] == v_origin_H[hn] ||
-        e_undirected_H[h] == e_undirected_H[hn] ||
-        f_left_H[h] != f_left_H[hn]) {
-      // next ~ (v,e,f)->(v',e',f)
-      return false;
-    }
-  }
-
-  return true;
-}
-
-//////////////////////
-// Constructors //////
-//////////////////////
+///////////////////////////////////////////////////
+// Constructors, initialization and mesh I/O //////
+///////////////////////////////////////////////////
 
 MatrixMesh::MatrixMesh(const Samples3d &xyz_coord_V, const Samples3i &V_cycle_F)
     : xyz_coord_V_{xyz_coord_V}, V_cycle_F_{V_cycle_F},
@@ -337,81 +61,8 @@ MatrixMesh::MatrixMesh(const YAML::Node &parameters) {
   init_core_data_from_ply();
   init_cache_from_core_data();
 }
-///////////////////
-// Operators //////
-///////////////////
 
-MatrixMesh &MatrixMesh::operator+=(const MatrixMesh &m) {
-
-  if (this == &m) {
-    MatrixMesh copy(m);
-    return *this += copy;
-  }
-
-  int Nv_other = m.get_num_vertices();
-  int Ne_other = m.get_num_edges();
-  int Nf_other = m.get_num_faces();
-  int Nb_other = m.get_num_boundaries();
-  int Nh_other = m.get_num_half_edges();
-
-  int Nv_this = get_num_vertices();
-  int Ne_this = get_num_edges();
-  int Nf_this = get_num_faces();
-  int Nb_this = get_num_boundaries();
-  int Nh_this = get_num_half_edges();
-
-  int Nv = Nv_this + Nv_other;
-  int Ne = Ne_this + Ne_other;
-  int Nf = Nf_this + Nf_other;
-  int Nb = Nb_this + Nb_other;
-  int Nh = Nh_this + Nh_other;
-
-  xyz_coord_V_.conservativeResize(Nv, 3);
-  h_out_V_.conservativeResize(Nv);
-  V_cycle_E_.conservativeResize(Ne, 2);
-  h_directed_E_.conservativeResize(Ne);
-  V_cycle_F_.conservativeResize(Nf, 3);
-  h_right_F_.conservativeResize(Nf);
-  h_negative_B_.conservativeResize(Nb);
-  v_origin_H_.conservativeResize(Nh);
-  e_undirected_H_.conservativeResize(Nh);
-  f_left_H_.conservativeResize(Nh);
-  h_next_H_.conservativeResize(Nh);
-  h_twin_H_.conservativeResize(Nh);
-
-  xyz_coord_V_.bottomRows(Nv_other) = m.xyz_coord_V_;
-  h_out_V_.tail(Nv_other) = m.h_out_V_.array() + Nh_this;
-
-  V_cycle_E_.bottomRows(Ne_other) = m.V_cycle_E_.array() + Nv_this;
-  h_directed_E_.tail(Ne_other) = m.h_directed_E_.array() + Nh_this;
-
-  V_cycle_F_.bottomRows(Nf_other) = m.V_cycle_F_.array() + Nv_this;
-  h_right_F_.tail(Nf_other) = m.h_right_F_.array() + Nh_this;
-
-  h_negative_B_.tail(Nb_other) = m.h_negative_B_.array() + Nh_this;
-
-  v_origin_H_.tail(Nh_other) = m.v_origin_H_.array() + Nv_this;
-  e_undirected_H_.tail(Nh_other) = m.e_undirected_H_.array() + Ne_this;
-  Samplesi new_f_left_H = m.f_left_H_;
-  for (int &f : new_f_left_H) {
-    f += (f >= 0) ? Nf_this : -Nb_this;
-  }
-  f_left_H_.tail(Nh_other) = new_f_left_H;
-  h_next_H_.tail(Nh_other) = m.h_next_H_.array() + Nh_this;
-  h_twin_H_.tail(Nh_other) = m.h_twin_H_.array() + Nh_this;
-
-  return *this;
-}
-
-MatrixMesh MatrixMesh::operator+(const MatrixMesh &m) const {
-  MatrixMesh out = *this; // copy
-  out += m;               // reuse checked in-place op
-  return out;
-}
-
-//////////////////////
-// Initialization ////
-//////////////////////
+// Initialization
 
 void MatrixMesh::init_core_data_from_V_cycle_F() {
   if (!xyz_coord_V_was_set_ || !V_cycle_F_was_set_) {
@@ -1019,9 +670,7 @@ void MatrixMesh::copy_mesh_cache(MatrixMesh &m) {
   vector_field_arrows_ = m.vector_field_arrows_;
 }
 
-///////////////////////////////////////////
-// Static methods for special surfaces ////
-///////////////////////////////////////////
+// Special surfaces ////
 
 // xyz_coord_V_was_set_ = true;
 // h_out_V_was_set_ = true;
@@ -1183,6 +832,7 @@ MatrixMesh MatrixMesh::tube_between_loops(Samples3d xyz_loop0,
   }
 
   MatrixMesh m(xyz_coord_V, V_cycle_F);
+  m.init_core_data_from_V_cycle_F();
   return m;
 }
 
@@ -1200,13 +850,94 @@ MatrixMesh MatrixMesh::spherical_shell(int num_refinements, double h) {
   return m;
 }
 
+void MatrixMesh::write_he_ply(const fs::path &ply_path) const {
+  // printf("Saving ply file %s\n", ply_path.c_str());
+  meshbrane::mesh_io::write_he_samples_to_ply(
+      xyz_coord_V_, h_out_V_, v_origin_H_, h_next_H_, h_twin_H_, f_left_H_,
+      h_right_F_, h_negative_B_, ply_path);
+}
+
+///////////////////
+// Operators //////
+///////////////////
+
+MatrixMesh &MatrixMesh::operator+=(const MatrixMesh &m) {
+
+  if (this == &m) {
+    MatrixMesh copy(m);
+    return *this += copy;
+  }
+
+  int Nv_other = m.get_num_vertices();
+  int Ne_other = m.get_num_edges();
+  int Nf_other = m.get_num_faces();
+  int Nb_other = m.get_num_boundaries();
+  int Nh_other = m.get_num_half_edges();
+
+  int Nv_this = get_num_vertices();
+  int Ne_this = get_num_edges();
+  int Nf_this = get_num_faces();
+  int Nb_this = get_num_boundaries();
+  int Nh_this = get_num_half_edges();
+
+  int Nv = Nv_this + Nv_other;
+  int Ne = Ne_this + Ne_other;
+  int Nf = Nf_this + Nf_other;
+  int Nb = Nb_this + Nb_other;
+  int Nh = Nh_this + Nh_other;
+
+  xyz_coord_V_.conservativeResize(Nv, 3);
+  h_out_V_.conservativeResize(Nv);
+  V_cycle_E_.conservativeResize(Ne, 2);
+  h_directed_E_.conservativeResize(Ne);
+  V_cycle_F_.conservativeResize(Nf, 3);
+  h_right_F_.conservativeResize(Nf);
+  h_negative_B_.conservativeResize(Nb);
+  v_origin_H_.conservativeResize(Nh);
+  e_undirected_H_.conservativeResize(Nh);
+  f_left_H_.conservativeResize(Nh);
+  h_next_H_.conservativeResize(Nh);
+  h_twin_H_.conservativeResize(Nh);
+
+  xyz_coord_V_.bottomRows(Nv_other) = m.xyz_coord_V_;
+  h_out_V_.tail(Nv_other) = m.h_out_V_.array() + Nh_this;
+
+  V_cycle_E_.bottomRows(Ne_other) = m.V_cycle_E_.array() + Nv_this;
+  h_directed_E_.tail(Ne_other) = m.h_directed_E_.array() + Nh_this;
+
+  V_cycle_F_.bottomRows(Nf_other) = m.V_cycle_F_.array() + Nv_this;
+  h_right_F_.tail(Nf_other) = m.h_right_F_.array() + Nh_this;
+
+  h_negative_B_.tail(Nb_other) = m.h_negative_B_.array() + Nh_this;
+
+  v_origin_H_.tail(Nh_other) = m.v_origin_H_.array() + Nv_this;
+  e_undirected_H_.tail(Nh_other) = m.e_undirected_H_.array() + Ne_this;
+  Samplesi new_f_left_H = m.f_left_H_;
+  for (int &f : new_f_left_H) {
+    f += (f >= 0) ? Nf_this : -Nb_this;
+  }
+  f_left_H_.tail(Nh_other) = new_f_left_H;
+  h_next_H_.tail(Nh_other) = m.h_next_H_.array() + Nh_this;
+  h_twin_H_.tail(Nh_other) = m.h_twin_H_.array() + Nh_this;
+
+  return *this;
+}
+
+MatrixMesh MatrixMesh::operator+(const MatrixMesh &m) const {
+  MatrixMesh out = *this; // copy
+  out += m;               // reuse checked in-place op
+  return out;
+}
+
 ////////////////////////////
 // Debugging and checks ////
 ////////////////////////////
 
 void MatrixMesh::check_v(int v) const {
   if (v < 0 || v >= get_num_vertices()) {
-    throw std::out_of_range("v index " + std::to_string(v) + " out of range");
+    throw std::out_of_range(
+        "v index " + std::to_string(v) +
+        " out of range for Nv = " + std::to_string(get_num_vertices()));
   }
 }
 void MatrixMesh::check_e(int e) const {
@@ -1414,285 +1145,200 @@ void MatrixMesh::print_simplex_mats() {
   std::cout << "V_cycle_F = " << V_cycle_F_ << '\n';
 }
 
-//////////////////////
-// Cache updaters ////
-//////////////////////
+///////////////////////////////////////////////////////////////////
+// Checked access to vertex positions and combinatorial map data //
+///////////////////////////////////////////////////////////////////
 
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////////////////////
+Vec3d MatrixMesh::xyz_coord_v(int v) const {
+  check_v(v);
+  return xyz_coord_V_.row(v);
+}
 
-//////////////////////
-// Cache updaters ////
-//////////////////////
-
-void MatrixMesh::update_boundary_cycles() {
-  int num_boundaries = get_num_boundaries();
-  V_cycle_B_.resize(num_boundaries);
-  for (int b = 0; b < num_boundaries; b++) {
-    std::vector<int> Vnegative;
-    for (auto h : generate_H_next_h(h_negative_b(b))) {
-      Vnegative.push_back(v_origin_h(h));
-    }
-    int Nv = Vnegative.size();
-    V_cycle_B_[b].resize(Nv);
-    for (int _i = 0; _i < Nv; _i++) {
-      int i = Nv - 1 - _i;
-      V_cycle_B_[b][i] = Vnegative[_i];
-    }
+Samples3d MatrixMesh::xyz_coord_v(const Samplesi &indices) const {
+  Samples3d result(indices.size(), 3);
+  for (int i = 0; i < indices.size(); ++i) {
+    check_v(indices(i));
+    result.row(i) = xyz_coord_V_.row(indices(i));
   }
+  return result;
 }
 
-void MatrixMesh::update_mesh_geometric_data_E() {
-  size_t num_edges = get_num_edges();
-  int num_half_edges = get_num_half_edges();
-  vec_H_.resize(num_half_edges, 3);
-  // resize the length vector
-  // length_E_.setZero();
-  length_E_.resize(num_edges);
-  average_edge_length_ = 0.0;
-  for (int e = 0; e < num_edges; e++) {
-    int h = h_directed_E_(e);
-    int ht = h_twin_h(h);
-    int v = v_origin_h(h);
-    int vt = v_origin_h(ht);
-    Vec3d x = xyz_coord_v(v);
-    Vec3d xt = xyz_coord_v(vt);
-    vec_H_.row(h) = xt - x;
-    vec_H_.row(ht) = -vec_H_.row(h);
-    // length_E_(e) = math::L2norm(vec_H_.row(h));
-    length_E_(e) = vec_H_.row(h).norm();
-    average_edge_length_ += length_E_(e);
+int MatrixMesh::h_out_v(int v) const {
+  check_v(v);
+  return h_out_V_(v);
+}
+
+Samplesi MatrixMesh::h_out_v(const Samplesi &indices) const {
+  Samplesi result(indices.size());
+  for (int i = 0; i < indices.size(); ++i) {
+    check_v(indices(i));
+    result(i) = h_out_V_(indices(i));
   }
-  average_edge_length_ /= num_edges;
+  return result;
 }
 
-void MatrixMesh::update_mesh_geometric_data_F() {
-  size_t num_faces = get_num_faces();
-  // area_F_.setZero();
-  // normal_F_.setZero();
-  area_F_.resize(num_faces);
-  normal_F_.resize(num_faces, 3);
-  average_face_area_ = 0.0;
-  for (int f = 0; f < num_faces; f++) {
-    area_F_(f) = heron_area_f(f);
-    normal_F_.row(f) = normal_f(f);
-    average_face_area_ += area_F_(f);
+int MatrixMesh::v_origin_h(int h) const {
+  check_h(h);
+  return v_origin_H_(h);
+}
+
+Samplesi MatrixMesh::v_origin_h(const Samplesi &indices) const {
+  Samplesi result(indices.size());
+  for (int i = 0; i < indices.size(); ++i) {
+    check_h(indices(i));
+    result(i) = v_origin_H_(indices(i));
   }
-  average_face_area_ /= num_faces;
+  return result;
 }
 
-void MatrixMesh::update_mesh_geometric_data_V() {
-  int num_vertices = get_num_vertices();
-  // area_V_.setZero();
-  // normal_V_.setZero();
-  area_V_.resize(num_vertices);
-  normal_V_.resize(num_vertices, 3);
-  for (int v = 0; v < num_vertices; v++) {
-    area_V_(v) = 0;
-    normal_V_.row(v) = Eigen::Vector3d::Zero();
-    int norm_n = 0;
-    for (auto f : generate_F_incident_v(v)) {
-      // printf("v,f=%d,%d\n", v, f);
-      area_V_(v) += area_F_[f] / 3;
-      normal_V_.row(v) += area_F_[f] * normal_F_.row(f);
-    }
-    normal_V_.row(v) /= math::L2norm(normal_V_.row(v));
+int MatrixMesh::h_next_h(int h) const {
+  check_h(h);
+  return h_next_H_(h);
+}
+
+Samplesi MatrixMesh::h_next_h(const Samplesi &indices) const {
+  Samplesi result(indices.size());
+  for (int i = 0; i < indices.size(); ++i) {
+    check_h(indices(i));
+    result(i) = h_next_H_(indices(i));
   }
+  return result;
 }
 
-void MatrixMesh::update_mesh_volume() {
-  total_volume_ = 0.0;
-  for (int f = 0; f < get_num_faces(); f++) {
-    total_volume_ += signed_volume_f(f);
+int MatrixMesh::h_twin_h(int h) const {
+  check_h(h);
+  return h_twin_H_(h);
+}
+
+Samplesi MatrixMesh::h_twin_h(const Samplesi &indices) const {
+  Samplesi result(indices.size());
+  for (int i = 0; i < indices.size(); ++i) {
+    check_h(indices(i));
+    result(i) = h_twin_H_(indices(i));
   }
-  total_volume_ = std::abs(total_volume_);
+  return result;
 }
 
-void MatrixMesh::update_mesh_geometric_data() {
-  update_mesh_geometric_data_E();
-  update_mesh_geometric_data_F();
-  update_mesh_geometric_data_V();
-  update_mesh_volume();
+int MatrixMesh::f_left_h(int h) const {
+  check_h(h);
+  return f_left_H_(h);
 }
 
-/////////////////////
-// Need to check ////
-/////////////////////
-
-/////////////////////////
-// Convergence testing //
-/////////////////////////
-
-void MatrixMesh::refine_messy_icososphere() {
-  divide_faces_barycentric();
-  int num_vertices = xyz_coord_V_.rows();
-  for (int v{0}; v < num_vertices; v++) {
-    Vec3d xyz = xyz_coord_V_.row(v);
-    double normxyz = xyz.norm();
-    // xyz = xyz / normxyz;
-    xyz_coord_V_.row(v) = xyz / normxyz;
+Samplesi MatrixMesh::f_left_h(const Samplesi &indices) const {
+  Samplesi result(indices.size());
+  for (int i = 0; i < indices.size(); ++i) {
+    check_h(indices(i));
+    result(i) = f_left_H_(indices(i));
   }
-  flip_non_delaunay();
+  return result;
 }
 
-void MatrixMesh::update_vector_field_arrows(Samples3d X, Samples3d U) {
-  Eigen::Vector3d rgb = vector_field_arrows_.rgb_;
-  double scale = 1.0;
-  vector_field_arrows_.update(X, U, scale, rgb);
-}
-/////////////////////////////////////
-// Misc precomputed geometric data //
-/////////////////////////////////////
-
-double MatrixMesh::signed_volume_f(int f) const {
-  // auto x0 = xyz_coord_v(V_cycle_F_(f, 0));
-  // auto x1 = xyz_coord_v(V_cycle_F_(f, 1));
-  // auto x2 = xyz_coord_v(V_cycle_F_(f, 2));
-  // Eigen::Vector3d n01, n12, n20;
-  // math::cross_inplace(x0, x1, n01);
-  // math::cross_inplace(x1, x2, n12);
-  // math::cross_inplace(x2, x0, n20);
-  // Eigen::Vector3d n = n01 + n12 + n20;
-  // double val;
-  // math::dot_inplace(n, x0, val);
-  // return val / 6.0;
-  int h1 = h_right_f(f);
-  int h2 = h_next_h(h1);
-  int h3 = h_next_h(h2);
-  Vec3d u = xyz_coord_v(v_origin_h(h1));
-  Vec3d v = xyz_coord_v(v_origin_h(h2));
-  Vec3d w = xyz_coord_v(v_origin_h(h3));
-  return (u[1] * v[2] * w[0] - u[2] * v[1] * w[0] + u[2] * v[0] * w[1] -
-          u[0] * v[2] * w[1] + u[0] * v[1] * w[2] - u[1] * v[0] * w[2]) /
-         6.0;
+int MatrixMesh::h_right_f(int f) const {
+  check_f(f);
+  return h_right_F_(f);
 }
 
-///////////////////////////////////////////////////////
-// Constructors and Mesh I/O //////////////////////////
-///////////////////////////////////////////////////////
-
-// /**
-//  * @brief Construct a new MatrixMesh object from a half-edge ply.
-//  *
-//  * @param ply_path
-//  * @return MatrixMesh
-//  */
-// MatrixMesh MatrixMesh::from_he_ply(const fs::path &ply_path) {
-//   mesh_io::MeshBuilder mc = mesh_io::MeshBuilder::from_he_ply(ply_path,
-//   false); auto [xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
-//   f_left_H,
-//         h_right_F, h_negative_B] = mc.he_samples;
-//   return MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
-//                     f_left_H, h_right_F, h_negative_B);
-// }
-
-/**
- * @brief Save the mesh to a half-edge ply file.
- *
- * @param ply_path
- */
-void MatrixMesh::write_he_ply(const fs::path &ply_path) const {
-  // printf("Saving ply file %s\n", ply_path.c_str());
-  meshbrane::mesh_io::write_he_samples_to_ply(
-      xyz_coord_V_, h_out_V_, v_origin_H_, h_next_H_, h_twin_H_, f_left_H_,
-      h_right_F_, h_negative_B_, ply_path);
-}
-
-// /**
-//  * @brief Construct a new MatrixMesh object from a vertex-face samples. See
-//  * `meshbrane::VertexFaceTuple`.
-//  *
-//  * @param xyz_coord_V
-//  * @param V_cycle_F
-//  * @return MatrixMesh
-//  */
-// MatrixMesh MatrixMesh::from_vf_samples(const Samples3d &xyz_coord_V,
-//                                        const Samples3i &V_cycle_F) {
-//   mesh_io::MeshBuilder mc =
-//       mesh_io::MeshBuilder::from_vf_samples(xyz_coord_V, V_cycle_F, true);
-//   auto [xyz_coord_V0, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H,
-//         h_right_F, h_negative_B] = mc.he_samples;
-//   return MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
-//                     f_left_H, h_right_F, h_negative_B);
-// }
-
-// MatrixMesh MatrixMesh::from_vf_ply(const fs::path &ply_path) {
-//   mesh_io::MeshBuilder mc = mesh_io::MeshBuilder::from_vf_ply(ply_path,
-//   true); auto [xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
-//   f_left_H,
-//         h_right_F, h_negative_B] = mc.he_samples;
-//   return MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
-//                     f_left_H, h_right_F, h_negative_B);
-// }
-
-void MatrixMesh::update_vef_from_he() {
-
-  // auto [xyz_coord_V, h_out_V, v_origin_H_, h_next_H_, h_twin_H, f_left_H_,
-  //       h_right_F_, h_negative_B] = he_samples();
-
-  int Nf = h_right_F_.rows();
-  int Nh = get_num_half_edges();
-  int Ne = Nh / 2;
-
-  // Samples3i V_cycle_F_ = Samples3i(Nf, 3);
-  // Samples2i V_cycle_E_ = Samples2i(Ne, 2);
-  V_cycle_E_.resize(Ne, 2);
-  V_cycle_F_.resize(Nf, 3);
-  e_undirected_H_.resize(Nh);
-  h_directed_E_.resize(Ne);
-  std::set<std::vector<int>> setV_of_E;
-  for (int f = 0; f < Nf; ++f) {
-    int h0 = h_right_F_[f];
-    int h1 = h_next_H_[h0];
-    int h2 = h_next_H_[h1];
-    int v0 = v_origin_H_[h0];
-    int v1 = v_origin_H_[h1];
-    int v2 = v_origin_H_[h2];
-    V_cycle_F_.row(f) << v0, v1, v2;
-
-    std::vector<int> edge0 = {std::min(v0, v1), std::max(v0, v1)};
-    std::vector<int> edge1 = {std::min(v1, v2), std::max(v1, v2)};
-    std::vector<int> edge2 = {std::min(v2, v0), std::max(v2, v0)};
-    // Insert edges into the set and update V_cycle_E
-    if (setV_of_E.find(edge0) == setV_of_E.end()) {
-      V_cycle_E_.row(setV_of_E.size()) << edge0[0], edge0[1];
-      setV_of_E.insert(edge0);
-    }
-    if (setV_of_E.find(edge1) == setV_of_E.end()) {
-      V_cycle_E_.row(setV_of_E.size()) << edge1[0], edge1[1];
-      setV_of_E.insert(edge1);
-    }
-    if (setV_of_E.find(edge2) == setV_of_E.end()) {
-      V_cycle_E_.row(setV_of_E.size()) << edge2[0], edge2[1];
-      setV_of_E.insert(edge2);
-    }
+Samplesi MatrixMesh::h_right_f(const Samplesi &indices) const {
+  Samplesi result(indices.size());
+  for (int i = 0; i < indices.size(); ++i) {
+    check_f(indices(i));
+    result(i) = h_right_F_(indices(i));
   }
-  // return {xyz_coord_V, V_cycle_E, V_cycle_F};
+  return result;
 }
 
-///////////////////////////////////////////////////////
-// Fundamental accessors and properties ///////////////
-///////////////////////////////////////////////////////
+int MatrixMesh::h_negative_b(int b) const {
+  check_b(b);
+  return h_negative_B_(b);
+}
 
-// Misc getters
+Samplesi MatrixMesh::h_negative_b(const Samplesi &indices) const {
+  Samplesi result(indices.size());
+  for (int i = 0; i < indices.size(); ++i) {
+    check_b(indices(i));
+    result(i) = h_negative_B_(indices(i));
+  }
+  return result;
+}
+
+int MatrixMesh::h_directed_e(int e) const {
+  check_e(e);
+  return h_directed_E_(e);
+}
+
+Samplesi MatrixMesh::h_directed_e(const Samplesi &indices) const {
+  Samplesi result(indices.size());
+  for (int i = 0; i < indices.size(); ++i) {
+    check_e(indices(i));
+    result(i) = h_directed_E_(indices(i));
+  }
+  return result;
+}
+
+int MatrixMesh::e_undirected_h(int h) const {
+  check_h(h);
+  return e_undirected_H_(h);
+}
+
+Samplesi MatrixMesh::e_undirected_h(const Samplesi &indices) const {
+  Samplesi result(indices.size());
+  for (int i = 0; i < indices.size(); ++i) {
+    check_h(indices(i));
+    result(i) = e_undirected_H_(indices(i));
+  }
+  return result;
+}
+
+// Derived combinatorial maps
+int MatrixMesh::h_in_v(int v) const {
+  // check_v(v);
+  return h_twin_H_[h_out_V_[v]];
+}
+
+int MatrixMesh::v_head_h(int h) const {
+  // check_h(h);
+  return v_origin_H_[h_twin_H_[h]];
+}
+
+int MatrixMesh::h_prev_h(int h) const {
+  // check_h(h);
+  int h_prev = h;
+  while (h_next_H_[h_prev] != h) {
+    h_prev = h_next_H_[h_prev];
+  }
+  return h_prev;
+}
+
+int MatrixMesh::h_rotcw_h(int h) const {
+  // check_h(h);
+  return h_next_H_[h_twin_H_[h]];
+}
+
+int MatrixMesh::h_rotccw_h(int h) const {
+  // check_h(h);
+  // return h_twin_h(h_prev_h(h));
+  int h_prev = h;
+  while (h_next_H_[h_prev] != h) {
+    h_prev = h_next_H_[h_prev];
+  }
+  return h_twin_H_[h_prev];
+}
+
+int MatrixMesh::h_prev_h_by_rot(int h) const {
+  // check_h(h);
+  int p_h = h_twin_H_[h];
+  int n_h = h_next_H_[p_h];
+  while (n_h != h) {
+    p_h = h_twin_H_[n_h];
+    n_h = h_next_H_[p_h];
+  }
+  return p_h;
+}
+
+////////////////////////////////////////////
+// Misc accessors/properties ///////////////
+////////////////////////////////////////////
+
 int MatrixMesh::get_num_vertices() const { return h_out_V_.size(); }
 
 int MatrixMesh::get_num_edges() const { return v_origin_H_.size() / 2; }
@@ -1718,6 +1364,39 @@ int MatrixMesh::get_valence_v(int v) const {
   }
   return valence;
 }
+
+Samplesi MatrixMesh::F_incident_b(int b) const {
+  std::unordered_set<int> setF_incident_b;
+  for (auto h : generate_H_negative_b(b)) {
+    int v = v_origin_H_[h];
+    for (auto h_out : generate_H_out_v_clockwise(v, h)) {
+      if (some_negative_boundary_contains_h(h_out)) {
+        continue;
+      }
+      setF_incident_b.insert(f_left_H_[h_out]);
+    }
+  }
+  Samplesi F_incident_b(setF_incident_b.size());
+  std::copy(setF_incident_b.begin(), setF_incident_b.end(),
+            F_incident_b.begin());
+  return F_incident_b;
+}
+
+Samplesi MatrixMesh::E_incident_b(int b) const {
+  std::unordered_set<int> setE_incident_b;
+  for (auto h : generate_H_negative_b(b)) {
+    int v = v_origin_H_[h];
+    for (auto h_out : generate_H_out_v_clockwise(v, h)) {
+      setE_incident_b.insert(e_undirected_H_[h_out]);
+    }
+  }
+  Samplesi E_incident_b(setE_incident_b.size());
+  std::copy(setE_incident_b.begin(), setE_incident_b.end(),
+            E_incident_b.begin());
+  return E_incident_b;
+}
+
+//
 
 Samples3i MatrixMesh::V_cycle_F() const {
   Samples3i V_cycle_F(get_num_faces(), 3);
@@ -1775,236 +1454,16 @@ HalfEdgeTuple MatrixMesh::he_samples() const {
           h_twin_H_,    f_left_H_, h_right_F_,  h_negative_B_};
 }
 
-Samplesi MatrixMesh::F_incident_b(int b) const {
-  std::unordered_set<int> setF_incident_b;
-  for (auto h : generate_H_negative_b(b)) {
-    int v = v_origin_h(h);
-    for (auto h_out : generate_H_out_v_clockwise(v, h)) {
-      if (some_negative_boundary_contains_h(h_out)) {
-        continue;
-      }
-      setF_incident_b.insert(f_left_h(h_out));
-    }
-  }
-  Samplesi F_incident_b(setF_incident_b.size());
-  std::copy(setF_incident_b.begin(), setF_incident_b.end(),
-            F_incident_b.begin());
-  return F_incident_b;
-}
-
-Samplesi MatrixMesh::E_incident_b(int b) const {
-  std::unordered_set<int> setE_incident_b;
-  for (auto h : generate_H_negative_b(b)) {
-    int v = v_origin_h(h);
-    for (auto h_out : generate_H_out_v_clockwise(v, h)) {
-      setE_incident_b.insert(e_undirected_h(h_out));
-    }
-  }
-  Samplesi E_incident_b(setE_incident_b.size());
-  std::copy(setE_incident_b.begin(), setE_incident_b.end(),
-            E_incident_b.begin());
-  return E_incident_b;
-}
-///////////////////////////////////////////////////////
-// Combinatorial maps /////////////////////////////////
-///////////////////////////////////////////////////////
-
-Vec3d MatrixMesh::xyz_coord_v(int v) const {
-  if (v < 0 || v >= xyz_coord_V_.rows()) {
-    throw std::out_of_range("xyz_coord_v: Vertex index out of range");
-  }
-  return xyz_coord_V_.row(v);
-}
-
-Samples3d MatrixMesh::xyz_coord_v(const Samplesi &indices) const {
-  Samples3d result(indices.size(), 3);
-  for (int i = 0; i < indices.size(); ++i) {
-    result.row(i) = xyz_coord_V_.row(indices(i));
-  }
-  return result;
-}
-
-int MatrixMesh::h_out_v(int v) const {
-  if (v < 0 || v >= h_out_V_.size()) {
-    throw std::out_of_range("h_out_v: Vertex index out of range");
-  }
-  return h_out_V_(v);
-}
-
-Samplesi MatrixMesh::h_out_v(const Samplesi &indices) const {
-  Samplesi result(indices.size());
-  for (int i = 0; i < indices.size(); ++i) {
-    result(i) = h_out_V_(indices(i));
-  }
-  return result;
-}
-
-int MatrixMesh::v_origin_h(int h) const {
-  if (h < 0 || h >= v_origin_H_.size()) {
-    throw std::out_of_range("v_origin_h: Half-edge index out of range");
-  }
-  return v_origin_H_(h);
-}
-
-Samplesi MatrixMesh::v_origin_h(const Samplesi &indices) const {
-  Samplesi result(indices.size());
-  for (int i = 0; i < indices.size(); ++i) {
-    result(i) = v_origin_H_(indices(i));
-  }
-  return result;
-}
-
-int MatrixMesh::h_next_h(int h) const {
-  if (h < 0 || h >= h_next_H_.size()) {
-    throw std::out_of_range("h_next_h: Half-edge index out of range");
-  }
-  return h_next_H_(h);
-}
-
-Samplesi MatrixMesh::h_next_h(const Samplesi &indices) const {
-  Samplesi result(indices.size());
-  for (int i = 0; i < indices.size(); ++i) {
-    result(i) = h_next_H_(indices(i));
-  }
-  return result;
-}
-
-int MatrixMesh::h_twin_h(int h) const {
-  if (h < 0 || h >= h_twin_H_.size()) {
-    throw std::out_of_range("h_twin_h: Half-edge index out of range");
-  }
-  return h_twin_H_(h);
-}
-
-Samplesi MatrixMesh::h_twin_h(const Samplesi &indices) const {
-  Samplesi result(indices.size());
-  for (int i = 0; i < indices.size(); ++i) {
-    result(i) = h_twin_H_(indices(i));
-  }
-  return result;
-}
-
-int MatrixMesh::f_left_h(int h) const {
-  if (h < 0 || h >= f_left_H_.size()) {
-    throw std::out_of_range("f_left_h: Half-edge index out of range");
-  }
-  return f_left_H_(h);
-}
-
-Samplesi MatrixMesh::f_left_h(const Samplesi &indices) const {
-  Samplesi result(indices.size());
-  for (int i = 0; i < indices.size(); ++i) {
-    result(i) = f_left_H_(indices(i));
-  }
-  return result;
-}
-
-int MatrixMesh::h_right_f(int f) const {
-  if (f < 0 || f >= h_right_F_.size()) {
-    throw std::out_of_range("h_right_f: Face index out of range");
-  }
-  return h_right_F_(f);
-}
-
-Samplesi MatrixMesh::h_right_f(const Samplesi &indices) const {
-  Samplesi result(indices.size());
-  for (int i = 0; i < indices.size(); ++i) {
-    result(i) = h_right_F_(indices(i));
-  }
-  return result;
-}
-
-int MatrixMesh::h_negative_b(int b) const {
-  if (b < 0 || b >= h_negative_B_.size()) {
-    throw std::out_of_range("h_negative_b: Boundary index out of range");
-  }
-  return h_negative_B_(b);
-}
-
-Samplesi MatrixMesh::h_negative_b(const Samplesi &indices) const {
-  Samplesi result(indices.size());
-  for (int i = 0; i < indices.size(); ++i) {
-    result(i) = h_negative_B_(indices(i));
-  }
-  return result;
-}
-
-int MatrixMesh::h_directed_e(int e) const {
-  if (e < 0 || e >= h_directed_E_.size()) {
-    throw std::out_of_range("h_directed_e: Edge index out of range");
-  }
-  return h_directed_E_(e);
-}
-
-Samplesi MatrixMesh::h_directed_e(const Samplesi &indices) const {
-  Samplesi result(indices.size());
-  for (int i = 0; i < indices.size(); ++i) {
-    result(i) = h_directed_E_(indices(i));
-  }
-  return result;
-}
-
-int MatrixMesh::e_undirected_h(int h) const {
-  if (h < 0 || h >= e_undirected_H_.size()) {
-    throw std::out_of_range("e_undirected_h: Half-edge index out of range");
-  }
-  return e_undirected_H_(h);
-}
-
-Samplesi MatrixMesh::e_undirected_h(const Samplesi &indices) const {
-  Samplesi result(indices.size());
-  for (int i = 0; i < indices.size(); ++i) {
-    result(i) = e_undirected_H_(indices(i));
-  }
-  return result;
-}
-
-// Derived combinatorial maps
-int MatrixMesh::h_in_v(int v) const { return h_twin_h(h_out_v(v)); }
-
-int MatrixMesh::v_head_h(int h) const { return v_origin_h(h_twin_h(h)); }
-
-// int MatrixMesh::h_prev_h(int h) const {
-//   int h_prev;
-//   int h_next = h_next_h(h);
-//   while (h_next != h) {
-//     h_prev = h_next;
-//     h_next = h_next_h(h_prev);
-//   }
-//   return h_prev;
-// }
-
-int MatrixMesh::h_prev_h(int h) const {
-  int h_prev = h;
-  while (h_next_h(h_prev) != h) {
-    h_prev = h_next_h(h_prev);
-  }
-  return h_prev;
-}
-
-int MatrixMesh::h_rotcw_h(int h) const { return h_next_h(h_twin_h(h)); }
-
-int MatrixMesh::h_rotccw_h(int h) const { return h_twin_h(h_prev_h(h)); }
-
-int MatrixMesh::h_prev_h_by_rot(int h) const {
-  int p_h = h_twin_h(h);
-  int n_h = h_next_h(p_h);
-  while (n_h != h) {
-    p_h = h_twin_h(n_h);
-    n_h = h_next_h(p_h);
-  }
-  return p_h;
-}
 ///////////////////////////////////////////////////////
 // Predicates /////////////////////////////////////////
 ///////////////////////////////////////////////////////
 
 bool MatrixMesh::some_negative_boundary_contains_h(int h) const {
-  return f_left_h(h) < 0;
+  return f_left_H_[h] < 0;
 }
 
 bool MatrixMesh::some_positive_boundary_contains_h(int h) const {
-  return f_left_h(h_twin_h(h)) < 0;
+  return f_left_H_[h_twin_H_[h]] < 0;
 }
 
 bool MatrixMesh::some_boundary_contains_h(int h) const {
@@ -2013,7 +1472,7 @@ bool MatrixMesh::some_boundary_contains_h(int h) const {
 }
 
 bool MatrixMesh::some_boundary_contains_v(int v) const {
-  int h_start = h_out_v(v);
+  int h_start = h_out_V_[v];
   //   do {
   //     if (some_boundary_contains_h(h)) {
   //       return true;
@@ -2030,21 +1489,22 @@ bool MatrixMesh::some_boundary_contains_v(int v) const {
 }
 
 bool MatrixMesh::h_is_locally_delaunay(int h) const {
-  int vi = v_head_h(h_next_h(h_twin_h(h)));
+  // check_h(h);
+  int vi = v_head_h(h_next_H_[h_twin_H_[h]]);
   int vj = v_head_h(h);
-  int vk = v_head_h(h_next_h(h));
-  int vl = v_origin_h(h);
+  int vk = v_head_h(h_next_H_[h]);
+  int vl = v_origin_H_[h];
 
-  Vec3d rij = xyz_coord_v(vj) - xyz_coord_v(vi);
-  Vec3d ril = xyz_coord_v(vl) - xyz_coord_v(vi);
+  Vec3d rij = xyz_coord_V_.row(vj) - xyz_coord_V_.row(vi);
+  Vec3d ril = xyz_coord_V_.row(vl) - xyz_coord_V_.row(vi);
 
-  Vec3d rkj = xyz_coord_v(vj) - xyz_coord_v(vk);
-  Vec3d rkl = xyz_coord_v(vl) - xyz_coord_v(vk);
+  Vec3d rkj = xyz_coord_V_.row(vj) - xyz_coord_V_.row(vk);
+  Vec3d rkl = xyz_coord_V_.row(vl) - xyz_coord_V_.row(vk);
 
   double alphai = std::acos(rij.dot(ril) / (rij.norm() * ril.norm()));
   double alphak = std::acos(rkl.dot(rkj) / (rkl.norm() * rkj.norm()));
 
-  return alphai + alphak <= M_PI;
+  return alphai + alphak <= std::numbers::pi;
 }
 
 bool MatrixMesh::h_is_flippable(int h) const {
@@ -2052,8 +1512,8 @@ bool MatrixMesh::h_is_flippable(int h) const {
     return false;
   }
   int hlj = h;
-  int hjk = h_next_h(hlj);
-  int hli = h_next_h(h_twin_h(hlj));
+  int hjk = h_next_H_[hlj];
+  int hli = h_next_H_[h_twin_H_[hlj]];
   int vi = v_head_h(hli);
   int vk = v_head_h(hjk);
   for (auto him : generate_H_out_v_clockwise(vi)) {
@@ -2071,16 +1531,16 @@ bool MatrixMesh::h_is_flippable(int h) const {
 utils::SimpleGenerator<int>
 MatrixMesh::generate_H_out_v_clockwise(int v, int h_start) const {
   if (h_start < 0) {
-    h_start = h_out_v(v);
-  } else if (v_origin_h(h_start) != v) {
+    h_start = h_out_V_[v];
+  } else if (v_origin_H_[h_start] != v) {
     throw std::invalid_argument(
         "Starting half-edge does not originate at vertex v");
   }
   int h = h_start;
   do {
     co_yield h;
-    h = h_rotcw_h(h);
-    //     h = h_next_h(h_twin_h(h));
+    // h = h_rotcw_h(h);
+    h = h_next_H_[h_twin_H_[h]];
   } while (h != h_start);
 }
 
@@ -2088,8 +1548,8 @@ utils::SimpleGenerator<int> MatrixMesh::generate_H_rotcw_h(int h) const {
   int h_start = h;
   do {
     co_yield h;
-    h = h_rotcw_h(h);
-    //     h = h_next_h(h_twin_h(h));
+    // h = h_rotcw_h(h);
+    h = h_next_H_[h_twin_H_[h]];
   } while (h != h_start);
 }
 
@@ -2097,37 +1557,752 @@ utils::SimpleGenerator<int> MatrixMesh::generate_H_next_h(int h) const {
   int h_start = h;
   do {
     co_yield h;
-    h = h_next_h(h);
+    h = h_next_H_[h];
   } while (h != h_start);
 }
 
 utils::SimpleGenerator<int> MatrixMesh::generate_H_right_f(int f) const {
-  int h_start = h_right_f(f);
+  int h_start = h_right_F_[f];
   int h = h_start;
   do {
     co_yield h;
-    h = h_next_h(h);
+    h = h_next_H_[h];
   } while (h != h_start);
 }
 
 utils::SimpleGenerator<int> MatrixMesh::generate_H_negative_b(int b) const {
-  int h_start = h_negative_b(b);
+  int h_start = h_negative_B_[b];
   int h = h_start;
   do {
     co_yield h;
-    h = h_next_h(h);
+    h = h_next_H_[h];
   } while (h != h_start);
 }
 
 utils::SimpleGenerator<int> MatrixMesh::generate_F_incident_v(int v) const {
-  int h_start = h_out_v(v);
+  int h_start = h_out_V_[v];
   int h = h_start;
   do {
     if (!some_negative_boundary_contains_h(h)) {
       co_yield f_left_h(h);
     }
-    h = h_rotcw_h(h);
+    // h = h_rotcw_h(h);
+    h = h_next_H_[h_twin_H_[h]];
   } while (h != h_start);
+}
+
+//////////////////////
+// Cache updaters ////
+//////////////////////
+
+void MatrixMesh::update_boundary_cycles() {
+  int num_boundaries = get_num_boundaries();
+  V_cycle_B_.resize(num_boundaries);
+  for (int b = 0; b < num_boundaries; b++) {
+    std::vector<int> Vnegative;
+    for (auto h : generate_H_next_h(h_negative_B_[b])) {
+      Vnegative.push_back(v_origin_H_[h]);
+    }
+    int Nv = Vnegative.size();
+    V_cycle_B_[b].resize(Nv);
+    for (int _i = 0; _i < Nv; _i++) {
+      int i = Nv - 1 - _i;
+      V_cycle_B_[b][i] = Vnegative[_i];
+    }
+  }
+}
+
+void MatrixMesh::update_mesh_geometric_data_E() {
+  size_t num_edges = get_num_edges();
+  int num_half_edges = get_num_half_edges();
+  vec_H_.resize(num_half_edges, 3);
+  // resize the length vector
+  // length_E_.setZero();
+  length_E_.resize(num_edges);
+  average_edge_length_ = 0.0;
+  for (int e = 0; e < num_edges; e++) {
+    int h = h_directed_E_[e];
+    int ht = h_twin_H_[h];
+    int v = v_origin_H_[h];
+    int vt = v_origin_H_[ht];
+    Vec3d x = xyz_coord_V_.row(v);
+    Vec3d xt = xyz_coord_V_.row(vt);
+    vec_H_.row(h) = xt - x;
+    vec_H_.row(ht) = -vec_H_.row(h);
+    length_E_[e] = vec_H_.row(h).norm();
+    average_edge_length_ += length_E_[e];
+  }
+  average_edge_length_ /= num_edges;
+}
+
+void MatrixMesh::update_mesh_geometric_data_F() {
+  size_t num_faces = get_num_faces();
+  // area_F_.setZero();
+  // normal_F_.setZero();
+  area_F_.resize(num_faces);
+  normal_F_.resize(num_faces, 3);
+  average_face_area_ = 0.0;
+  for (int f = 0; f < num_faces; f++) {
+    area_F_[f] = heron_area_f(f);
+    normal_F_.row(f) = normal_f(f);
+    average_face_area_ += area_F_[f];
+  }
+  average_face_area_ /= num_faces;
+}
+
+void MatrixMesh::update_mesh_geometric_data_V() {
+  int num_vertices = get_num_vertices();
+  // area_V_.setZero();
+  // normal_V_.setZero();
+  area_V_.resize(num_vertices);
+  normal_V_.resize(num_vertices, 3);
+  for (int v = 0; v < num_vertices; v++) {
+    area_V_[v] = 0;
+    normal_V_.row(v) << 0, 0, 0;
+    int norm_n = 0;
+    for (auto f : generate_F_incident_v(v)) {
+      // printf("v,f=%d,%d\n", v, f);
+      area_V_[v] += area_F_[f] / 3;
+      normal_V_.row(v) += area_F_[f] * normal_F_.row(f);
+    }
+    normal_V_.row(v) /= normal_V_.row(v).norm();
+  }
+}
+
+void MatrixMesh::update_mesh_volume() {
+  total_volume_ = 0.0;
+  for (int f = 0; f < get_num_faces(); f++) {
+    total_volume_ += signed_volume_f(f);
+  }
+  total_volume_ = std::abs(total_volume_);
+}
+
+void MatrixMesh::update_mesh_geometric_data() {
+  update_mesh_geometric_data_E();
+  update_mesh_geometric_data_F();
+  update_mesh_geometric_data_V();
+  update_mesh_volume();
+}
+
+/////////////////////////////
+// Simple geometry helpers //
+/////////////////////////////
+
+double MatrixMesh::length_e(int e) const {
+  return (xyz_coord_v(V_cycle_E_(e, 1)) - xyz_coord_v(V_cycle_E_(e, 0))).norm();
+}
+
+double MatrixMesh::heron_area_f(int f) const {
+  auto x0 = xyz_coord_V_.row(V_cycle_F_(f, 0));
+  auto x1 = xyz_coord_V_.row(V_cycle_F_(f, 1));
+  auto x2 = xyz_coord_V_.row(V_cycle_F_(f, 2));
+  double a = (x0 - x1).norm();
+  double b = (x1 - x2).norm();
+  double c = (x2 - x0).norm();
+  return math::heron_area(a, b, c);
+}
+
+Vec3d MatrixMesh::normal_f(int f) const {
+  int h0 = h_right_F_[f];
+  int h1 = h_next_H_[h0];
+  int h2 = h_next_H_[h1];
+  int v0 = v_origin_H_[h0];
+  int v1 = v_origin_H_[h1];
+  int v2 = v_origin_H_[h2];
+  auto x0 = xyz_coord_V_.row(v0);
+  auto x1 = xyz_coord_V_.row(v1);
+  auto x2 = xyz_coord_V_.row(v2);
+  // Eigen::Vector3d n =
+  //     math::cross(x0, x1) + math::cross(x1, x2) + math::cross(x2, x0);
+  // return n.normalized();
+  return (x0.cross(x1) + x1.cross(x2) + x2.cross(x0)).normalized();
+}
+
+Vec3d MatrixMesh::normal_v(int v) const {
+  int h_out = h_out_V_[v];
+  auto x0 = xyz_coord_V_.row(v);
+  Eigen::Vector3d n;
+  for (int h0 : generate_H_out_v_clockwise(v)) {
+    if (some_negative_boundary_contains_h(h0)) {
+      continue;
+    }
+    int h1 = h_next_H_[h0];
+    int h2 = h_next_H_[h1];
+    int v1 = v_origin_H_[h1];
+    int v2 = v_origin_H_[h2];
+    auto x1 = xyz_coord_V_.row(v1);
+    auto x2 = xyz_coord_V_.row(v2);
+    n += x0.cross(x1) + x1.cross(x2) + x2.cross(x0);
+  }
+  return n.normalized();
+}
+
+double MatrixMesh::signed_volume_f(int f) const {
+  // auto x0 = xyz_coord_v(V_cycle_F_(f, 0));
+  // auto x1 = xyz_coord_v(V_cycle_F_(f, 1));
+  // auto x2 = xyz_coord_v(V_cycle_F_(f, 2));
+  // Eigen::Vector3d n01, n12, n20;
+  // math::cross_inplace(x0, x1, n01);
+  // math::cross_inplace(x1, x2, n12);
+  // math::cross_inplace(x2, x0, n20);
+  // Eigen::Vector3d n = n01 + n12 + n20;
+  // double val;
+  // math::dot_inplace(n, x0, val);
+  // return val / 6.0;
+  int h1 = h_right_F_[f];
+  int h2 = h_next_H_[h1];
+  int h3 = h_next_H_[h2];
+  Vec3d u = xyz_coord_V_.row(v_origin_H_[h1]);
+  Vec3d v = xyz_coord_V_.row(v_origin_H_[h2]);
+  Vec3d w = xyz_coord_V_.row(v_origin_H_[h3]);
+  return (u[1] * v[2] * w[0] - u[2] * v[1] * w[0] + u[2] * v[0] * w[1] -
+          u[0] * v[2] * w[1] + u[0] * v[1] * w[2] - u[1] * v[0] * w[2]) /
+         6.0;
+}
+
+Vec3d MatrixMesh::compute_avg_xyz_coord() const {
+  Vec3d avg = Vec3d::Zero();
+  for (int v = 0; v < get_num_vertices(); v++) {
+    avg += xyz_coord_V_.row(v);
+  }
+  return avg / get_num_vertices();
+}
+
+//////////////////////////////
+// Gaussian curvature stuff //
+//////////////////////////////
+
+double MatrixMesh::get_gaussian_curvature_angle_defect_v(int v) const {
+  double area = 0.0;
+  double defect = 2 * std::numbers::pi;
+  for (auto h : generate_H_out_v_clockwise(v)) {
+    if (some_negative_boundary_contains_h(h)) {
+      // # do boundary geodesic curvature stuff;
+      continue;
+    }
+    int e = e_undirected_H_[h];
+    double L = length_E_[e];
+    Vec3d vecL = vec_H_.row(h);
+    int hrot = h_rotcw_h(h);
+    int erot = e_undirected_H_[hrot];
+    double Lrot = length_E_[erot];
+    Vec3d vecLrot = vec_H_.row(hrot);
+    // double cos_angle = math::dot(vecL, vecLrot) / (L * Lrot);
+    double cos_angle = vecL.dot(vecLrot) / (L * Lrot);
+    defect -= std::acos(cos_angle);
+    area += L * Lrot * std::sqrt(1 - cos_angle * cos_angle) / 6;
+  }
+  return defect / area;
+}
+
+void MatrixMesh::update_gaussian_curvature_angle_defect() {
+  int num_vertices = get_num_vertices();
+  gaussian_curvature_V_.resize(num_vertices);
+  for (int v = 0; v < num_vertices; v++) {
+    gaussian_curvature_V_[v] = get_gaussian_curvature_angle_defect_v(v);
+  }
+}
+
+void MatrixMesh::update_gaussian_curvature_laplacian() {
+  // printf("MatrixMesh::update_gaussian_curvature_laplacian\n");
+  int num_vertices = get_num_vertices();
+  gaussian_curvature_V_.resize(num_vertices);
+  Samples3d n_V = mcvec_V_.rowwise().normalized();
+  // Samples3d n_V = normal_V_;
+  Samples3d lap_n_V = laplacian(n_V);
+  for (int v = 0; v < num_vertices; v++) {
+    // printf("v = %d\n", v);
+    Vec3d lap_r = mcvec_V_.row(v);
+    double norm_sqr_lap_r = lap_r.squaredNorm();
+    // double norm_sqr_lap_r = 4 * mean_curvature_V_[v] * mean_curvature_V_[v];
+    // printf("norm_sqr_lap_r = %.20f\n", norm_sqr_lap_r);
+    Vec3d n = n_V.row(v);
+    // printf("n = %.20f, %.20f, %.20f\n", n[0], n[1], n[2]);
+    Vec3d lap_n = lap_n_V.row(v);
+    // printf("lap_n = %.20f, %.20f, %.20f\n", lap_n[0], lap_n[1], lap_n[2]);
+    gaussian_curvature_V_[v] = 0.5 * (norm_sqr_lap_r + math::dot(n, lap_n));
+    // printf("gaussian_curvature_V_[%d] = %.20f\n", v,
+    // gaussian_curvature_V_[v]);
+  }
+}
+
+void MatrixMesh::update_gaussian_curvature() {
+  // printf("MatrixMesh::update_gaussian_curvature\n");
+  // if (gaussian_curvature_type_ == "angle_defect") {
+  //   update_gaussian_curvature_angle_defect();
+  // } else if (gaussian_curvature_type_ == "laplacian") {
+  //   update_gaussian_curvature_laplacian();
+  // } else {
+  //   throw std::runtime_error("Invalid gaussian_curvature_type_");
+  // }
+  switch (gaussian_curvature_type_) {
+  case GaussianCurvatureType::ANGLE_DEFECT:
+    update_gaussian_curvature_angle_defect();
+    return;
+  case GaussianCurvatureType::LAPLACIAN:
+    update_gaussian_curvature_laplacian();
+    return;
+  }
+  throw std::runtime_error(
+      "update_gaussian_curvature: Unknown gaussian curvature type");
+}
+
+//////////////////////////////////////////////
+// Visualization /////////////////////////////
+//////////////////////////////////////////////
+
+std::array<Samples3d, 3> MatrixMesh::compute_shifted_half_edge_arrows() {
+
+  Samples3d xyz_o_H = xyz_coord_v(v_origin_H_);
+  Samples3d xyz_on_H = xyz_coord_v(v_origin_h(h_next_H_));
+  Samples3d xyz_onn_H = xyz_coord_v(v_origin_h(h_next_h(h_next_H_)));
+
+  Samples3d P1(get_num_half_edges(), 3);
+  Samples3d P2(get_num_half_edges(), 3);
+  Samples3d P3(get_num_half_edges(), 3);
+  double shift_to_center = 0.15;
+  double shaft_len = 0.75;
+  double tip_len = 0.25;
+  for (int h = 0; h < get_num_half_edges(); h++) {
+    Vec3d p1 = xyz_coord_v(v_origin_h(h));
+    Vec3d p2 = xyz_coord_v(v_origin_h(h_next_h(h)));
+    Vec3d p3 = xyz_coord_v(v_origin_h(h_next_h(h_next_h(h))));
+    Vec3d p12 = (p1 + p2) / 2;
+    if (some_negative_boundary_contains_h(h)) {
+      int ht = h_twin_h(h);
+
+      Vec3d p3 = xyz_coord_v(v_origin_h(h_next_h(h_next_h(ht))));
+      p3 = p12 - (p3 - p12);
+    }
+
+    Vec3d c = (p1 + p2 + p3) / 3;
+    p1 = p1 + shift_to_center * (c - p1);
+    p2 = p2 + shift_to_center * (c - p2);
+
+    p1 = p12 + shaft_len * (p1 - p12);
+    p2 = p12 + shaft_len * (p2 - p12);
+    p3 = p2 + tip_len * (c - p2);
+
+    P1.row(h) = p1;
+    P2.row(h) = p2;
+    P3.row(h) = p3;
+  }
+  std::array<Samples3d, 3> result = {P1, P2, P3};
+  return result;
+}
+
+void MatrixMesh::update_shifted_half_edge_arrows() {
+  if (!show_half_edges_) {
+    return;
+  }
+  // shifted_half_edge_arrows_ = compute_shifted_half_edge_arrows();
+  size_t num_half_edges = get_num_half_edges();
+  for (int i = 0; i < 3; i++) {
+    shifted_half_edge_arrows_[i].resize(num_half_edges, 3);
+  }
+  Samples3d xyz_o_H = xyz_coord_v(v_origin_H_);
+  Samples3d xyz_on_H = xyz_coord_v(v_origin_h(h_next_H_));
+  Samples3d xyz_onn_H = xyz_coord_v(v_origin_h(h_next_h(h_next_H_)));
+
+  // Samples3d P1(num_half_edges, 3);
+  // Samples3d P2(num_half_edges, 3);
+  // Samples3d P3(num_half_edges, 3);
+  double shift_to_center = 0.15;
+  double shaft_len = 0.75;
+  double tip_len = 0.25;
+  for (int h = 0; h < num_half_edges; h++) {
+    Vec3d p1 = xyz_coord_v(v_origin_h(h));
+    Vec3d p2 = xyz_coord_v(v_origin_h(h_next_h(h)));
+    Vec3d p3 = xyz_coord_v(v_origin_h(h_next_h(h_next_h(h))));
+    Vec3d p12 = (p1 + p2) / 2;
+    if (some_negative_boundary_contains_h(h)) {
+      int ht = h_twin_h(h);
+
+      Vec3d p3 = xyz_coord_v(v_origin_h(h_next_h(h_next_h(ht))));
+      p3 = p12 - (p3 - p12);
+    }
+
+    Vec3d c = (p1 + p2 + p3) / 3;
+    p1 = p1 + shift_to_center * (c - p1);
+    p2 = p2 + shift_to_center * (c - p2);
+
+    p1 = p12 + shaft_len * (p1 - p12);
+    p2 = p12 + shaft_len * (p2 - p12);
+    p3 = p2 + tip_len * (c - p2);
+
+    shifted_half_edge_arrows_[0].row(h) = p1;
+    shifted_half_edge_arrows_[1].row(h) = p2;
+    shifted_half_edge_arrows_[2].row(h) = p3;
+  }
+}
+
+void MatrixMesh::update_vector_field_arrows(Samples3d X, Samples3d U) {
+  Eigen::Vector3d rgb = vector_field_arrows_.rgb_;
+  double scale = 1.0;
+  vector_field_arrows_.update(X, U, scale, rgb);
+}
+
+void MatrixMesh::update_mesh_visuals() { update_shifted_half_edge_arrows(); }
+
+void MatrixMesh::set_visual_defaults() {
+
+  // radius_vertex_ = 5;
+  // rgba_vertex_ = RGBA_DICT.at("purple");
+  // rgba_half_edge_ = RGBA_DICT.at("purple");
+  // rgba_face_ = RGBA_DICT.at("meshbrane_blue80");
+  // rgba_face_ = RGBA_DICT.at("purple50");
+
+  int num_vertices = get_num_vertices();
+  int num_half_edges = get_num_half_edges();
+  int num_faces = get_num_faces();
+  int num_edges = get_num_edges();
+
+  radius_V.resize(num_vertices, 1);
+  rgba_V.resize(num_vertices, 4);
+  for (int i = 0; i < num_vertices; i++) {
+    radius_V(i) = radius_vertex_;
+    rgba_V.row(i) = rgba_vertex_;
+  }
+  rgba_H.resize(num_half_edges, 4);
+  for (int i = 0; i < num_half_edges; i++) {
+    rgba_H.row(i) = rgba_half_edge_;
+  }
+  rgba_F.resize(num_faces, 4);
+  for (int i = 0; i < num_faces; i++) {
+    rgba_F.row(i) = rgba_face_;
+  }
+  rgba_E_.resize(num_edges, 4);
+  for (int i = 0; i < num_edges; i++) {
+    rgba_E_.row(i) = rgba_edge_;
+  }
+}
+
+///////////////////////////////////////////////////////
+// Quadrature /////////////////////////////////////////
+///////////////////////////////////////////////////////
+void MatrixMesh::init_quad_points_and_weights() {
+  printf("MatrixMesh::init_quad_points_and_weights\n");
+  // 4th order quadrature
+  bary_coord_Q_.resize(7, 3);
+  bary_coord_Q_ << 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0 / 3,
+      1.0 / 3, 1.0 / 3, 0.5, 0.5, 0.0, 0.0, 0.5, 0.5, 0.5, 0.0, 0.5;
+  dimensionless_quad_weight_Q_.resize(7);
+  dimensionless_quad_weight_Q_ << 1.0 / 20, 1.0 / 20, 1.0 / 20, 9.0 / 20,
+      2.0 / 15, 2.0 / 15, 2.0 / 15;
+}
+
+Vec3d MatrixMesh::xyz_coord_fq(int f, int q) const {
+  int h0 = h_right_f(f);
+  int h1 = h_next_h(h0);
+  int h2 = h_next_h(h1);
+  int v0 = v_origin_h(h0);
+  int v1 = v_origin_h(h1);
+  int v2 = v_origin_h(h2);
+  Vec3d x0 = xyz_coord_v(v0);
+  Vec3d x1 = xyz_coord_v(v1);
+  Vec3d x2 = xyz_coord_v(v2);
+  Vec3d s = bary_coord_q(q);
+  Vec3d x = s[0] * x0 + s[1] * x1 + s[2] * x2;
+  return x;
+}
+
+///////////////////////////////
+// Re-indexing ////////////////
+///////////////////////////////
+
+void MatrixMesh::swap_vertex_indices(int v0, int v1) {
+  check_v(v0);
+  check_v(v1);
+  if (v0 == v1) {
+    return;
+  }
+
+  // Collect incident half-edges, edges, and faces.
+  std::vector<int> H;
+  std::unordered_set<int> E;
+  std::unordered_set<int> F;
+
+  for (int v : {v0, v1}) {
+    for (int h : generate_H_out_v_clockwise(v)) {
+      H.push_back(h);
+      E.insert(e_undirected_h(h));
+      int f = f_left_h(h);
+      if (f >= 0) {
+        F.insert(f);
+      }
+    }
+  }
+  // Exchange references to v0 and v1.
+  auto swap_ref = [v0, v1](int &v) {
+    if (v == v0) {
+      v = v1;
+    } else if (v == v1) {
+      v = v0;
+    }
+  };
+  for (int h : H) {
+    swap_ref(v_origin_H_[h]);
+  }
+  for (int e : E) {
+    for (int i = 0; i < 2; i++) {
+      swap_ref(V_cycle_E_(e, i));
+    }
+  }
+  for (int f : F) {
+    for (int i = 0; i < 3; i++) {
+      swap_ref(V_cycle_F_(f, i));
+    }
+  }
+  // Exchange vertex-indexed data.
+  xyz_coord_V_.row(v0).swap(xyz_coord_V_.row(v1));
+  std::swap(h_out_V_[v0], h_out_V_[v1]);
+  //
+}
+
+void MatrixMesh::swap_edge_indices(int e0, int e1) {
+  check_e(e0);
+  check_e(e1);
+  if (e0 == e1) {
+    return;
+  }
+  int h0 = h_directed_E_[e0];
+  int ht0 = h_twin_H_[h0];
+  int h1 = h_directed_E_[e1];
+  int ht1 = h_twin_H_[h1];
+  // update things that output e0/e1 indices
+  std::swap(e_undirected_H_[h0], e_undirected_H_[h1]);
+  std::swap(e_undirected_H_[ht0], e_undirected_H_[ht1]);
+  // update things that eat e0/e1 indices
+  std::swap(h_directed_E_[e0], h_directed_E_[e1]);
+  V_cycle_E_.row(e0).swap(V_cycle_E_.row(e1));
+}
+
+void MatrixMesh::swap_face_indices(int f0, int f1) {
+  check_f(f0);
+  check_f(f1);
+  if (f0 == f1) {
+    return;
+  }
+  // update things that output f0/f1 indices
+  for (auto h : generate_H_right_f(f0)) {
+    f_left_H_[h] = f1;
+  }
+  for (auto h : generate_H_right_f(f1)) {
+    f_left_H_[h] = f0;
+  }
+  // update things that eat f0/f1 indices
+  std::swap(h_right_F_[f0], h_right_F_[f1]);
+  V_cycle_F_.row(f0).swap(V_cycle_F_.row(f1));
+}
+
+void MatrixMesh::swap_boundary_indices(int b0, int b1) {
+  check_b(b0);
+  check_b(b1);
+  if (b0 == b1) {
+    return;
+  }
+  // update things that output b0/b1 indices
+  for (int h : generate_H_negative_b(b0)) {
+    f_left_H_[h] = -(b1 + 1);
+  }
+  for (int h : generate_H_negative_b(b1)) {
+    f_left_H_[h] = -(b0 + 1);
+  }
+  // update things that eat b0/b1 indices
+  std::swap(h_negative_B_[b0], h_negative_B_[b1]);
+}
+
+void MatrixMesh::swap_halfedge_indices1(int h0, int h1) {
+  check_h(h0);
+  check_h(h1);
+  if (h0 == h1) {
+    return;
+  }
+
+  auto swap_ref = [h0, h1](int &h) {
+    if (h == h0) {
+      h = h1;
+    } else if (h == h1) {
+      h = h0;
+    }
+  };
+
+  int v_origin_h0 = v_origin_H_[h0];
+  int e_undirected_h0 = e_undirected_H_[h0];
+  int f_left_h0 = f_left_H_[h0];
+  int b_left_h0 = -(f_left_h0 + 1);
+  int h_twin_h0 = h_twin_H_[h0];
+  int h_next_h0 = h_next_H_[h0];
+  int h_prev_h0 = h_prev_h(h0);
+
+  int v_origin_h1 = v_origin_H_[h1];
+  int e_undirected_h1 = e_undirected_H_[h1];
+  int f_left_h1 = f_left_H_[h1];
+  int b_left_h1 = -(f_left_h1 + 1);
+  int h_twin_h1 = h_twin_H_[h1];
+  int h_next_h1 = h_next_H_[h1];
+  int h_prev_h1 = h_prev_h(h1);
+
+  // update things that output h0/h1 indices
+  // h_out_V_, h_directed_E_, h_right_F_, h_negative_B_
+  // h_next_H_, h_twin_H_
+  swap_ref(h_out_V_[v_origin_h0]);
+  if (v_origin_h1 != v_origin_h0) {
+    swap_ref(h_out_V_[v_origin_h1]);
+  }
+
+  swap_ref(h_directed_E_[e_undirected_h0]);
+  if (e_undirected_h1 != e_undirected_h0) {
+    swap_ref(h_directed_E_[e_undirected_h1]);
+  }
+
+  auto swap_face_ref = [&](int f) {
+    if (f >= 0) {
+      swap_ref(h_right_F_[f]);
+    } else {
+      swap_ref(h_negative_B_[-(f + 1)]);
+    }
+  };
+
+  swap_face_ref(f_left_h0);
+  if (f_left_h1 != f_left_h0) {
+    swap_face_ref(f_left_h1);
+  }
+
+  std::swap(h_next_H_[h_prev_h0], h_next_H_[h_prev_h1]);
+  std::swap(h_twin_H_[h_twin_h0], h_twin_H_[h_twin_h1]);
+  // update things that eat h0/h1 indices
+  std::swap(v_origin_H_[h0], v_origin_H_[h1]);
+  std::swap(e_undirected_H_[h0], e_undirected_H_[h1]);
+  std::swap(f_left_H_[h0], f_left_H_[h1]);
+
+  std::swap(h_next_H_[h0], h_next_H_[h1]);
+  std::swap(h_twin_H_[h0], h_twin_H_[h1]);
+}
+
+void MatrixMesh::swap_halfedge_indices(int h0, int h1) {
+  check_h(h0);
+  check_h(h1);
+  if (h0 == h1) {
+    return;
+  }
+
+  int v_origin_h0 = v_origin_H_[h0];
+  int e_undirected_h0 = e_undirected_H_[h0];
+  int f_left_h0 = f_left_H_[h0];
+  int b_left_h0 = -(f_left_h0 + 1);
+  int h_twin_h0 = h_twin_H_[h0];
+  int h_next_h0 = h_next_H_[h0];
+  int h_prev_h0 = h_prev_h(h0);
+
+  int v_origin_h1 = v_origin_H_[h1];
+  int e_undirected_h1 = e_undirected_H_[h1];
+  int f_left_h1 = f_left_H_[h1];
+  int b_left_h1 = -(f_left_h1 + 1);
+  int h_twin_h1 = h_twin_H_[h1];
+  int h_next_h1 = h_next_H_[h1];
+  int h_prev_h1 = h_prev_h(h1);
+
+  assert(h_next_H_[h_prev_h0] == h0);
+  assert(h_next_H_[h_prev_h1] == h1);
+
+  // update things that output h0/h1 indices
+  // h_out_V_, h_directed_E_, h_right_F_, h_negative_B_
+  // h_next_H_, h_twin_H_
+  if (h_out_V_[v_origin_h0] == h0) {
+    h_out_V_[v_origin_h0] = h1;
+  }
+  if (h_out_V_[v_origin_h1] == h1) {
+    h_out_V_[v_origin_h1] = h0;
+  }
+  if (h_directed_E_[e_undirected_h0] == h0) {
+    h_directed_E_[e_undirected_h0] = h1;
+  }
+  if (h_directed_E_[e_undirected_h1] == h1) {
+    h_directed_E_[e_undirected_h1] = h0;
+  }
+  if (f_left_h0 >= 0) {
+    if (h_right_F_[f_left_h0] == h0) {
+      h_right_F_[f_left_h0] = h1;
+    }
+  } else {
+    if (h_negative_B_[b_left_h0] == h0) {
+      h_negative_B_[b_left_h0] = h1;
+    }
+  }
+  if (f_left_h1 >= 0) {
+    if (h_right_F_[f_left_h1] == h1) {
+      h_right_F_[f_left_h1] = h0;
+    }
+  } else {
+    if (h_negative_B_[b_left_h1] == h1) {
+      h_negative_B_[b_left_h1] = h0;
+    }
+  }
+  std::swap(h_next_H_[h_prev_h0], h_next_H_[h_prev_h1]);
+  std::swap(h_twin_H_[h_twin_h0], h_twin_H_[h_twin_h1]);
+  // update things that eat h0/h1 indices
+  std::swap(v_origin_H_[h0], v_origin_H_[h1]);
+  std::swap(e_undirected_H_[h0], e_undirected_H_[h1]);
+  std::swap(f_left_H_[h0], f_left_H_[h1]);
+
+  std::swap(h_next_H_[h0], h_next_H_[h1]);
+  std::swap(h_twin_H_[h0], h_twin_H_[h1]);
+}
+
+void MatrixMesh::move_vertex_indices_to_end(std::vector<int> V) {
+  int N = get_num_vertices();
+  int n = V.size();
+  std::sort(V.begin(), V.end());
+  // swap input indices with [N-n,N-n+1,...,N-1]
+  // starting with the largest
+  for (int i = 0; i < n; i++) {
+    swap_vertex_indices(V[n - 1 - i], N - 1 - i);
+  }
+}
+
+void MatrixMesh::move_edge_indices_to_end(std::vector<int> E) {
+  int N = get_num_edges();
+  int n = E.size();
+  std::sort(E.begin(), E.end());
+  // swap input indices with [N-n,N-n+1,...,N-1]
+  // starting with the largest
+  for (int i = 0; i < n; i++) {
+    swap_edge_indices(E[n - 1 - i], N - 1 - i);
+  }
+}
+
+void MatrixMesh::move_face_indices_to_end(std::vector<int> F) {
+  int N = get_num_faces();
+  int n = F.size();
+  std::sort(F.begin(), F.end());
+  // swap input indices with [N-n,N-n+1,...,N-1]
+  // starting with the largest
+  for (int i = 0; i < n; i++) {
+    swap_face_indices(F[n - 1 - i], N - 1 - i);
+  }
+}
+
+void MatrixMesh::move_boundary_indices_to_end(std::vector<int> B) {
+  int N = get_num_boundaries();
+  int n = B.size();
+  std::sort(B.begin(), B.end());
+  // swap input indices with [N-n,N-n+1,...,N-1]
+  // starting with the largest
+  for (int i = 0; i < n; i++) {
+    swap_boundary_indices(B[n - 1 - i], N - 1 - i);
+  }
+}
+
+void MatrixMesh::move_half_edge_indices_to_end(std::vector<int> H) {
+  int N = get_num_half_edges();
+  int n = H.size();
+  std::sort(H.begin(), H.end());
+  // swap input indices with [N-n,N-n+1,...,N-1]
+  // starting with the largest
+  for (int i = 0; i < n; i++) {
+    swap_halfedge_indices(H[n - 1 - i], N - 1 - i);
+  }
 }
 
 ///////////////////////////////////////////////////////
@@ -2544,196 +2719,21 @@ void MatrixMesh::divide_faces() {
   init_core_data_from_V_cycle_F();
 }
 
-///////////////////////////////////////////////////////
-// Prototyping ////////////////////////////////////////
-///////////////////////////////////////////////////////
-Samples3d MatrixMesh::mean_curvature_vector_cotan() const {
-  // int numH = get_num_half_edges();
-  Samples1d H;
-  Eigen::MatrixXd HN;
-  Eigen::SparseMatrix<double> L, M, Minv;
-  auto [V, F] = vf_samples();
-  // igl::cotmatrix(V, F, L);
-  // igl::massmatrix(V, F, igl::MASSMATRIX_TYPE_VORONOI, M);
-  // igl::invert_diag(M, Minv);
-  // HN = -Minv * (L * V) / 2;
-  H = HN.rowwise().norm(); // up to sign
-  return HN;
+/////////////////////////
+// Convergence testing //
+/////////////////////////
+
+void MatrixMesh::refine_messy_icososphere() {
+  divide_faces_barycentric();
+  int num_vertices = xyz_coord_V_.rows();
+  for (int v{0}; v < num_vertices; v++) {
+    Vec3d xyz = xyz_coord_V_.row(v);
+    double normxyz = xyz.norm();
+    // xyz = xyz / normxyz;
+    xyz_coord_V_.row(v) = xyz / normxyz;
+  }
+  flip_non_delaunay();
 }
-
-Samples3d MatrixMesh::mean_curvature_vector_graph_laplacian() const {
-  int num_vertices = get_num_vertices();
-  int valance;
-  int h_start;
-  int vj;
-  Samples1d H(num_vertices);
-  Samples3d Q = xyz_coord_V_;
-  Samples3d lapQ(num_vertices, 3);
-
-  for (int v = 0; v < num_vertices; v++) {
-    h_start = h_out_v(v);
-    valance = 0;
-    lapQ.row(v) = Vec3d::Zero();
-    for (auto h : generate_H_out_v_clockwise(v, h_start)) {
-      valance++;
-      vj = v_head_h(h);
-      lapQ.row(v) += Q.row(vj) - Q.row(v);
-    }
-    lapQ.row(v) /= valance;
-  }
-  return lapQ;
-}
-
-Vec3d MatrixMesh::compute_avg_xyz_coord() const {
-  Vec3d avg = Vec3d::Zero();
-  for (int v = 0; v < get_num_vertices(); v++) {
-    avg += xyz_coord_v(v);
-  }
-  return avg / get_num_vertices();
-}
-
-int MatrixMesh::uniform_flip_sweep() {
-  int flip_count = 0;
-  int num_edges = get_num_edges();
-  for (int e = 0; e < num_edges; e++) {
-    double _r = static_cast<double>(rand()) / static_cast<double>(RAND_MAX);
-    if (_r < 0.02) {
-      int h = h_directed_E_(e);
-      if (h_is_flippable(h)) {
-        printf("Flipping edge %d\n", e);
-        flip_edge(e);
-        flip_count++;
-      } else {
-        printf("Edge %d is not flippable\n", e);
-      }
-    }
-  }
-  return flip_count;
-}
-
-//////////////////////////////////////////////
-// Visualization /////////////////////////////
-//////////////////////////////////////////////
-
-void MatrixMesh::set_visual_defaults() {
-
-  // radius_vertex_ = 5;
-  // rgba_vertex_ = RGBA_DICT.at("purple");
-  // rgba_half_edge_ = RGBA_DICT.at("purple");
-  // rgba_face_ = RGBA_DICT.at("meshbrane_blue80");
-  // rgba_face_ = RGBA_DICT.at("purple50");
-
-  int num_vertices = get_num_vertices();
-  int num_half_edges = get_num_half_edges();
-  int num_faces = get_num_faces();
-  int num_edges = get_num_edges();
-
-  radius_V.resize(num_vertices, 1);
-  rgba_V.resize(num_vertices, 4);
-  for (int i = 0; i < num_vertices; i++) {
-    radius_V(i) = radius_vertex_;
-    rgba_V.row(i) = rgba_vertex_;
-  }
-  rgba_H.resize(num_half_edges, 4);
-  for (int i = 0; i < num_half_edges; i++) {
-    rgba_H.row(i) = rgba_half_edge_;
-  }
-  rgba_F.resize(num_faces, 4);
-  for (int i = 0; i < num_faces; i++) {
-    rgba_F.row(i) = rgba_face_;
-  }
-  rgba_E_.resize(num_edges, 4);
-  for (int i = 0; i < num_edges; i++) {
-    rgba_E_.row(i) = rgba_edge_;
-  }
-}
-
-std::array<Samples3d, 3> MatrixMesh::compute_shifted_half_edge_arrows() {
-
-  Samples3d xyz_o_H = xyz_coord_v(v_origin_H_);
-  Samples3d xyz_on_H = xyz_coord_v(v_origin_h(h_next_H_));
-  Samples3d xyz_onn_H = xyz_coord_v(v_origin_h(h_next_h(h_next_H_)));
-
-  Samples3d P1(get_num_half_edges(), 3);
-  Samples3d P2(get_num_half_edges(), 3);
-  Samples3d P3(get_num_half_edges(), 3);
-  double shift_to_center = 0.15;
-  double shaft_len = 0.75;
-  double tip_len = 0.25;
-  for (int h = 0; h < get_num_half_edges(); h++) {
-    Vec3d p1 = xyz_coord_v(v_origin_h(h));
-    Vec3d p2 = xyz_coord_v(v_origin_h(h_next_h(h)));
-    Vec3d p3 = xyz_coord_v(v_origin_h(h_next_h(h_next_h(h))));
-    Vec3d p12 = (p1 + p2) / 2;
-    if (some_negative_boundary_contains_h(h)) {
-      int ht = h_twin_h(h);
-
-      Vec3d p3 = xyz_coord_v(v_origin_h(h_next_h(h_next_h(ht))));
-      p3 = p12 - (p3 - p12);
-    }
-
-    Vec3d c = (p1 + p2 + p3) / 3;
-    p1 = p1 + shift_to_center * (c - p1);
-    p2 = p2 + shift_to_center * (c - p2);
-
-    p1 = p12 + shaft_len * (p1 - p12);
-    p2 = p12 + shaft_len * (p2 - p12);
-    p3 = p2 + tip_len * (c - p2);
-
-    P1.row(h) = p1;
-    P2.row(h) = p2;
-    P3.row(h) = p3;
-  }
-  std::array<Samples3d, 3> result = {P1, P2, P3};
-  return result;
-}
-
-void MatrixMesh::update_shifted_half_edge_arrows() {
-  if (!show_half_edges_) {
-    return;
-  }
-  // shifted_half_edge_arrows_ = compute_shifted_half_edge_arrows();
-  size_t num_half_edges = get_num_half_edges();
-  for (int i = 0; i < 3; i++) {
-    shifted_half_edge_arrows_[i].resize(num_half_edges, 3);
-  }
-  Samples3d xyz_o_H = xyz_coord_v(v_origin_H_);
-  Samples3d xyz_on_H = xyz_coord_v(v_origin_h(h_next_H_));
-  Samples3d xyz_onn_H = xyz_coord_v(v_origin_h(h_next_h(h_next_H_)));
-
-  // Samples3d P1(num_half_edges, 3);
-  // Samples3d P2(num_half_edges, 3);
-  // Samples3d P3(num_half_edges, 3);
-  double shift_to_center = 0.15;
-  double shaft_len = 0.75;
-  double tip_len = 0.25;
-  for (int h = 0; h < num_half_edges; h++) {
-    Vec3d p1 = xyz_coord_v(v_origin_h(h));
-    Vec3d p2 = xyz_coord_v(v_origin_h(h_next_h(h)));
-    Vec3d p3 = xyz_coord_v(v_origin_h(h_next_h(h_next_h(h))));
-    Vec3d p12 = (p1 + p2) / 2;
-    if (some_negative_boundary_contains_h(h)) {
-      int ht = h_twin_h(h);
-
-      Vec3d p3 = xyz_coord_v(v_origin_h(h_next_h(h_next_h(ht))));
-      p3 = p12 - (p3 - p12);
-    }
-
-    Vec3d c = (p1 + p2 + p3) / 3;
-    p1 = p1 + shift_to_center * (c - p1);
-    p2 = p2 + shift_to_center * (c - p2);
-
-    p1 = p12 + shaft_len * (p1 - p12);
-    p2 = p12 + shaft_len * (p2 - p12);
-    p3 = p2 + tip_len * (c - p2);
-
-    shifted_half_edge_arrows_[0].row(h) = p1;
-    shifted_half_edge_arrows_[1].row(h) = p2;
-    shifted_half_edge_arrows_[2].row(h) = p3;
-  }
-}
-
-void MatrixMesh::update_mesh_visuals() { update_shifted_half_edge_arrows(); }
 
 /////////////////////////////////////////////////
 // Simplicial operations ////////////////////////
@@ -2802,116 +2802,608 @@ SimplicialTriple MatrixMesh::closure(SimplicialTriple &VEF) const {
   return {clV, clE, clF};
 }
 
-///////////////////////////////////////////////////////
-// Quadrature /////////////////////////////////////////
-///////////////////////////////////////////////////////
-void MatrixMesh::init_quad_points_and_weights() {
-  printf("MatrixMesh::init_quad_points_and_weights\n");
-  // 4th order quadrature
-  bary_coord_Q_.resize(7, 3);
-  bary_coord_Q_ << 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0 / 3,
-      1.0 / 3, 1.0 / 3, 0.5, 0.5, 0.0, 0.0, 0.5, 0.5, 0.5, 0.0, 0.5;
-  dimensionless_quad_weight_Q_.resize(7);
-  dimensionless_quad_weight_Q_ << 1.0 / 20, 1.0 / 20, 1.0 / 20, 9.0 / 20,
-      2.0 / 15, 2.0 / 15, 2.0 / 15;
-}
-Vec3d MatrixMesh::xyz_coord_fq(int f, int q) const {
-  int h0 = h_right_f(f);
-  int h1 = h_next_h(h0);
-  int h2 = h_next_h(h1);
-  int v0 = v_origin_h(h0);
-  int v1 = v_origin_h(h1);
-  int v2 = v_origin_h(h2);
-  Vec3d x0 = xyz_coord_v(v0);
-  Vec3d x1 = xyz_coord_v(v1);
-  Vec3d x2 = xyz_coord_v(v2);
-  Vec3d s = bary_coord_q(q);
-  Vec3d x = s[0] * x0 + s[1] * x1 + s[2] * x2;
-  return x;
-}
-///////////////////////////////////////////////////////
-///////////////////////////////////////////////////////
-// From Membrane subclass /////////////////////////////
-///////////////////////////////////////////////////////
-///////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+// Prototyping ///////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
 
-double MatrixMesh::get_gaussian_curvature_angle_defect_v(int v) const {
-  double area = 0.0;
-  double defect = 2 * M_PI;
-  for (auto h : generate_H_out_v_clockwise(v)) {
-    if (some_negative_boundary_contains_h(h)) {
-      // # do boundary geodesic curvature stuff;
+Samples3d MatrixMesh::mean_curvature_vector_graph_laplacian() const {
+  int num_vertices = get_num_vertices();
+  int valance;
+  int h_start;
+  int vj;
+  Samples1d H(num_vertices);
+  Samples3d Q = xyz_coord_V_;
+  Samples3d lapQ(num_vertices, 3);
+
+  for (int v = 0; v < num_vertices; v++) {
+    h_start = h_out_v(v);
+    valance = 0;
+    lapQ.row(v) = Vec3d::Zero();
+    for (auto h : generate_H_out_v_clockwise(v, h_start)) {
+      valance++;
+      vj = v_head_h(h);
+      lapQ.row(v) += Q.row(vj) - Q.row(v);
+    }
+    lapQ.row(v) /= valance;
+  }
+  return lapQ;
+}
+
+void MatrixMesh::remove_f(int f) {
+  // TODO: boundary cases
+  int Nf0 = get_num_faces();
+  int Nf = Nf0 - 1;
+  int Nb0 = get_num_boundaries();
+  int Nb = Nb0 + 1;
+  int b = Nb0;
+  int f0 = Nf0 - 1;
+
+  swap_face_indices(f, f0);
+
+  int h0 = h_right_F_[f0];
+  int h1 = h_next_H_[h0];
+  int h2 = h_next_H_[h1];
+
+  h_negative_B_.conservativeResize(Nb);
+  h_negative_B_[b] = h0;
+
+  f_left_H_[h0] = -(b + 1);
+  f_left_H_[h1] = -(b + 1);
+  f_left_H_[h2] = -(b + 1);
+
+  h_right_F_.conservativeResize(Nf);
+  V_cycle_F_.conservativeResize(Nf, 3);
+}
+
+void MatrixMesh::glue_boundaries(MatrixMesh &m_other, int b_this, int b_other) {
+  int Nb_other = m_other.get_num_boundaries();
+  int Nb_this = get_num_boundaries();
+  // b_this/b_other will be deleted so swap with final b index
+  m_other.swap_boundary_indices(b_other, Nb_other - 1);
+  swap_boundary_indices(b_this, Nb_this - 1);
+  b_other = Nb_other - 1;
+  b_this = Nb_this - 1;
+
+  // Get h cycle along this negatively oriented boundary
+  std::vector<int> H_negative_this;
+  for (int h : generate_H_negative_b(b_this)) {
+    H_negative_this.push_back(h);
+  }
+  // Find v, e, and h indices along other boundary that will be
+  // deleted/overwritten by indices in this boundary after gluing
+  std::vector<int> V_other;
+  std::vector<int> E_other;
+  std::vector<int> H_other;
+  int size_b = 0; // counts # v/e in other boundary
+  for (int h : m_other.generate_H_negative_b(b_other)) {
+    size_b++;
+    V_other.push_back(m_other.v_origin_h(h));
+    E_other.push_back(m_other.e_undirected_h(h));
+    H_other.push_back(h);
+    H_other.push_back(m_other.h_twin_h(h));
+  }
+  if (H_negative_this.size() != size_b) {
+    throw std::runtime_error(
+        "glue_boundaries requires boundaries to be the same size");
+  }
+
+  // Relabel v, e, and h indices along other boundary that will be
+  // deleted/overwritten by gluing.
+  m_other.move_vertex_indices_to_end(V_other);
+  m_other.move_edge_indices_to_end(E_other);
+  m_other.move_half_edge_indices_to_end(H_other);
+
+  // Find closest vertex in other boundary to starting vertex in this
+  // boundary and reassign h_negative_b_other
+  double min_dist = std::numeric_limits<double>::infinity();
+  int h_other = -1;
+  for (int h : m_other.generate_H_negative_b(b_other)) {
+    int ht = m_other.h_twin_h(h);
+    int v_other = m_other.v_origin_h(ht);
+    int h_this = h_negative_b(b_this);
+    int v_this = v_origin_h(h_this);
+    double dist = (m_other.xyz_coord_v(v_other) - xyz_coord_v(v_this)).norm();
+    if (dist < min_dist) {
+      min_dist = dist;
+      h_other = h;
+    }
+  }
+  m_other.h_negative_B_[b_other] = h_other;
+
+  //
+  int Nv_this = get_num_vertices();
+  int Ne_this = get_num_edges();
+  int Nf_this = get_num_faces();
+  int Nh_this = get_num_half_edges();
+
+  int Nv_other = m_other.get_num_vertices();
+  int Ne_other = m_other.get_num_edges();
+  int Nf_other = m_other.get_num_faces();
+  int Nh_other = m_other.get_num_half_edges();
+
+  int dNv = Nv_other - size_b;
+  int dNe = Ne_other - size_b;
+  int dNf = Nf_other;
+  int dNb = Nb_other - 2;
+  int dNh = Nh_other - 2 * size_b;
+
+  int Nv = Nv_this + dNv;
+  int Ne = Ne_this + dNe;
+  int Nf = Nf_this + dNf;
+  int Nb = Nb_this + dNb;
+  int Nh = Nh_this + dNh;
+
+  // shift so other indices that will be added to this by gluing.
+  Samples3d new_xyz_coord_V = m_other.xyz_coord_V_.topRows(dNv);
+  Samplesi new_h_out_V = m_other.h_out_V_.head(dNv).array() + Nh_this;
+
+  Samples2i new_V_cycle_E = m_other.V_cycle_E_.topRows(dNe).array() + Nv_this;
+  Samplesi new_h_directed_E = m_other.h_directed_E_.head(dNe).array() + Nh_this;
+
+  Samples3i new_V_cycle_F = m_other.V_cycle_F_.array() + Nv_this;
+  Samplesi new_h_right_F = m_other.h_right_F_.array() + Nh_this;
+
+  Samplesi new_h_negative_B =
+      m_other.h_negative_B_.head(Nb_other - 1).array() + Nh_this;
+
+  Samplesi new_v_origin_H = m_other.v_origin_H_.head(dNh).array() + Nv_this;
+  Samplesi new_e_undirected_H =
+      m_other.e_undirected_H_.head(dNh).array() + Ne_this;
+  Samplesi new_f_left_H = m_other.f_left_H_.head(dNh);
+  for (int &f : new_f_left_H) {
+    f += (f >= 0) ? Nf_this : -(Nb_this - 1);
+    // if (f >= 0) {
+    //   f += Nf_this;
+    //   continue;
+    // }
+    // int b = -(f + 1);
+    // b += Nb_this - 1;
+    // f = -(b + 1);
+  }
+  Samplesi new_h_next_H = m_other.h_next_H_.head(dNh).array() + Nh_this;
+  Samplesi new_h_twin_H = m_other.h_twin_H_.head(dNh).array() + Nh_this;
+
+  // get h indices in other boundary that will be replaced by h's in
+  // H_negative_this with order chosen to be consistent with
+  // H_negative_this. m_other.generate_H_negative_b(b_other) generates twins
+  // of the h's in the order [h_{0}, h_{n-1}, h_{n-2},..., h_{1}], but we
+  // want [h_{0}, h_{1}, h_{2},..., h_{n-1}] so we need to re-order
+  H_other.resize(size_b);
+  int i = 0;
+  for (int h : m_other.generate_H_negative_b(b_other)) {
+    int ht = m_other.h_twin_h(h);
+    H_other[(size_b - i) % size_b] = ht;
+    i++;
+  }
+  if (i != size_b) {
+    throw std::runtime_error("something is wrong...");
+  }
+
+  // Map to swap references to v indices in other boundary to
+  // v indices in this boundary.
+  std::unordered_map<int, int> V_map_other_to_this;
+  // Collections of e/f's incident on other boundary vertices deleted by
+  // gluing that need to update V_cycle refs
+  std::unordered_set<int> E_incident_b_other;
+  std::unordered_set<int> F_incident_b_other;
+  for (int i = 0; i < size_b; i++) {
+    int h_other = H_other[i];
+    int h_this = H_negative_this[i];
+    int v_other = m_other.v_origin_h(h_other);
+    int v_this = v_origin_h(h_this);
+    V_map_other_to_this[v_other + Nv_this] = v_this;
+    // H_map_other_to_this[h_other + Nh_this] = h_this;
+    // H_prev_H_other.insert(m_other.h_prev_h(h_other));
+    for (int h : m_other.generate_H_out_v_clockwise(v_other)) {
+      if (h < dNh) {
+        // The h's through other boundary vertices need to update their
+        // v_origin refs. We skip h>=dNh since those are getting deleted.
+        new_v_origin_H[h] = v_this;
+      }
+      int e = m_other.e_undirected_h(h);
+      if (e < dNe) {
+        E_incident_b_other.insert(e);
+      }
+      int f = m_other.f_left_h(h);
+      if (f >= 0) {
+        F_incident_b_other.insert(f);
+      }
+    }
+    //
+    int h_prev_other = m_other.h_prev_h(h_other);
+    int h_next_other = m_other.h_next_h(h_other);
+    int f_left_other = m_other.f_left_h(h_other);
+    // other interior h's preceding other boundary h's need to update h_next
+    // refs
+    new_h_next_H[h_prev_other] = h_this;
+    // this boundary h's need to update h_next refs
+    h_next_H_[h_this] = h_next_other + Nh_this;
+    // this boundary h's need to update f_left refs since they will no
+    // longer be on a boundary after gluing
+    f_left_H_[h_this] = f_left_other + Nf_this;
+    if (m_other.h_right_f(f_left_other) == h_other) {
+      // other f's may need to update h_right refs if they reference an h
+      // deleted by gluing
+      new_h_right_F[f_left_other] = h_this;
+    }
+  }
+
+  auto swap_v_ref = [&V_map_other_to_this](int &v) {
+    auto it = V_map_other_to_this.find(v);
+    if (it != V_map_other_to_this.end()) {
+      v = it->second;
+    }
+  };
+  for (int f : F_incident_b_other) {
+    for (int i = 0; i < 3; i++) {
+      swap_v_ref(new_V_cycle_F(f, i));
+    }
+  }
+  for (int e : E_incident_b_other) {
+    for (int i = 0; i < 2; i++) {
+      swap_v_ref(new_V_cycle_E(e, i));
+    }
+  }
+
+  xyz_coord_V_.conservativeResize(Nv, 3);
+  h_out_V_.conservativeResize(Nv);
+  V_cycle_E_.conservativeResize(Ne, 2);
+  h_directed_E_.conservativeResize(Ne);
+  V_cycle_F_.conservativeResize(Nf, 3);
+  h_right_F_.conservativeResize(Nf);
+  h_negative_B_.conservativeResize(Nb);
+  v_origin_H_.conservativeResize(Nh);
+  e_undirected_H_.conservativeResize(Nh);
+  f_left_H_.conservativeResize(Nh);
+  h_next_H_.conservativeResize(Nh);
+  h_twin_H_.conservativeResize(Nh);
+
+  xyz_coord_V_.bottomRows(dNv) = new_xyz_coord_V;
+  h_out_V_.tail(dNv) = new_h_out_V;
+
+  V_cycle_E_.bottomRows(dNe) = new_V_cycle_E;
+  h_directed_E_.tail(dNe) = new_h_directed_E;
+
+  V_cycle_F_.bottomRows(dNf) = new_V_cycle_F;
+  h_right_F_.tail(dNf) = new_h_right_F;
+
+  h_negative_B_.tail(Nb_other - 1) = new_h_negative_B;
+
+  v_origin_H_.tail(dNh) = new_v_origin_H;
+  e_undirected_H_.tail(dNh) = new_e_undirected_H;
+  f_left_H_.tail(dNh) = new_f_left_H;
+  h_next_H_.tail(dNh) = new_h_next_H;
+  h_twin_H_.tail(dNh) = new_h_twin_H;
+
+  // check_he_matrices();
+}
+
+int MatrixMesh::find_opposite_vertex(int v0, double r_max) {
+  Vec3d x0 = xyz_coord_v(v0);
+  Vec3d n0 = normal_v(v0); // = -ez
+  int valance0 = get_valence_v(v0);
+  // double r_max = 0.1;
+
+  int v_opposite = -1;
+  double dist_opposite = std::numeric_limits<double>::max();
+  int Nv = get_num_vertices();
+  // closest vertex in cylinder satisfying <n_v, n_v0> < 0
+  for (int v = 0; v < Nv; v++) {
+    int valance = get_valence_v(v);
+    if (valance != valance0) {
       continue;
     }
-    int e = e_undirected_h(h);
-    double L = length_E_[e];
-    Vec3d vecL = vec_H_.row(h);
-    int hrot = h_rotcw_h(h);
-    int erot = e_undirected_h(hrot);
-    double Lrot = length_E_[erot];
-    Vec3d vecLrot = vec_H_.row(hrot);
-    double cos_angle = math::dot(vecL, vecLrot) / (L * Lrot);
-    defect -= std::acos(cos_angle);
-    area += L * Lrot * std::sqrt(1 - cos_angle * cos_angle) / 6;
+    Vec3d x = xyz_coord_v(v);
+    Vec3d x_x0 = x - x0;
+    // double z = -n0.dot(x_x0);
+    double r = n0.cross(x_x0).norm();
+    if (r > r_max) {
+      continue;
+    }
+    Vec3d n = normal_v(v);
+    if (n0.dot(n) >= 0.0) {
+      continue;
+    }
+    double dist = x_x0.norm();
+    if (dist < dist_opposite) {
+      dist_opposite = dist;
+      v_opposite = v;
+    }
   }
-  return defect / area;
+
+  if (v_opposite == -1) {
+    throw std::runtime_error("Could not find opposite vertex");
+  }
+  return v_opposite;
 }
 
-void MatrixMesh::update_gaussian_curvature_angle_defect() {
-  int num_vertices = get_num_vertices();
-  gaussian_curvature_V_.resize(num_vertices);
-  for (int v = 0; v < num_vertices; v++) {
-    gaussian_curvature_V_[v] = get_gaussian_curvature_angle_defect_v(v);
+void MatrixMesh::remove_v_neighborhood(int v) {
+  int Nv0 = get_num_vertices();
+  int Ne0 = get_num_edges();
+  int Nf0 = get_num_faces();
+  int Nb0 = get_num_boundaries();
+  int Nh0 = get_num_half_edges();
+
+  std::vector<int> E_remove;
+  std::vector<int> F_remove;
+  std::vector<int> H_remove;
+  std::vector<int> H_bdry;
+
+  for (int h : generate_H_out_v_clockwise(v)) {
+    int ht = h_twin_H_(h);
+    int h_bdry = h_next_H_(h);
+    int e = e_undirected_H_(h);
+    int f = f_left_H_(h);
+
+    E_remove.push_back(e);
+    F_remove.push_back(f);
+    H_remove.push_back(h);
+    H_remove.push_back(ht);
+  }
+
+  printf("MatrixMesh::remove_v_and_v_opposite_neighborhood Nv0 = %d\n", Nv0);
+  printf("MatrixMesh::remove_v_and_v_opposite_neighborhood v = %d\n", v);
+  swap_vertex_indices(v, Nv0 - 1);
+  v = Nv0 - 1;
+  printf("MatrixMesh::remove_v_and_v_opposite_neighborhood  - 1\n");
+  move_edge_indices_to_end(E_remove);
+  printf("MatrixMesh::remove_v_and_v_opposite_neighborhood  - 2\n");
+  move_face_indices_to_end(F_remove);
+  printf("MatrixMesh::remove_v_and_v_opposite_neighborhood  - 3\n");
+  move_half_edge_indices_to_end(H_remove);
+  printf("MatrixMesh::remove_v_and_v_opposite_neighborhood  - 4\n");
+
+  int Nv = Nv0 - 1;
+  int Ne = Ne0 - E_remove.size();
+  int Nf = Nf0 - F_remove.size();
+  int Nb = Nb0 + 1;
+  int Nh = Nh0 - H_remove.size();
+
+  for (int h : generate_H_out_v_clockwise(v)) {
+    int h_bdry = h_next_H_(h);
+    H_bdry.push_back(h_bdry);
+    int ht = h_twin_H_(h);
+    int vt = v_origin_H_(ht);
+    if (h_out_V_[vt] == ht) {
+      h_out_V_[vt] = h_bdry;
+    }
+  }
+  printf("MatrixMesh::remove_v_and_v_opposite_neighborhood  - 5\n");
+  std::reverse(H_bdry.begin(), H_bdry.end());
+  xyz_coord_V_.conservativeResize(Nv, 3);
+  h_out_V_.conservativeResize(Nv);
+  V_cycle_E_.conservativeResize(Ne, 2);
+  h_directed_E_.conservativeResize(Ne);
+  V_cycle_F_.conservativeResize(Nf, 3);
+  h_right_F_.conservativeResize(Nf);
+  h_negative_B_.conservativeResize(Nb);
+  v_origin_H_.conservativeResize(Nh);
+  e_undirected_H_.conservativeResize(Nh);
+  f_left_H_.conservativeResize(Nh);
+  h_next_H_.conservativeResize(Nh);
+  h_twin_H_.conservativeResize(Nh);
+
+  h_negative_B_[Nb0] = H_bdry[0];
+  int size_bdry = H_bdry.size();
+  int f_b = -(Nb0 + 1);
+  for (int i_h = 0; i_h < size_bdry; i_h++) {
+    int h = H_bdry[i_h];
+    int h_next = H_bdry[(i_h + 1) % size_bdry];
+    h_next_H_[h] = h_next;
+    f_left_H_[h] = f_b;
   }
 }
 
-void MatrixMesh::update_gaussian_curvature_laplacian() {
-  // printf("MatrixMesh::update_gaussian_curvature_laplacian\n");
-  int num_vertices = get_num_vertices();
-  gaussian_curvature_V_.resize(num_vertices);
-  Samples3d n_V = mcvec_V_.rowwise().normalized();
-  // Samples3d n_V = normal_V_;
-  Samples3d lap_n_V = laplacian(n_V);
-  for (int v = 0; v < num_vertices; v++) {
-    // printf("v = %d\n", v);
-    Vec3d lap_r = mcvec_V_.row(v);
-    double norm_sqr_lap_r = lap_r.squaredNorm();
-    // double norm_sqr_lap_r = 4 * mean_curvature_V_[v] * mean_curvature_V_[v];
-    // printf("norm_sqr_lap_r = %.20f\n", norm_sqr_lap_r);
-    Vec3d n = n_V.row(v);
-    // printf("n = %.20f, %.20f, %.20f\n", n[0], n[1], n[2]);
-    Vec3d lap_n = lap_n_V.row(v);
-    // printf("lap_n = %.20f, %.20f, %.20f\n", lap_n[0], lap_n[1], lap_n[2]);
-    gaussian_curvature_V_[v] = 0.5 * (norm_sqr_lap_r + math::dot(n, lap_n));
-    // printf("gaussian_curvature_V_[%d] = %.20f\n", v,
-    // gaussian_curvature_V_[v]);
+// void MatrixMesh::remove_v_and_v_opposite_neighborhood(int v0, double r_max) {
+//   int Nv0 = get_num_vertices();
+//   int Ne0 = get_num_edges();
+//   int Nf0 = get_num_faces();
+//   int Nb0 = get_num_boundaries();
+//   int Nh0 = get_num_half_edges();
+//
+//   std::vector<int> E_remove;
+//   std::vector<int> F_remove;
+//   std::vector<int> H_remove;
+//   std::vector<int> H_bdry;
+//
+//   for (int h : generate_H_out_v_clockwise(v0)) {
+//     int ht = h_twin_h(h);
+//     int h_bdry = h_next_h(h);
+//     int e = e_undirected_h(h);
+//     int f = f_left_h(h);
+//
+//     E_remove.push_back(e);
+//     F_remove.push_back(f);
+//     H_remove.push_back(h);
+//     H_remove.push_back(ht);
+//   }
+//
+//   swap_vertex_indices(v0, Nv0 - 1);
+//   v0 = Nv0 - 1;
+//   move_edge_indices_to_end(E_remove);
+//   move_face_indices_to_end(F_remove);
+//   move_half_edge_indices_to_end(H_remove);
+//
+//   int Nv = Nv0 - 1;
+//   int Ne = Ne0 - E_remove.size();
+//   int Nf = Nf0 - F_remove.size();
+//   int Nb = Nb0 + 1;
+//   int Nh = Nh0 - H_remove.size();
+//
+//   for (int h : generate_H_out_v_clockwise(v0)) {
+//     int h_bdry = h_next_h(h);
+//     H_bdry.push_back(h_bdry);
+//     int ht = h_twin_h(h);
+//     int vt = v_origin_h(ht);
+//     if (h_out_V_[vt] == ht) {
+//       h_out_V_[vt] = h_bdry;
+//     }
+//   }
+//   std::reverse(H_bdry.begin(), H_bdry.end());
+//   xyz_coord_V_.conservativeResize(Nv, 3);
+//   h_out_V_.conservativeResize(Nv);
+//   V_cycle_E_.conservativeResize(Ne, 2);
+//   h_directed_E_.conservativeResize(Ne);
+//   V_cycle_F_.conservativeResize(Nf, 3);
+//   h_right_F_.conservativeResize(Nf);
+//   h_negative_B_.conservativeResize(Nb);
+//   v_origin_H_.conservativeResize(Nh);
+//   e_undirected_H_.conservativeResize(Nh);
+//   f_left_H_.conservativeResize(Nh);
+//   h_next_H_.conservativeResize(Nh);
+//   h_twin_H_.conservativeResize(Nh);
+//
+//   h_negative_B_[Nb0] = H_bdry[0];
+//   int size_bdry = H_bdry.size();
+//   int f_b = -(Nb0 + 1);
+//   for (int i_h = 0; i_h < size_bdry; i_h++) {
+//     int h = H_bdry[i_h];
+//     int h_next = H_bdry[(i_h + 1) % size_bdry];
+//     h_next_H_[h] = h_next;
+//     f_left_H_[h] = f_b;
+//   }
+// }
+
+void MatrixMesh::remove_v_and_v_opposite_neighborhood(int v0, double r_max) {
+  check_v(v0);
+  int v1 = find_opposite_vertex(v0, r_max);
+
+  // Remove the larger index first to preserve the smaller index.
+  if (v0 < v1) {
+    std::swap(v0, v1);
+  }
+
+  remove_v_neighborhood(v0);
+  remove_v_neighborhood(v1);
+}
+
+void MatrixMesh::reverse_orientation() {
+  int Nh = get_num_half_edges();
+  int Nf = get_num_faces();
+  int Nb = get_num_boundaries();
+
+  for (int f = 0; f < Nf; f++) {
+    int h0 = h_right_F_[f];
+    int h1 = h_next_H_[h0];
+    int h2 = h_next_H_[h1];
+    int v0 = v_origin_H_[h0];
+    int v1 = v_origin_H_[h1];
+    int v2 = v_origin_H_[h2];
+
+    h_out_V_[v0] = h2;
+    h_out_V_[v1] = h0;
+    h_out_V_[v2] = h1;
+
+    v_origin_H_[h0] = v1;
+    v_origin_H_[h1] = v2;
+    v_origin_H_[h2] = v0;
+    h_next_H_[h0] = h2;
+    h_next_H_[h1] = h0;
+    h_next_H_[h2] = h1;
+
+    V_cycle_F_.row(f) << v1, v2, v0;
+  }
+
+  for (int b = 0; b < Nb; b++) {
+    int h0 = h_negative_B_[b];
+    std::vector<int> H;
+    std::vector<int> H_next;
+    std::vector<int> V_next;
+    int h = h0;
+    do {
+      int hn = h_next_H_[h];
+      H.push_back(h);
+      H_next.push_back(hn);
+      V_next.push_back(v_origin_H_[hn]);
+      h = hn;
+    } while (h != h0);
+
+    for (int i = 0; i < H.size(); i++) {
+      int h0 = H[i];
+      int h1 = H_next[i];
+      int v1 = V_next[i];
+      v_origin_H_[h0] = v1;
+      h_next_H_[h1] = h0;
+    }
   }
 }
 
-void MatrixMesh::update_gaussian_curvature() {
-  // printf("MatrixMesh::update_gaussian_curvature\n");
-  // if (gaussian_curvature_type_ == "angle_defect") {
-  //   update_gaussian_curvature_angle_defect();
-  // } else if (gaussian_curvature_type_ == "laplacian") {
-  //   update_gaussian_curvature_laplacian();
-  // } else {
-  //   throw std::runtime_error("Invalid gaussian_curvature_type_");
-  // }
-  switch (gaussian_curvature_type_) {
-  case GaussianCurvatureType::ANGLE_DEFECT:
-    update_gaussian_curvature_angle_defect();
-    return;
-  case GaussianCurvatureType::LAPLACIAN:
-    update_gaussian_curvature_laplacian();
-    return;
+Eigen::Matrix<int, Eigen::Dynamic, 2, Eigen::RowMajor>
+MatrixMesh::get_V_cycle_E0() const {
+  int Ne = h_directed_E_.size();
+  Eigen::Matrix<int, Eigen::Dynamic, 2, Eigen::RowMajor> V_cycle_E(Ne, 2);
+
+  const int *H = h_directed_E_.data();
+  const int *twin = h_twin_H_.data();
+  const int *origin = v_origin_H_.data();
+  int *out = V_cycle_E.data();
+
+  for (int e = 0; e < Ne; ++e) {
+    int h = H[e];
+    out[2 * e] = origin[h];
+    out[2 * e + 1] = origin[twin[h]];
   }
-  throw std::runtime_error(
-      "update_gaussian_curvature: Unknown gaussian curvature type");
+
+  return V_cycle_E;
 }
 
-//////////////////////
-// Laplacians ////////
-//////////////////////
+Eigen::Matrix<int, Eigen::Dynamic, 2> MatrixMesh::get_V_cycle_E1() const {
+  int Ne = h_directed_E_.size();
+  Eigen::Matrix<int, Eigen::Dynamic, 2> V_cycle_E(Ne, 2);
+
+  for (int e = 0; e < Ne; ++e) {
+    int h0 = h_directed_E_[e];
+    int h1 = h_twin_H_[h0];
+
+    V_cycle_E.row(e) << v_origin_H_[h0], v_origin_H_[h1];
+  }
+
+  return V_cycle_E;
+}
+
+Eigen::Matrix<int, Eigen::Dynamic, 3, Eigen::RowMajor>
+MatrixMesh::get_V_cycle_F0() const {
+  int Nf = h_right_F_.size();
+  Eigen::Matrix<int, Eigen::Dynamic, 3, Eigen::RowMajor> V_cycle_F(Nf, 3);
+
+  const int *H = h_right_F_.data();
+  const int *next = h_next_H_.data();
+  const int *origin = v_origin_H_.data();
+  int *out = V_cycle_F.data();
+
+  for (int f = 0; f < Nf; ++f) {
+    int h0 = H[f];
+    int h1 = next[h0];
+    int h2 = next[h1];
+
+    out[3 * f] = origin[h0];
+    out[3 * f + 1] = origin[h1];
+    out[3 * f + 2] = origin[h2];
+  }
+
+  return V_cycle_F;
+}
+
+Eigen::Matrix<int, Eigen::Dynamic, 3> MatrixMesh::get_V_cycle_F1() const {
+  int Nf = h_right_F_.size();
+  Eigen::Matrix<int, Eigen::Dynamic, 3> V_cycle_F(Nf, 3);
+
+  for (int f = 0; f < Nf; ++f) {
+    int h0 = h_right_F_[f];
+    int h1 = h_next_H_[h0];
+    int h2 = h_next_H_[h1];
+
+    V_cycle_F.row(f) << v_origin_H_[h0], v_origin_H_[h1], v_origin_H_[h2];
+  }
+
+  return V_cycle_F;
+}
 
 ///////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////
@@ -2936,18 +3428,18 @@ Samples3d MatrixMesh::cotan_laplacian(Samples3d &Q) {
       int vj = v_head_h(hij);
       Vec3d qj = Q.row(vj);
 
-      int hijm1 = h_next_h(h_twin_h(hij));
-      int hijp1 = h_twin_h(h_next_h(h_next_h(hij)));
-      int hjjm1 = h_twin_h(h_next_h(h_next_h(h_twin_h(hij))));
-      int hjjp1 = h_next_h(hij);
+      int hijm1 = h_next_H_[h_twin_H_[hij]];
+      int hijp1 = h_twin_H_[h_next_H_[h_next_H_[hij]]];
+      int hjjm1 = h_twin_H_[h_next_H_[h_next_H_[h_twin_H_[hij]]]];
+      int hjjp1 = h_next_H_[hij];
       // printf("hijm1 = %d, hijp1 = %d, hjjm1 = %d, hjjp1 = %d, hij = %d\n",
       //        hijm1, hijp1, hjjm1, hjjp1, hij);
 
-      int eijm1 = e_undirected_h(hijm1);
-      int eijp1 = e_undirected_h(hijp1);
-      int ejjm1 = e_undirected_h(hjjm1);
-      int ejjp1 = e_undirected_h(hjjp1);
-      int eij = e_undirected_h(hij);
+      int eijm1 = e_undirected_H_[hijm1];
+      int eijp1 = e_undirected_H_[hijp1];
+      int ejjm1 = e_undirected_H_[hjjm1];
+      int ejjp1 = e_undirected_H_[hjjp1];
+      int eij = e_undirected_H_[hij];
       // printf("eijm1 = %d, ejjm1 = %d, eijp1 = %d, ejjp1 = %d, eij = %d\n",
       //        eijm1, ejjm1, eijp1, ejjp1, eij);
 
@@ -2978,7 +3470,7 @@ Samples3d MatrixMesh::cotan_laplacian(Samples3d &Q) {
       double cot_thetap = 1.0 / std::tan(thetajp1);
       if (some_negative_boundary_contains_h(hij)) {
         cot_thetap = 0.0;
-      } else if (some_negative_boundary_contains_h(h_twin_h(hij))) {
+      } else if (some_negative_boundary_contains_h(h_twin_H_[hij])) {
         cot_thetam = 0.0;
       }
 
@@ -3008,16 +3500,16 @@ Samples1d MatrixMesh::cotan_laplacian(Samples1d &Q) {
       int vj = v_head_h(hij);
       double qj = Q[vj];
 
-      int hijm1 = h_next_h(h_twin_h(hij));
-      int hijp1 = h_twin_h(h_next_h(h_next_h(hij)));
-      int hjjm1 = h_twin_h(h_next_h(h_next_h(h_twin_h(hij))));
-      int hjjp1 = h_next_h(hij);
+      int hijm1 = h_next_H_[h_twin_H_[hij]];
+      int hijp1 = h_twin_H_[h_next_H_[h_next_H_[hij]]];
+      int hjjm1 = h_twin_H_[h_next_H_[h_next_H_[h_twin_H_[hij]]]];
+      int hjjp1 = h_next_H_[hij];
 
-      int eijm1 = e_undirected_h(hijm1);
-      int eijp1 = e_undirected_h(hijp1);
-      int ejjm1 = e_undirected_h(hjjm1);
-      int ejjp1 = e_undirected_h(hjjp1);
-      int eij = e_undirected_h(hij);
+      int eijm1 = e_undirected_H_[hijm1];
+      int eijp1 = e_undirected_H_[hijp1];
+      int ejjm1 = e_undirected_H_[hjjm1];
+      int ejjp1 = e_undirected_H_[hjjp1];
+      int eij = e_undirected_H_[hij];
 
       double Lijm1 = length_E_[eijm1];
       double Ljjm1 = length_E_[ejjm1];
@@ -3814,6 +4306,94 @@ void MatrixMesh::update_mean_curvature() {
 //   h_right_F_ = std::get<6>(he_tuple);
 //   h_negative_B_ = std::get<7>(he_tuple);
 //   update_edges_from_he_mats();
+// }
+
+// void MatrixMesh::update_vef_from_he() {
+//
+//   // auto [xyz_coord_V, h_out_V, v_origin_H_, h_next_H_, h_twin_H, f_left_H_,
+//   //       h_right_F_, h_negative_B] = he_samples();
+//
+//   int Nf = h_right_F_.rows();
+//   int Nh = get_num_half_edges();
+//   int Ne = Nh / 2;
+//
+//   // Samples3i V_cycle_F_ = Samples3i(Nf, 3);
+//   // Samples2i V_cycle_E_ = Samples2i(Ne, 2);
+//   V_cycle_E_.resize(Ne, 2);
+//   V_cycle_F_.resize(Nf, 3);
+//   e_undirected_H_.resize(Nh);
+//   h_directed_E_.resize(Ne);
+//   std::set<std::vector<int>> setV_of_E;
+//   for (int f = 0; f < Nf; ++f) {
+//     int h0 = h_right_F_[f];
+//     int h1 = h_next_H_[h0];
+//     int h2 = h_next_H_[h1];
+//     int v0 = v_origin_H_[h0];
+//     int v1 = v_origin_H_[h1];
+//     int v2 = v_origin_H_[h2];
+//     V_cycle_F_.row(f) << v0, v1, v2;
+//
+//     std::vector<int> edge0 = {std::min(v0, v1), std::max(v0, v1)};
+//     std::vector<int> edge1 = {std::min(v1, v2), std::max(v1, v2)};
+//     std::vector<int> edge2 = {std::min(v2, v0), std::max(v2, v0)};
+//     // Insert edges into the set and update V_cycle_E
+//     if (setV_of_E.find(edge0) == setV_of_E.end()) {
+//       V_cycle_E_.row(setV_of_E.size()) << edge0[0], edge0[1];
+//       setV_of_E.insert(edge0);
+//     }
+//     if (setV_of_E.find(edge1) == setV_of_E.end()) {
+//       V_cycle_E_.row(setV_of_E.size()) << edge1[0], edge1[1];
+//       setV_of_E.insert(edge1);
+//     }
+//     if (setV_of_E.find(edge2) == setV_of_E.end()) {
+//       V_cycle_E_.row(setV_of_E.size()) << edge2[0], edge2[1];
+//       setV_of_E.insert(edge2);
+//     }
+//   }
+//   // return {xyz_coord_V, V_cycle_E, V_cycle_F};
+// }
+//
+
+// /**
+//  * @brief Construct a new MatrixMesh object from a half-edge ply.
+//  *
+//  * @param ply_path
+//  * @return MatrixMesh
+//  */
+// MatrixMesh MatrixMesh::from_he_ply(const fs::path &ply_path) {
+//   mesh_io::MeshBuilder mc = mesh_io::MeshBuilder::from_he_ply(ply_path,
+//   false); auto [xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
+//   f_left_H,
+//         h_right_F, h_negative_B] = mc.he_samples;
+//   return MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
+//                     f_left_H, h_right_F, h_negative_B);
+// }
+
+// /**
+//  * @brief Construct a new MatrixMesh object from a vertex-face samples. See
+//  * `meshbrane::VertexFaceTuple`.
+//  *
+//  * @param xyz_coord_V
+//  * @param V_cycle_F
+//  * @return MatrixMesh
+//  */
+// MatrixMesh MatrixMesh::from_vf_samples(const Samples3d &xyz_coord_V,
+//                                        const Samples3i &V_cycle_F) {
+//   mesh_io::MeshBuilder mc =
+//       mesh_io::MeshBuilder::from_vf_samples(xyz_coord_V, V_cycle_F, true);
+//   auto [xyz_coord_V0, h_out_V, v_origin_H, h_next_H, h_twin_H, f_left_H,
+//         h_right_F, h_negative_B] = mc.he_samples;
+//   return MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
+//                     f_left_H, h_right_F, h_negative_B);
+// }
+
+// MatrixMesh MatrixMesh::from_vf_ply(const fs::path &ply_path) {
+//   mesh_io::MeshBuilder mc = mesh_io::MeshBuilder::from_vf_ply(ply_path,
+//   true); auto [xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
+//   f_left_H,
+//         h_right_F, h_negative_B] = mc.he_samples;
+//   return MatrixMesh(xyz_coord_V, h_out_V, v_origin_H, h_next_H, h_twin_H,
+//                     f_left_H, h_right_F, h_negative_B);
 // }
 
 } // namespace meshbrane

@@ -557,7 +557,7 @@ def save_final_surface_tension_stats():
     return surface_tension_stats_data
 
 
-save_final_surface_tension_stats()
+# save_final_surface_tension_stats()
 # s = compute_concatenated_run_average_surface_tension_stats(
 #     surface_tension_stats_runs_005120,
 #     t_start=0.0,
@@ -626,27 +626,28 @@ def save_final_chunked_samples_and_weights():
     )
 
 
-save_final_chunked_samples_and_weights()
+# save_final_chunked_samples_and_weights()
 
 # %%
 
 
 # %%
 def plot_fit_B_gamma_vs_l_max():
-    show_all_fits = True
+    show_all_fits = False
     inverse_variance_weights = False
     show_error_bars = True
     auto_limits = True
 
     stiffness_y_lims = (-0.25, 0.25)
     tension_y_lims = (-0.25, 0.25)
+    x_lims = (0, 13)
 
     fig_path = fluctuations_analysis_dir / "unweighted_fit_B_gamma_vs_l_max.svg"
 
     Nf = 5120
     chunked_samples_and_weights_path = chunked_50_samples_and_weights_path_005120
     chunked_samples_and_weights_path = chunked_100_samples_and_weights_path_005120
-    # chunked_samples_and_weights_path = chunked_200_samples_and_weights_path_005120
+    chunked_samples_and_weights_path = chunked_200_samples_and_weights_path_005120
     # chunked_samples_and_weights_path = chunked_300_samples_and_weights_path_005120
     B_actual = 1.0
     B_guess = 1.2
@@ -742,9 +743,9 @@ def plot_fit_B_gamma_vs_l_max():
     )
     # axes[0].set_xlabel(r"$\ell_{\text{max}}$")
     axes[0].set_ylabel(r"$(B_{\text{fit}}-B)/B$")
-    axes[1].set_xlabel(r"$\ell_{\text{max}}$")
+    axes[1].set_xlabel(r"$\ell_{\text{cut}}$")
     axes[1].set_ylabel(
-        r"$(\sigma_{\text{fit}}-\langle\overline{\gamma}\rangle)/\langle\overline{\gamma}\rangle$"
+        r"$(\gamma_{\text{fit}}-\langle\overline{\gamma}\rangle)/\langle\overline{\gamma}\rangle$"
     )
 
     Nf_str = f"{Nf}"
@@ -824,6 +825,8 @@ def plot_fit_B_gamma_vs_l_max():
     if not auto_limits:
         axes[0].set_ylim(*stiffness_y_lims)
         axes[1].set_ylim(*tension_y_lims)
+    # axes[0].set_xlim(*x_lims)
+    # axes[1].set_xlim(*x_lims)
 
     plt.savefig(fig_path, dpi=600)
     plt.show()

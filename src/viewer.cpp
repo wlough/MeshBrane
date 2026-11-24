@@ -4,6 +4,7 @@
 #include "meshbrane/viewer.hpp"
 #include <cmath>
 #include <filesystem>
+#include <numbers>
 
 namespace fs = std::filesystem;
 
@@ -86,6 +87,22 @@ void Viewer::init() {
   // iglviewer_.core().set_rotation_type(
   //     igl::opengl::ViewerCore::ROTATION_TYPE_TRACKBALL);
   dist_ = (eye_ - center_).norm();
+  //
+  //
+  //
+  //
+  //
+  //
+  //
+  // auto &core = iglviewer_.core();
+  //
+  // core.camera_eye = Eigen::Vector3f(0, 0, 5);
+  // core.camera_center = Eigen::Vector3f(0, 0, 0);
+  // core.camera_up = Eigen::Vector3f(0, 1, 0);
+  // core.trackball_angle = Eigen::Quaternionf::Identity();
+  //
+  // core.set_rotation_type(
+  //     igl::opengl::ViewerCore::ROTATION_TYPE_TWO_AXIS_VALUATOR_FIXED_UP);
 }
 
 ///////////////////////////////
@@ -205,7 +222,7 @@ void Viewer::draw_chromatin_chain(ChromatinChain &m) {
   //
   // double radius = m.bead_radius_; // Physical bead radius
   // double D = (core.camera_eye - core.camera_center).norm();
-  // double phi = core.camera_view_angle * M_PI / 180.0;
+  // double phi = core.camera_view_angle * std::numbers::pi / 180.0;
   // double s = core.camera_zoom * core.camera_base_zoom;
   // double H = core.viewport(3);
   //
@@ -245,8 +262,8 @@ void Viewer::draw_chromatin_chain(ChromatinChain &m) {
     double A = amplitude_fraction * L;
 
     auto spring_point = [&](double t) {
-      double phase = 2.0 * M_PI * num_turns * t;
-      double radius = A * std::sin(M_PI * t);
+      double phase = 2.0 * std::numbers::pi * num_turns * t;
+      double radius = A * std::sin(std::numbers::pi * t);
 
       return Eigen::Vector3d(
           a + t * d + radius * (std::cos(phase) * u + std::sin(phase) * v));
@@ -284,7 +301,7 @@ void Viewer::draw_tube(Vec3d &p1, Vec3d &p2, double radius,
   ey.normalize();
   Vec3d ex = ey.cross(ez);
 
-  double dphi = 2 * M_PI / Nphi;
+  double dphi = 2 * std::numbers::pi / Nphi;
   Samples3d Pa{Nphi, 3};
   Samples3d Pb{Nphi, 3};
   Samples3d Color{Nphi, 3};
@@ -393,7 +410,7 @@ void Viewer::draw_rigid_mt_bundle(RigidMTBundle &mt_bundle) {
   Vec3d rgb1 = mt_bundle.rgb_mt1_;
   Vec3d rgb2 = mt_bundle.rgb_mt2_;
   int num_mts = mt_bundle.num_mts_;
-  double dphi = 2 * M_PI / num_mts;
+  double dphi = 2 * std::numbers::pi / num_mts;
   Samples3d Pa{2 * num_mts, 3};
   Samples3d Pb{2 * num_mts, 3};
   Samples3d Color{2 * num_mts, 3};

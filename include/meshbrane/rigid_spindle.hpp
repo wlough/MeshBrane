@@ -12,6 +12,7 @@
 #include <cmath>
 #include <filesystem>
 #include <limits>
+#include <numbers>
 #include <stdexcept>
 #include <yaml-cpp/yaml.h>
 
@@ -75,9 +76,10 @@ public:
 
   void after_init() override {
     printf("SphericalSPBChromatinComplex::after_init\n");
-    linear_drag_coefficient_ = 6.0 * M_PI * bulk_viscosity_ * radius_;
+    linear_drag_coefficient_ =
+        6.0 * std::numbers::pi * bulk_viscosity_ * radius_;
     angular_drag_coefficient_ =
-        8.0 * M_PI * bulk_viscosity_ * radius_ * radius_ * radius_;
+        8.0 * std::numbers::pi * bulk_viscosity_ * radius_ * radius_ * radius_;
   }
 
   void
@@ -207,7 +209,8 @@ public:
 
   void after_init() override {
     printf("RigidMTBundle0::after_init\n");
-    ang_drag_per_len_par_ = 4.0 * M_PI * bulk_viscosity_ * radius_ * radius_;
+    ang_drag_per_len_par_ =
+        4.0 * std::numbers::pi * bulk_viscosity_ * radius_ * radius_;
     update_linear_drag_coefficients();
   }
 
@@ -290,9 +293,10 @@ public:
     double aspect_ratio = std::max(L / radius_, 2.25);
     double c_perp = c_drag_constant_par_ + 1;
     double log_term = std::log(aspect_ratio);
-    lin_drag_per_len_par_ =
-        2.0 * M_PI * bulk_viscosity_ / (log_term + c_drag_constant_par_);
-    lin_drag_per_len_perp_ = 4.0 * M_PI * bulk_viscosity_ / (log_term + c_perp);
+    lin_drag_per_len_par_ = 2.0 * std::numbers::pi * bulk_viscosity_ /
+                            (log_term + c_drag_constant_par_);
+    lin_drag_per_len_perp_ =
+        4.0 * std::numbers::pi * bulk_viscosity_ / (log_term + c_perp);
     if (lin_drag_per_len_par_ < 0.0) {
       throw std::runtime_error(
           "RigidMTBundle::update_linear_drag_coefficients - Negative drag "

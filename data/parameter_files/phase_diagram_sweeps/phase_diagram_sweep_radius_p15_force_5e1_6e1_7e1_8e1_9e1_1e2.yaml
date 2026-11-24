@@ -1,9 +1,6 @@
-# Notes
 executable: ./build/bin/rigid_spindle_sim
 output_dir: output/phase_diagram_sweep_radius_p15_force_5e1_6e1_7e1_8e1_9e1_1e2
 run_name: run
-#
-make_movie: true
 clear_output_dir: true
 dt: 1e-5
 dt_frame: 5e-4
